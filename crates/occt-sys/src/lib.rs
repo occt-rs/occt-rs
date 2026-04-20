@@ -23,6 +23,58 @@
 pub mod ffi {
     unsafe extern "C++" {
         include!("occt_sys.hxx");
+        // ── WireEdgeExplorer ─────────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_tools___wire_explorer.html
+        type WireEdgeExplorer;
+
+        fn new_wire_edge_explorer(w: &TopodsWire) -> UniquePtr<WireEdgeExplorer>;
+        fn more(self: &WireEdgeExplorer) -> bool;
+        fn next(self: Pin<&mut WireEdgeExplorer>);
+        fn current_edge(self: &WireEdgeExplorer) -> UniquePtr<TopodsEdge>;
+
+        // ── Edge vertex access ───────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_top_exp.html
+        fn edge_start_vertex(e: &TopodsEdge) -> UniquePtr<TopodsVertex>;
+        fn edge_end_vertex(e: &TopodsEdge) -> UniquePtr<TopodsVertex>;
+        #[cxx_name = "TopoDS_Wire"]
+        type TopodsWire;
+
+        fn clone_wire(w: &TopodsWire) -> UniquePtr<TopodsWire>;
+
+        type MakeWireBuilder;
+
+        fn new_make_wire_builder() -> UniquePtr<MakeWireBuilder>;
+        fn add_edge(self: Pin<&mut MakeWireBuilder>, e: &TopodsEdge);
+        fn is_done(self: &MakeWireBuilder) -> bool;
+        fn error(self: &MakeWireBuilder) -> i32;
+        fn wire(self: Pin<&mut MakeWireBuilder>) -> UniquePtr<TopodsWire>;
+        // ── TopoDS_Edge ──────────────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___edge.html
+        #[cxx_name = "TopoDS_Edge"]
+        type TopodsEdge;
+
+        /// Copy-constructs a TopoDS_Edge.  Called by OcEdge's Clone impl.
+        fn clone_edge(e: &TopodsEdge) -> UniquePtr<TopodsEdge>;
+
+        // ── MakeEdgeBuilder ──────────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_edge.html
+        type MakeEdgeBuilder;
+
+        /// Constructs a MakeEdgeBuilder from two vertices.
+        fn new_make_edge_builder(
+            v1: &TopodsVertex,
+            v2: &TopodsVertex,
+        ) -> UniquePtr<MakeEdgeBuilder>;
+
+        /// Returns true when the edge was successfully constructed.
+        fn is_done(self: &MakeEdgeBuilder) -> bool;
+
+        /// Returns the raw BRepBuilderAPI_EdgeError value.
+        /// Map against constants in occt_rs::topo::edge::EdgeError.
+        fn error(self: &MakeEdgeBuilder) -> i32;
+
+        /// Returns the constructed edge.  Only call when is_done() is true.
+        fn edge(self: Pin<&mut MakeEdgeBuilder>) -> UniquePtr<TopodsEdge>;
 
         // ── TopoDS_Vertex ────────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___vertex.html

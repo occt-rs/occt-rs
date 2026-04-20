@@ -27,6 +27,12 @@ pub struct OcVertex {
 }
 
 impl OcVertex {
+    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsVertex>) -> Self {
+        Self {
+            inner,
+            _not_send: PhantomData,
+        }
+    }
     /// Constructs a vertex at the given point with the default tolerance
     /// (`Precision::Confusion()`).
     pub fn from_pnt(p: &OcPnt) -> Self {

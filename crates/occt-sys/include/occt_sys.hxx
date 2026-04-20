@@ -27,6 +27,9 @@
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
+#include <BRepBuilderAPI_EdgeError.hxx>
+#include <TopoDS_Edge.hxx>
 
 // ── Exception protocol ──────────────────────────────────────────────────────
 //
@@ -63,7 +66,92 @@ inline std::unique_ptr<gp_Pnt> new_gp_pnt_xyz(double x, double y, double z) {
 inline std::unique_ptr<gp_Vec> new_gp_vec_xyz(double x, double y, double z) {
     return std::make_unique<gp_Vec>(x, y, z);
 }
+#include <BRepTools_WireExplorer.hxx>
+#include <TopExp.hxx>
 
+// ── Wire edge exploration ─────────────────────────────────────────────────
+// Reference (WireExplorer): https://dev.opencascade.org/doc/refman/html/class_b_rep_tools___wire_explorer.html
+// Reference (TopExp):       https://dev.opencascade.org/doc/refman/html/class_top_exp.html
+
+struct WireEdgeExplorer {
+    BRepTools_WireExplorer inner;
+    WireEdgeExplorer(const TopoDS_Wire& w) : inner(w) {}
+    bool more() const { return inner.More(); }
+    void next() { inner.Next(); }
+    std::unique_ptr<TopoDS_Edge> current_edge() const {
+        return std::make_unique<TopoDS_Edge>(inner.Current());
+    }
+};
+
+inline std::unique_ptr<WireEdgeExplorer> new_wire_edge_explorer(const TopoDS_Wire& w) {
+    return std::make_unique<WireEdgeExplorer>(w);
+}
+
+inline std::unique_ptr<TopoDS_Vertex> edge_start_vertex(const TopoDS_Edge& e) {
+    TopoDS_Vertex v1, v2;
+    TopExp::Vertices(e, v1, v2);
+    return std::make_unique<TopoDS_Vertex>(v1);
+}
+
+inline std::unique_ptr<TopoDS_Vertex> edge_end_vertex(const TopoDS_Edge& e) {
+    TopoDS_Vertex v1, v2;
+    TopExp::Vertices(e, v1, v2);
+    return std::make_unique<TopoDS_Vertex>(v2);
+}
+// ── TopoDS_Edge construction ───────────────────────────────────────────────
+// Reference (MakeEdge): https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_edge.html
+// Reference (EdgeError): https://dev.opencascade.org/doc/refman/html/BRepBuilderAPI__EdgeError_8hxx.html
+//
+// Exposed as an opaque builder so the Rust side can inspect IsDone() and
+// Error() directly.  No manipulation of error values in the shim.
+
+struct MakeEdgeBuilder {
+    BRepBuilderAPI_MakeEdge inner;
+
+    MakeEdgeBuilder(const TopoDS_Vertex& v1, const TopoDS_Vertex& v2)
+        : inner(v1, v2) {}
+
+    bool is_done() const { return inner.IsDone(); }
+
+    // Returns the raw BRepBuilderAPI_EdgeError enum value as int.
+    // Callers map against BRepBuilderAPI_EdgeError.hxx constants.
+    int error() const { return static_cast<int>(inner.Error()); }
+
+    std::unique_ptr<TopoDS_Edge> edge() {
+        return std::make_unique<TopoDS_Edge>(inner.Edge());
+    }
+};
+
+inline std::unique_ptr<MakeEdgeBuilder> new_make_edge_builder(
+    const TopoDS_Vertex& v1, const TopoDS_Vertex& v2)
+{
+    return std::make_unique<MakeEdgeBuilder>(v1, v2);
+}
+
+inline std::unique_ptr<TopoDS_Edge> clone_edge(const TopoDS_Edge& e) {
+    return std::make_unique<TopoDS_Edge>(e);
+}
+// ── Wire builder ──────────────────────────────
+#include <BRepBuilderAPI_MakeWire.hxx>
+#include <BRepBuilderAPI_WireError.hxx>
+#include <TopoDS_Wire.hxx>
+
+struct MakeWireBuilder {
+    BRepBuilderAPI_MakeWire inner;
+
+    void add_edge(const TopoDS_Edge& e) { inner.Add(e); }
+    bool is_done() const { return inner.IsDone(); }
+    int error() const { return static_cast<int>(inner.Error()); }
+    std::unique_ptr<TopoDS_Wire> wire() { return std::make_unique<TopoDS_Wire>(inner.Wire()); }
+};
+
+inline std::unique_ptr<MakeWireBuilder> new_make_wire_builder() {
+    return std::make_unique<MakeWireBuilder>();
+}
+
+inline std::unique_ptr<TopoDS_Wire> clone_wire(const TopoDS_Wire& w) {
+    return std::make_unique<TopoDS_Wire>(w);
+}
 // ── TopoDS_Vertex construction and inspection ──────────────────────────────
 // Reference (MakeVertex): https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_vertex.html
 // Reference (BRep_Tool):  https://dev.opencascade.org/doc/refman/html/class_b_rep___tool.html
