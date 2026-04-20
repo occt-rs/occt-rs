@@ -457,6 +457,323 @@ impl std::ops::Neg for OcDir {
         self.reversed()
     }
 }
+// ── OcAx1 ─────────────────────────────────────────────────────────────────
+ 
+/// An axis in 3-D space: an origin point and a unit direction.
+///
+/// Corresponds to `gp_Ax1` in OCCT.
+/// Reference: <https://dev.opencascade.org/doc/refman/html/classgp___ax1.html>
+///
+/// Construction is infallible: any `OcPnt` and `OcDir` pair is a valid axis.
+/// The direction invariant (unit magnitude) is enforced by `OcDir`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OcAx1 {
+    location: OcPnt,
+    direction: OcDir,
+}
+ 
+impl OcAx1 {
+    /// Creates an axis from an origin point and a unit direction.
+    #[inline]
+    pub fn new(location: OcPnt, direction: OcDir) -> Self {
+        Self { location, direction }
+    }
+ 
+    /// The Z axis of the reference coordinate system: origin (0,0,0),
+    /// direction (0,0,1).  Corresponds to `gp_Ax1()` default constructor.
+    #[inline]
+    pub fn z_axis() -> Self {
+        Self {
+            location: OcPnt::origin(),
+            // SAFETY: (0,0,1) has unit magnitude; unwrap cannot panic.
+            direction: OcDir::new(0.0, 0.0, 1.0).expect("unit Z direction"),
+        }
+    }
+ 
+    /// Returns the origin (location point) of this axis.
+    #[inline]
+    pub fn location(&self) -> OcPnt { self.location }
+ 
+    /// Returns the unit direction of this axis.
+    #[inline]
+    pub fn direction(&self) -> OcDir { self.direction }
+ 
+    /// Returns a new axis with the direction reversed.
+    ///
+    /// Corresponds to `gp_Ax1::Reversed()`.
+    #[inline]
+    pub fn reversed(&self) -> Self {
+        Self { location: self.location, direction: self.direction.reversed() }
+    }
+ 
+    /// Translates this axis by vector `v` (shifts the origin; direction unchanged).
+    #[inline]
+    pub fn translated(&self, v: OcVec) -> Self {
+        Self { location: self.location + v, direction: self.direction }
+    }
+ 
+    /// Angle between the directions of `self` and `other`, in [0, π] radians.
+    ///
+    /// Corresponds to `gp_Ax1::Angle()`.
+    /// Note: the OCCT reference documentation states the range as [0, 2π] but
+    /// the underlying `gp_Dir::Angle` uses `acos`, giving [0, π].  This
+    /// implementation matches the actual OCCT behaviour.
+    #[inline]
+    pub fn angle(&self, other: &OcAx1) -> f64 {
+        self.direction.angle(&other.direction)
+    }
+ 
+    /// Returns `true` when `self` and `other` share the same infinite line,
+    /// within tolerances.
+    ///
+    /// Conditions (from `gp_Ax1::IsCoaxial` documentation):
+    /// - `self.angle(other) ≤ ang_tol`
+    /// - distance from `self.location()` to the line through `other` ≤ `lin_tol`
+    /// - distance from `other.location()` to the line through `self` ≤ `lin_tol`
+    pub fn is_coaxial(&self, other: &OcAx1, ang_tol: f64, lin_tol: f64) -> bool {
+        if self.angle(other) > ang_tol {
+            return false;
+        }
+        point_to_axis_distance(&self.location, &other.location, &other.direction) <= lin_tol
+            && point_to_axis_distance(&other.location, &self.location, &self.direction) <= lin_tol
+    }
+ 
+    /// Returns `true` when the directions are approximately perpendicular:
+    /// `|angle − π/2| ≤ ang_tol`.
+    ///
+    /// Corresponds to `gp_Ax1::IsNormal()`.
+    #[inline]
+    pub fn is_normal(&self, other: &OcAx1, ang_tol: f64) -> bool {
+        self.direction.is_normal(&other.direction, ang_tol)
+    }
+ 
+    /// Returns `true` when the directions are approximately opposite (anti-parallel):
+    /// `π − angle ≤ ang_tol`.
+    ///
+    /// Corresponds to `gp_Ax1::IsOpposite()`.
+    #[inline]
+    pub fn is_opposite(&self, other: &OcAx1, ang_tol: f64) -> bool {
+        self.direction.is_opposite(&other.direction, ang_tol)
+    }
+ 
+    /// Returns `true` when the directions are approximately parallel (same or
+    /// opposite orientation): `angle ≤ ang_tol || π − angle ≤ ang_tol`.
+    ///
+    /// Corresponds to `gp_Ax1::IsParallel()`.
+    #[inline]
+    pub fn is_parallel(&self, other: &OcAx1, ang_tol: f64) -> bool {
+        self.direction.is_parallel(&other.direction, ang_tol)
+    }
+ 
+    /// Materialises a `gp_Ax1` for passing to an OCCT API.
+    /// This is the only point at which an `OcAx1` crosses the FFI boundary.
+    #[inline]
+    pub(crate) fn to_ffi(&self) -> cxx::UniquePtr<ffi::GpAx1> {
+        ffi::new_gp_ax1(
+            self.location.x, self.location.y, self.location.z,
+            self.direction.x(), self.direction.y(), self.direction.z(),
+        )
+        .expect("pre-validated OcAx1 failed to materialise — invariant violated")
+    }
+}
+ 
+impl std::ops::Neg for OcAx1 {
+    type Output = OcAx1;
+    #[inline]
+    fn neg(self) -> OcAx1 { self.reversed() }
+}
+ 
+// ── OcAx2 ─────────────────────────────────────────────────────────────────
+ 
+/// A right-handed coordinate system in 3-D space.
+///
+/// Defined by an origin point and three mutually orthogonal unit vectors:
+/// `direction` (the "main" or "Z" direction), `x_dir`, and `y_dir`.
+/// The right-handedness invariant is: `direction = x_dir × y_dir`.
+///
+/// Corresponds to `gp_Ax2` in OCCT.
+/// Reference: <https://dev.opencascade.org/doc/refman/html/classgp___ax2.html>
+///
+/// Fields are private to maintain the right-handedness and unit-magnitude
+/// invariants.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OcAx2 {
+    location: OcPnt,
+    /// Main/"Z" direction.
+    direction: OcDir,
+    x_dir: OcDir,
+    /// Derived: `direction × x_dir`.  Stored to make `y_direction()` O(1).
+    y_dir: OcDir,
+}
+ 
+impl OcAx2 {
+    /// Creates a right-handed coordinate system from an origin, a main
+    /// direction `n`, and a hint vector `vx` for the X direction.
+    ///
+    /// The actual X direction is computed from the OCCT-documented formula:
+    /// `actual_x = (n × vx) × n`
+    /// which is the projection of `vx` onto the plane perpendicular to `n`,
+    /// normalised.  Y is then `n × actual_x`.
+    ///
+    /// Returns `Err(ConstructionError)` when `n` and `vx` are parallel (same
+    /// or opposite orientation), because the cross product would be zero.
+    ///
+    /// Corresponds to `gp_Ax2(P, N, Vx)`.
+    /// Reference: <https://dev.opencascade.org/doc/refman/html/classgp___ax2.html>
+    pub fn new(
+        location: OcPnt,
+        direction: OcDir,
+        x_dir: OcDir,
+    ) -> Result<Self, OcctError> {
+        let n = direction.to_vec();
+        let vx = x_dir.to_vec();
+ 
+        // (n × vx) × n  — projects vx onto the plane perpendicular to n.
+        // Zero if n ∥ vx.
+        let cross1 = n.cross(&vx);           // n × vx
+        let actual_x_vec = cross1.cross(&n); // (n × vx) × n
+ 
+        let actual_x = OcDir::from_vec(&actual_x_vec).map_err(|_| OcctError {
+            kind: OcctErrorKind::ConstructionError,
+            message: "OcAx2: direction and x_dir are parallel".to_owned(),
+        })?;
+ 
+        // Right-hand rule: y = n × actual_x.  Since n and actual_x are unit
+        // and mutually perpendicular, the cross product is also unit.
+        let y_vec = n.cross(&actual_x.to_vec());
+        let y_dir = OcDir::from_vec(&y_vec)
+            .expect("y direction non-zero: n and actual_x are perpendicular — invariant");
+ 
+        Ok(Self { location, direction, x_dir: actual_x, y_dir })
+    }
+ 
+    /// Creates a right-handed coordinate system from an origin and a main
+    /// direction, computing the X and Y directions automatically.
+    ///
+    /// The X direction is chosen perpendicular to `direction` using a
+    /// standard axis-independent algorithm: the least-component axis of
+    /// `direction` is used as the reference vector, then projected.
+    /// This algorithm is independent of OCCT's `gp_Ax2(P, V)` implementation;
+    /// its result may differ from OCCT's for the same inputs.
+    ///
+    /// Use [`OcAx2::new`] when an explicit X direction is required.
+    pub fn with_direction(location: OcPnt, direction: OcDir) -> Self {
+        // Pick the standard basis vector whose component along `direction`
+        // has the smallest absolute value — guaranteeing non-parallelism.
+        let (ax, ay, az) = (
+            direction.x().abs(),
+            direction.y().abs(),
+            direction.z().abs(),
+        );
+        let reference = if ax <= ay && ax <= az {
+            OcVec::new(1.0, 0.0, 0.0)
+        } else if ay <= az {
+            OcVec::new(0.0, 1.0, 0.0)
+        } else {
+            OcVec::new(0.0, 0.0, 1.0)
+        };
+ 
+        // x_raw = direction × reference.  Non-zero because reference is not
+        // parallel to direction (we chose the least-aligned axis).
+        let d = direction.to_vec();
+        let x_raw = d.cross(&reference);
+        let x_dir = OcDir::from_vec(&x_raw)
+            .expect("reference not parallel to direction — invariant");
+ 
+        // y = direction × x_dir.  Unit because direction ⊥ x_dir.
+        let y_vec = d.cross(&x_dir.to_vec());
+        let y_dir = OcDir::from_vec(&y_vec)
+            .expect("y direction non-zero by right-hand rule — invariant");
+ 
+        Self { location, direction, x_dir, y_dir }
+    }
+ 
+    /// The reference coordinate system OXYZ: origin (0,0,0), Z axis (0,0,1),
+    /// X axis (1,0,0), Y axis (0,1,0).
+    ///
+    /// Corresponds to `gp_Ax2()` default constructor.
+    pub fn oxyz() -> Self {
+        // Constructed with explicit unit vectors — unwraps cannot panic.
+        let direction = OcDir::new(0.0, 0.0, 1.0).expect("unit Z");
+        let x_dir    = OcDir::new(1.0, 0.0, 0.0).expect("unit X");
+        let y_dir    = OcDir::new(0.0, 1.0, 0.0).expect("unit Y");
+        Self { location: OcPnt::origin(), direction, x_dir, y_dir }
+    }
+ 
+    /// Returns the origin (location point) of this coordinate system.
+    #[inline]
+    pub fn location(&self) -> OcPnt { self.location }
+ 
+    /// Returns the main ("Z") direction of this coordinate system.
+    ///
+    /// Corresponds to `gp_Ax2::Direction()`.
+    #[inline]
+    pub fn direction(&self) -> OcDir { self.direction }
+ 
+    /// Returns the X direction of this coordinate system.
+    ///
+    /// Corresponds to `gp_Ax2::XDirection()`.
+    #[inline]
+    pub fn x_direction(&self) -> OcDir { self.x_dir }
+ 
+    /// Returns the Y direction of this coordinate system.
+    ///
+    /// Computed as `direction × x_direction` and stored at construction.
+    /// Corresponds to `gp_Ax2::YDirection()`.
+    #[inline]
+    pub fn y_direction(&self) -> OcDir { self.y_dir }
+ 
+    /// Returns the main axis (origin + main direction) as an `OcAx1`.
+    ///
+    /// Corresponds to `gp_Ax2::Axis()`.
+    #[inline]
+    pub fn axis(&self) -> OcAx1 {
+        OcAx1::new(self.location, self.direction)
+    }
+ 
+    /// Angle between the main directions of `self` and `other`, in [0, π] radians.
+    ///
+    /// Corresponds to `gp_Ax2::Angle()`.
+    #[inline]
+    pub fn angle(&self, other: &OcAx2) -> f64 {
+        self.direction.angle(&other.direction)
+    }
+ 
+    /// Translates this coordinate system by vector `v` (shifts the origin;
+    /// directions unchanged).
+    #[inline]
+    pub fn translated(&self, v: OcVec) -> Self {
+        Self { location: self.location + v, ..*self }
+    }
+ 
+    /// Materialises a `gp_Ax2` for passing to an OCCT API.
+    /// This is the only point at which an `OcAx2` crosses the FFI boundary.
+    #[inline]
+    pub(crate) fn to_ffi(&self) -> cxx::UniquePtr<ffi::GpAx2> {
+        ffi::new_gp_ax2(
+            self.location.x,    self.location.y,    self.location.z,
+            self.direction.x(), self.direction.y(), self.direction.z(),
+            self.x_dir.x(),     self.x_dir.y(),     self.x_dir.z(),
+        )
+        .expect("pre-validated OcAx2 failed to materialise — invariant violated")
+    }
+}
+ 
+// ── Internal geometry helpers ─────────────────────────────────────────────
+ 
+/// Distance from `point` to the infinite line defined by `origin` and `direction`.
+///
+/// Formula: ‖(point − origin) × direction‖
+/// Valid because `direction` is a unit vector.
+#[inline]
+fn point_to_axis_distance(point: &OcPnt, origin: &OcPnt, direction: &OcDir) -> f64 {
+    let op = OcVec::new(
+        point.x - origin.x,
+        point.y - origin.y,
+        point.z - origin.z,
+    );
+    op.cross(&direction.to_vec()).magnitude()
+}
 
 #[cfg(test)]
 mod tests {
@@ -600,4 +917,212 @@ mod tests {
         let x = OcDir::new(1.0, 0.0, 0.0).unwrap();
         assert_eq!(-x, OcDir::new(-1.0, 0.0, 0.0).unwrap());
     }
+    #[cfg(test)]
+    mod ax_tests {
+        use super::*;
+        use std::f64::consts::{FRAC_PI_2, PI};
+     
+        // ── OcAx1 ────────────────────────────────────────────────────────────
+     
+        #[test]
+        fn ax1_default_is_z_axis() {
+            let a = OcAx1::z_axis();
+            assert_eq!(a.location(), OcPnt::origin());
+            assert!((a.direction().z() - 1.0).abs() < 1e-15);
+        }
+     
+        #[test]
+        fn ax1_accessors_roundtrip() {
+            let p = OcPnt::new(1.0, 2.0, 3.0);
+            let d = OcDir::new(0.0, 0.0, 1.0).unwrap();
+            let a = OcAx1::new(p, d);
+            assert_eq!(a.location(), p);
+            assert_eq!(a.direction(), d);
+        }
+     
+        #[test]
+        fn ax1_reversed() {
+            let a = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
+            let r = a.reversed();
+            assert!((r.direction().z() + 1.0).abs() < 1e-15);
+            assert_eq!(r.location(), OcPnt::origin());
+        }
+     
+        #[test]
+        fn ax1_neg_operator() {
+            let a = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
+            assert_eq!(-a, a.reversed());
+        }
+     
+        #[test]
+        fn ax1_translated() {
+            let a = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
+            let t = a.translated(OcVec::new(1.0, 2.0, 3.0));
+            assert_eq!(t.location(), OcPnt::new(1.0, 2.0, 3.0));
+            assert_eq!(t.direction(), a.direction());
+        }
+     
+        #[test]
+        fn ax1_angle_right_angle() {
+            let x = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
+            let y = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 1.0, 0.0).unwrap());
+            assert!((x.angle(&y) - FRAC_PI_2).abs() < 1e-12);
+        }
+     
+        #[test]
+        fn ax1_is_parallel() {
+            let a  = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
+            let ma = OcAx1::new(OcPnt::new(5.0, 0.0, 0.0), OcDir::new(-1.0, 0.0, 0.0).unwrap());
+            let b  = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 1.0, 0.0).unwrap());
+            assert!(a.is_parallel(&ma, 1e-10));
+            assert!(!a.is_parallel(&b, 1e-10));
+        }
+     
+        #[test]
+        fn ax1_is_normal() {
+            let x = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
+            let y = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 1.0, 0.0).unwrap());
+            assert!(x.is_normal(&y, 1e-10));
+            assert!(!x.is_normal(&x, 1e-10));
+        }
+     
+        #[test]
+        fn ax1_is_opposite() {
+            let a  = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
+            let ma = OcAx1::new(OcPnt::origin(), OcDir::new(-1.0, 0.0, 0.0).unwrap());
+            assert!(a.is_opposite(&ma, 1e-10));
+            assert!(!a.is_opposite(&a, 1e-10));
+        }
+     
+        #[test]
+        fn ax1_is_coaxial_same_line() {
+            // Two axes on the same line, different locations.
+            let a = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
+            let b = OcAx1::new(OcPnt::new(5.0, 0.0, 0.0), OcDir::new(1.0, 0.0, 0.0).unwrap());
+            assert!(a.is_coaxial(&b, 1e-10, 1e-10));
+        }
+     
+        #[test]
+        fn ax1_is_coaxial_offset_line_fails() {
+            // Parallel axes but offset — not coaxial.
+            let a = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
+            let b = OcAx1::new(OcPnt::new(0.0, 1.0, 0.0), OcDir::new(1.0, 0.0, 0.0).unwrap());
+            assert!(!a.is_coaxial(&b, 1e-10, 0.5));
+        }
+     
+        // ── OcAx2 ────────────────────────────────────────────────────────────
+     
+        #[test]
+        fn ax2_oxyz_default() {
+            let cs = OcAx2::oxyz();
+            assert_eq!(cs.location(), OcPnt::origin());
+            assert!((cs.direction().z() - 1.0).abs() < 1e-15);
+            assert!((cs.x_direction().x() - 1.0).abs() < 1e-15);
+            assert!((cs.y_direction().y() - 1.0).abs() < 1e-15);
+        }
+     
+        #[test]
+        fn ax2_right_handed_invariant() {
+            // direction must equal x_direction × y_direction for any OcAx2.
+            let cs = OcAx2::new(
+                OcPnt::origin(),
+                OcDir::new(0.0, 0.0, 1.0).unwrap(),
+                OcDir::new(1.0, 1.0, 0.0).unwrap(), // oblique hint, not yet normalised
+            )
+            .unwrap();
+            let x = cs.x_direction().to_vec();
+            let y = cs.y_direction().to_vec();
+            let n = cs.direction().to_vec();
+            let computed_n = x.cross(&y);
+            assert!((computed_n.x - n.x).abs() < 1e-12);
+            assert!((computed_n.y - n.y).abs() < 1e-12);
+            assert!((computed_n.z - n.z).abs() < 1e-12);
+        }
+     
+        #[test]
+        fn ax2_new_x_dir_projected() {
+            // When an oblique Vx hint is given, the stored x_dir should be
+            // perpendicular to direction.
+            let n  = OcDir::new(0.0, 0.0, 1.0).unwrap();
+            let vx = OcDir::new(1.0, 1.0, 0.0).unwrap(); // 45° in XY plane
+            let cs = OcAx2::new(OcPnt::origin(), n, vx).unwrap();
+            // actual_x must be perpendicular to n (dot = 0)
+            assert!(cs.x_direction().dot(&n).abs() < 1e-12);
+            // and unit
+            let mag = cs.x_direction().to_vec().magnitude();
+            assert!((mag - 1.0).abs() < 1e-12);
+        }
+     
+        #[test]
+        fn ax2_parallel_fails() {
+            let n  = OcDir::new(0.0, 0.0, 1.0).unwrap();
+            let vx = OcDir::new(0.0, 0.0, 1.0).unwrap(); // parallel to n
+            assert!(OcAx2::new(OcPnt::origin(), n, vx).is_err());
+        }
+     
+        #[test]
+        fn ax2_anti_parallel_fails() {
+            let n  = OcDir::new(0.0, 0.0, 1.0).unwrap();
+            let vx = OcDir::new(0.0, 0.0, -1.0).unwrap(); // anti-parallel to n
+            assert!(OcAx2::new(OcPnt::origin(), n, vx).is_err());
+        }
+     
+        #[test]
+        fn ax2_with_direction_right_handed() {
+            for (dx, dy, dz) in [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0),
+                                 (1.0, 1.0, 0.0), (1.0, 1.0, 1.0)] {
+                let d = OcDir::new(dx, dy, dz).unwrap();
+                let cs = OcAx2::with_direction(OcPnt::origin(), d);
+                // Right-handedness: direction = x × y
+                let x = cs.x_direction().to_vec();
+                let y = cs.y_direction().to_vec();
+                let n = cs.direction().to_vec();
+                let computed = x.cross(&y);
+                assert!((computed.x - n.x).abs() < 1e-12, "failed for ({dx},{dy},{dz})");
+                assert!((computed.y - n.y).abs() < 1e-12, "failed for ({dx},{dy},{dz})");
+                assert!((computed.z - n.z).abs() < 1e-12, "failed for ({dx},{dy},{dz})");
+            }
+        }
+     
+        #[test]
+        fn ax2_axis_returns_correct_ax1() {
+            let cs = OcAx2::oxyz();
+            let ax = cs.axis();
+            assert_eq!(ax.location(), cs.location());
+            assert_eq!(ax.direction(), cs.direction());
+        }
+     
+        #[test]
+        fn ax2_angle_between_systems() {
+            let oxyz = OcAx2::oxyz();
+            // A second CS whose Z is the X axis.
+            let rotated = OcAx2::new(
+                OcPnt::origin(),
+                OcDir::new(1.0, 0.0, 0.0).unwrap(),
+                OcDir::new(0.0, 1.0, 0.0).unwrap(),
+            )
+            .unwrap();
+            assert!((oxyz.angle(&rotated) - FRAC_PI_2).abs() < 1e-12);
+        }
+     
+        #[test]
+        fn ax2_translated() {
+            let cs = OcAx2::oxyz();
+            let t = cs.translated(OcVec::new(3.0, 0.0, 0.0));
+            assert_eq!(t.location(), OcPnt::new(3.0, 0.0, 0.0));
+            assert_eq!(t.direction(), cs.direction());
+            assert_eq!(t.x_direction(), cs.x_direction());
+        }
+     
+        #[test]
+        fn point_to_axis_distance_known() {
+            // Point (0,1,0) to the X axis (origin, direction X).
+            let p = OcPnt::new(0.0, 1.0, 0.0);
+            let o = OcPnt::origin();
+            let d = OcDir::new(1.0, 0.0, 0.0).unwrap();
+            let dist = point_to_axis_distance(&p, &o, &d);
+            assert!((dist - 1.0).abs() < 1e-12);
+        }
+    }
+
 }

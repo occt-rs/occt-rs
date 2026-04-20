@@ -18,7 +18,12 @@
 #include <stdexcept>
 #include <string>
 
+#include <BRep_Tool.hxx>
+#include <BRepBuilderAPI_MakeVertex.hxx>
 #include <Standard_Failure.hxx>
+#include <TopoDS_Vertex.hxx>
+#include <gp_Ax1.hxx>
+#include <gp_Ax2.hxx>
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
@@ -73,10 +78,6 @@ inline std::unique_ptr<gp_Vec> new_gp_vec_xyz(double x, double y, double z) {
 // three thin shims that each extract one coordinate, keeping the gp_Pnt
 // stack-allocated and avoiding any heap allocation on the read-back path.
 
-#include <BRep_Tool.hxx>
-#include <BRepBuilderAPI_MakeVertex.hxx>
-#include <TopoDS_Vertex.hxx>
-
 /// Constructs a TopoDS_Vertex from raw coordinates.
 /// The gp_Pnt and BRepBuilderAPI_MakeVertex live on the C++ stack.
 inline std::unique_ptr<TopoDS_Vertex> make_vertex(double x, double y, double z) {
@@ -104,6 +105,8 @@ inline double vertex_pnt_z(const TopoDS_Vertex& v) {
 }
 
 // ── gp_Dir materialisation ─────────────────────────────────────────────────
+// Reference: https://dev.opencascade.org/doc/refman/html/classgp___dir.html
+//
 // OcDir validates and normalises at construction in pure Rust.  By the time
 // to_ffi() is called the coordinates are guaranteed unit magnitude, so this
 // shim should never raise in practice.  The Result return is retained as a
@@ -112,6 +115,53 @@ inline double vertex_pnt_z(const TopoDS_Vertex& v) {
 inline std::unique_ptr<gp_Dir> new_gp_dir_xyz(double x, double y, double z) {
     try {
         return std::make_unique<gp_Dir>(x, y, z);
+    } catch (...) {
+        rethrow_occt_as_runtime_error();
+    }
+}
+
+// ── gp_Ax1 materialisation ─────────────────────────────────────────────────
+// Reference: https://dev.opencascade.org/doc/refman/html/classgp___ax1.html
+//
+// Called by OcAx1::to_ffi() when passing to an OCCT API.
+// The direction components are guaranteed unit-magnitude (from OcDir), so
+// the gp_Dir constructor should never raise in practice.  The try/catch is
+// retained as a safety net against invariant violations.
+
+inline std::unique_ptr<gp_Ax1> new_gp_ax1(
+    double px, double py, double pz,
+    double dx, double dy, double dz)
+{
+    try {
+        return std::make_unique<gp_Ax1>(
+            gp_Pnt(px, py, pz),
+            gp_Dir(dx, dy, dz));
+    } catch (...) {
+        rethrow_occt_as_runtime_error();
+    }
+}
+
+// ── gp_Ax2 materialisation ─────────────────────────────────────────────────
+// Reference: https://dev.opencascade.org/doc/refman/html/classgp___ax2.html
+//
+// Called by OcAx2::to_ffi() when passing to an OCCT API.
+// (nx,ny,nz) is the main/"Z" direction; (xx,xy,xz) is the X direction.
+// By the time to_ffi() is called, OcAx2's constructor has already verified
+// non-parallelism and stored the corrected, mutually-perpendicular directions
+// (computed as (N ^ Vx) ^ N per the OCCT gp_Ax2 documentation), so
+// ConstructionError should never fire in practice.  The try/catch is
+// retained as a safety net against invariant violations.
+
+inline std::unique_ptr<gp_Ax2> new_gp_ax2(
+    double px, double py, double pz,
+    double nx, double ny, double nz,
+    double xx, double xy, double xz)
+{
+    try {
+        return std::make_unique<gp_Ax2>(
+            gp_Pnt(px, py, pz),
+            gp_Dir(nx, ny, nz),
+            gp_Dir(xx, xy, xz));
     } catch (...) {
         rethrow_occt_as_runtime_error();
     }
