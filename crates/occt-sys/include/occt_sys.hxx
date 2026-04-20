@@ -5,10 +5,11 @@
 // types are implemented in pure Rust in the occt-rs crate and never cross
 // the FFI boundary.
 //
-// LLM generated with reference to the following documents:
+// Sourced from:
 //   OCCT 7.9 reference documentation — https://dev.opencascade.org/doc/refman/html/
 //   cxx documentation              — https://cxx.rs/
 //
+// No derivation from opencascade-rs or any other binding crate.
 // See DEVELOPMENT.md for the full IP hygiene policy.
 
 #pragma once
@@ -56,6 +57,50 @@ inline std::unique_ptr<gp_Pnt> new_gp_pnt_xyz(double x, double y, double z) {
 
 inline std::unique_ptr<gp_Vec> new_gp_vec_xyz(double x, double y, double z) {
     return std::make_unique<gp_Vec>(x, y, z);
+}
+
+// ── TopoDS_Vertex construction and inspection ──────────────────────────────
+// Reference (MakeVertex): https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_vertex.html
+// Reference (BRep_Tool):  https://dev.opencascade.org/doc/refman/html/class_b_rep___tool.html
+//
+// BRepBuilderAPI_MakeVertex(const gp_Pnt&) builds a TopoDS_Vertex with
+// Precision::Confusion() as its default tolerance.  The result is a small
+// handle wrapper (TopoDS_Vertex contains a Handle(TopoDS_TShape) and is
+// internally reference-counted); copying it is cheap and correct.
+//
+// BRep_Tool::Pnt(const TopoDS_Vertex&) returns gp_Pnt by value — a stack
+// object.  Rather than returning that across the FFI boundary, we expose
+// three thin shims that each extract one coordinate, keeping the gp_Pnt
+// stack-allocated and avoiding any heap allocation on the read-back path.
+
+#include <BRep_Tool.hxx>
+#include <BRepBuilderAPI_MakeVertex.hxx>
+#include <TopoDS_Vertex.hxx>
+
+/// Constructs a TopoDS_Vertex from raw coordinates.
+/// The gp_Pnt and BRepBuilderAPI_MakeVertex live on the C++ stack.
+inline std::unique_ptr<TopoDS_Vertex> make_vertex(double x, double y, double z) {
+    return std::make_unique<TopoDS_Vertex>(
+        BRepBuilderAPI_MakeVertex(gp_Pnt(x, y, z)).Vertex()
+    );
+}
+
+/// Copy-constructs a TopoDS_Vertex.  Used to implement Clone on OcVertex.
+/// TopoDS_Vertex copy shares the underlying TShape handle (ref-counted).
+inline std::unique_ptr<TopoDS_Vertex> clone_vertex(const TopoDS_Vertex& v) {
+    return std::make_unique<TopoDS_Vertex>(v);
+}
+
+/// Reads back the X coordinate of the vertex's 3-D point.
+/// gp_Pnt is stack-allocated inside the shim; no heap allocation.
+inline double vertex_pnt_x(const TopoDS_Vertex& v) {
+    return BRep_Tool::Pnt(v).X();
+}
+inline double vertex_pnt_y(const TopoDS_Vertex& v) {
+    return BRep_Tool::Pnt(v).Y();
+}
+inline double vertex_pnt_z(const TopoDS_Vertex& v) {
+    return BRep_Tool::Pnt(v).Z();
 }
 
 // ── gp_Dir materialisation ─────────────────────────────────────────────────
