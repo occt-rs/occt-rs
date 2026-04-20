@@ -42,6 +42,12 @@ impl OcWire {
     pub(crate) fn as_ffi(&self) -> &ffi::TopodsWire {
         &self.inner
     }
+    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsWire>) -> Self {
+        Self {
+            inner,
+            _not_send: PhantomData,
+        }
+    }
 }
 
 impl Clone for OcWire {

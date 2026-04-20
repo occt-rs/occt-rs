@@ -23,6 +23,36 @@
 pub mod ffi {
     unsafe extern "C++" {
         include!("occt_sys.hxx");
+        // ── TopoDS_Face ──────────────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___face.html
+        #[cxx_name = "TopoDS_Face"]
+        type TopdsFace;
+
+        /// Copy-constructs a TopoDS_Face.  Called by OcFace's Clone impl.
+        fn clone_face(f: &TopdsFace) -> UniquePtr<TopdsFace>;
+
+        // ── MakeFaceBuilder ──────────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_face.html
+        type MakeFaceBuilder;
+
+        /// Constructs a MakeFaceBuilder from a wire.
+        /// `only_plane = true` restricts construction to planar faces.
+        fn new_make_face_from_wire(w: &TopodsWire, only_plane: bool) -> UniquePtr<MakeFaceBuilder>;
+
+        /// Returns true when the face was successfully constructed.
+        fn is_done(self: &MakeFaceBuilder) -> bool;
+
+        /// Returns the raw BRepBuilderAPI_FaceError value.
+        fn error(self: &MakeFaceBuilder) -> i32;
+
+        /// Returns the constructed face.  Only call when is_done() is true.
+        fn face(self: Pin<&mut MakeFaceBuilder>) -> UniquePtr<TopdsFace>;
+
+        // ── Face inspection ──────────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_tools.html
+        /// Returns the outer boundary wire of a face via BRepTools::OuterWire.
+        fn face_outer_wire(f: &TopdsFace) -> UniquePtr<TopodsWire>;
+
         // ── WireEdgeExplorer ─────────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_tools___wire_explorer.html
         type WireEdgeExplorer;

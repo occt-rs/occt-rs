@@ -30,6 +30,10 @@
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_EdgeError.hxx>
 #include <TopoDS_Edge.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_FaceError.hxx>
+#include <TopoDS_Face.hxx>
+#include <BRepTools.hxx>
 
 // ── Exception protocol ──────────────────────────────────────────────────────
 //
@@ -253,4 +257,59 @@ inline std::unique_ptr<gp_Ax2> new_gp_ax2(
     } catch (...) {
         rethrow_occt_as_runtime_error();
     }
+}
+
+// ── TopoDS_Face construction ──────────────────────────────────────────────────
+// Reference (MakeFace): https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_face.html
+// Reference (FaceError): https://dev.opencascade.org/doc/refman/html/BRepBuilderAPI__FaceError_8hxx.html
+//
+// Exposed as an opaque builder so the Rust side can inspect IsDone() and
+// Error() directly.  No manipulation of error values in the shim.
+//
+// Constructor used: BRepBuilderAPI_MakeFace(const TopoDS_Wire&, Standard_Boolean)
+//   only_plane = true  → fails if the wire is not planar
+//   only_plane = false → OCCT attempts to find a fitting surface (default)
+//
+// Face() is non-const in BRepBuilderAPI_MakeFace (confirmed from OCCT header:
+// it calls BRepBuilderAPI_MakeShape::Shape() which is non-const in the builder
+// hierarchy).  The result accessor therefore takes a mutable reference.
+
+struct MakeFaceBuilder {
+    BRepBuilderAPI_MakeFace inner;
+
+    MakeFaceBuilder(const TopoDS_Wire& w, bool only_plane)
+        : inner(w, only_plane ? Standard_True : Standard_False) {}
+
+    bool is_done() const { return inner.IsDone(); }
+
+    // Returns the raw BRepBuilderAPI_FaceError enum value as int.
+    // Callers map against BRepBuilderAPI_FaceError.hxx constants.
+    int error() const { return static_cast<int>(inner.Error()); }
+
+    std::unique_ptr<TopoDS_Face> face() {
+        return std::make_unique<TopoDS_Face>(inner.Face());
+    }
+};
+
+inline std::unique_ptr<MakeFaceBuilder> new_make_face_from_wire(
+    const TopoDS_Wire& w, bool only_plane)
+{
+    return std::make_unique<MakeFaceBuilder>(w, only_plane);
+}
+
+/// Copy-constructs a TopoDS_Face.  Used to implement Clone on OcFace.
+/// TopoDS_Face copy shares the underlying TShape handle (ref-counted).
+inline std::unique_ptr<TopoDS_Face> clone_face(const TopoDS_Face& f) {
+    return std::make_unique<TopoDS_Face>(f);
+}
+
+// ── Face inspection ───────────────────────────────────────────────────────────
+// Reference (BRepTools): https://dev.opencascade.org/doc/refman/html/class_b_rep_tools.html
+//
+// BRepTools::OuterWire returns the outer boundary wire of a face.
+// The result is a TopoDS_Wire by value; we heap-allocate it for UniquePtr
+// ownership on the Rust side.
+
+inline std::unique_ptr<TopoDS_Wire> face_outer_wire(const TopoDS_Face& f) {
+    return std::make_unique<TopoDS_Wire>(BRepTools::OuterWire(f));
 }
