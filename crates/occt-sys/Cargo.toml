@@ -6,4 +6,11 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+# cxx generates both Rust and C++ code.  The C++ side is compiled by
+# cxx-build in build.rs; the Rust side is provided by the cxx runtime crate.
 [dependencies]
+cxx = {workspace = true}
+ 
+[build-dependencies]
+cxx-build  = "1.0.194"
+pkg-config = "0.3.33"
