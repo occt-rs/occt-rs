@@ -96,18 +96,15 @@ mod tests {
 
     #[test]
     fn parse_construction_error() {
-        let e = parse_occt_exception(
-            "OCCT:Standard_ConstructionError:null magnitude in gp_Dir",
-        );
+        let e = parse_occt_exception("OCCT:Standard_ConstructionError:null magnitude in gp_Dir");
         assert_eq!(e.kind, OcctErrorKind::ConstructionError);
         assert_eq!(e.message, "null magnitude in gp_Dir");
     }
 
     #[test]
     fn parse_null_magnitude() {
-        let e = parse_occt_exception(
-            "OCCT:gp_VectorWithNullMagnitude:gp_Vec : cannot be normalized",
-        );
+        let e =
+            parse_occt_exception("OCCT:gp_VectorWithNullMagnitude:gp_Vec : cannot be normalized");
         assert_eq!(e.kind, OcctErrorKind::NullMagnitude);
     }
 
@@ -118,10 +115,7 @@ mod tests {
             "OCCT:Standard_DomainError:gp_Vec : coplanar: cannot compute AngleWithRef",
         );
         assert_eq!(e.kind, OcctErrorKind::DomainError);
-        assert_eq!(
-            e.message,
-            "gp_Vec : coplanar: cannot compute AngleWithRef"
-        );
+        assert_eq!(e.message, "gp_Vec : coplanar: cannot compute AngleWithRef");
     }
 
     #[test]

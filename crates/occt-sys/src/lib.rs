@@ -86,8 +86,12 @@ pub mod ffi {
         /// so this should never return `Err` in practice.  The `Result` is
         /// retained as a safety net against invariant violations.
         fn new_gp_ax1(
-            px: f64, py: f64, pz: f64,
-            dx: f64, dy: f64, dz: f64,
+            px: f64,
+            py: f64,
+            pz: f64,
+            dx: f64,
+            dy: f64,
+            dz: f64,
         ) -> Result<UniquePtr<GpAx1>>;
 
         // ── gp_Ax2 ───────────────────────────────────────────────────────────
@@ -103,9 +107,15 @@ pub mod ffi {
         /// corrected perpendicular X direction, so `ConstructionError` should
         /// never fire in practice.  The `Result` is retained as a safety net.
         fn new_gp_ax2(
-            px: f64, py: f64, pz: f64,
-            nx: f64, ny: f64, nz: f64,
-            xx: f64, xy: f64, xz: f64,
+            px: f64,
+            py: f64,
+            pz: f64,
+            nx: f64,
+            ny: f64,
+            nz: f64,
+            xx: f64,
+            xy: f64,
+            xz: f64,
         ) -> Result<UniquePtr<GpAx2>>;
     }
 }

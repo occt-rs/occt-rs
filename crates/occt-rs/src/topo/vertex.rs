@@ -66,7 +66,6 @@ impl Clone for OcVertex {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

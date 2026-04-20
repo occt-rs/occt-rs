@@ -8,7 +8,7 @@
 //!
 //! # Naming
 //!
-//! The `Oc` prefix marks unqualified usage as explicitly serving 
+//! The `Oc` prefix marks unqualified usage as explicitly serving
 //! OpenCascade, avoiding ambiguity with `std` types (`Vec`, etc.) and
 //! distinguishing from any future Rust-native geometry layer.
 
@@ -41,7 +41,11 @@ impl OcPnt {
 
     #[inline]
     pub fn origin() -> Self {
-        Self { x: 0.0, y: 0.0, z: 0.0 }
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        }
     }
 
     /// Euclidean distance to `other`.
@@ -83,7 +87,11 @@ impl std::ops::Add<OcVec> for OcPnt {
     type Output = OcPnt;
     #[inline]
     fn add(self, v: OcVec) -> OcPnt {
-        OcPnt { x: self.x + v.x, y: self.y + v.y, z: self.z + v.z }
+        OcPnt {
+            x: self.x + v.x,
+            y: self.y + v.y,
+            z: self.z + v.z,
+        }
     }
 }
 
@@ -92,7 +100,11 @@ impl std::ops::Sub<OcVec> for OcPnt {
     type Output = OcPnt;
     #[inline]
     fn sub(self, v: OcVec) -> OcPnt {
-        OcPnt { x: self.x - v.x, y: self.y - v.y, z: self.z - v.z }
+        OcPnt {
+            x: self.x - v.x,
+            y: self.y - v.y,
+            z: self.z - v.z,
+        }
     }
 }
 
@@ -101,7 +113,11 @@ impl std::ops::Sub for OcPnt {
     type Output = OcVec;
     #[inline]
     fn sub(self, other: OcPnt) -> OcVec {
-        OcVec { x: self.x - other.x, y: self.y - other.y, z: self.z - other.z }
+        OcVec {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z,
+        }
     }
 }
 
@@ -126,7 +142,11 @@ impl OcVec {
 
     #[inline]
     pub fn zero() -> Self {
-        Self { x: 0.0, y: 0.0, z: 0.0 }
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        }
     }
 
     #[inline]
@@ -204,12 +224,15 @@ impl OcVec {
             // Parallel or anti-parallel: cross product is ~zero, sign undefined.
             return Err(OcctError {
                 kind: OcctErrorKind::DomainError,
-                message: "angle_with_ref: vectors are parallel, sign is undefined"
-                    .to_owned(),
+                message: "angle_with_ref: vectors are parallel, sign is undefined".to_owned(),
             });
         }
         let cross = self.cross(other);
-        if cross.dot(vref) >= 0.0 { Ok(unsigned) } else { Ok(-unsigned) }
+        if cross.dot(vref) >= 0.0 {
+            Ok(unsigned)
+        } else {
+            Ok(-unsigned)
+        }
     }
 
     /// Materialises a `gp_Vec` for passing to an OCCT API.
@@ -223,7 +246,11 @@ impl std::ops::Add for OcVec {
     type Output = OcVec;
     #[inline]
     fn add(self, other: OcVec) -> OcVec {
-        OcVec { x: self.x + other.x, y: self.y + other.y, z: self.z + other.z }
+        OcVec {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z,
+        }
     }
 }
 
@@ -231,7 +258,11 @@ impl std::ops::Sub for OcVec {
     type Output = OcVec;
     #[inline]
     fn sub(self, other: OcVec) -> OcVec {
-        OcVec { x: self.x - other.x, y: self.y - other.y, z: self.z - other.z }
+        OcVec {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z,
+        }
     }
 }
 
@@ -239,7 +270,11 @@ impl std::ops::Mul<f64> for OcVec {
     type Output = OcVec;
     #[inline]
     fn mul(self, s: f64) -> OcVec {
-        OcVec { x: self.x * s, y: self.y * s, z: self.z * s }
+        OcVec {
+            x: self.x * s,
+            y: self.y * s,
+            z: self.z * s,
+        }
     }
 }
 
@@ -247,7 +282,11 @@ impl std::ops::Mul<OcVec> for f64 {
     type Output = OcVec;
     #[inline]
     fn mul(self, v: OcVec) -> OcVec {
-        OcVec { x: v.x * self, y: v.y * self, z: v.z * self }
+        OcVec {
+            x: v.x * self,
+            y: v.y * self,
+            z: v.z * self,
+        }
     }
 }
 
@@ -255,7 +294,11 @@ impl std::ops::Div<f64> for OcVec {
     type Output = OcVec;
     #[inline]
     fn div(self, s: f64) -> OcVec {
-        OcVec { x: self.x / s, y: self.y / s, z: self.z / s }
+        OcVec {
+            x: self.x / s,
+            y: self.y / s,
+            z: self.z / s,
+        }
     }
 }
 
@@ -263,7 +306,11 @@ impl std::ops::Neg for OcVec {
     type Output = OcVec;
     #[inline]
     fn neg(self) -> OcVec {
-        OcVec { x: -self.x, y: -self.y, z: -self.z }
+        OcVec {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+        }
     }
 }
 
@@ -332,7 +379,11 @@ impl OcDir {
                 message: "cannot construct OcDir from a zero-magnitude vector".to_owned(),
             });
         }
-        Ok(Self { x: x / mag, y: y / mag, z: z / mag })
+        Ok(Self {
+            x: x / mag,
+            y: y / mag,
+            z: z / mag,
+        })
     }
 
     /// Constructs a unit direction from an `OcVec`.
@@ -343,20 +394,37 @@ impl OcDir {
         Self::new(v.x, v.y, v.z)
     }
 
-    #[inline] pub fn x(&self) -> f64 { self.x }
-    #[inline] pub fn y(&self) -> f64 { self.y }
-    #[inline] pub fn z(&self) -> f64 { self.z }
+    #[inline]
+    pub fn x(&self) -> f64 {
+        self.x
+    }
+    #[inline]
+    pub fn y(&self) -> f64 {
+        self.y
+    }
+    #[inline]
+    pub fn z(&self) -> f64 {
+        self.z
+    }
 
     /// Returns the direction as a unit `OcVec`.
     #[inline]
     pub fn to_vec(&self) -> OcVec {
-        OcVec { x: self.x, y: self.y, z: self.z }
+        OcVec {
+            x: self.x,
+            y: self.y,
+            z: self.z,
+        }
     }
 
     /// Reverses the direction.
     #[inline]
     pub fn reversed(&self) -> OcDir {
-        OcDir { x: -self.x, y: -self.y, z: -self.z }
+        OcDir {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+        }
     }
 
     /// Scalar (dot) product of two unit directions.
@@ -390,12 +458,15 @@ impl OcDir {
         if unsigned < GP_RESOLUTION || (std::f64::consts::PI - unsigned) < GP_RESOLUTION {
             return Err(OcctError {
                 kind: OcctErrorKind::DomainError,
-                message: "angle_with_ref: directions are parallel, sign is undefined"
-                    .to_owned(),
+                message: "angle_with_ref: directions are parallel, sign is undefined".to_owned(),
             });
         }
         let cross = self.to_vec().cross(&other.to_vec());
-        if cross.dot(&vref.to_vec()) >= 0.0 { Ok(unsigned) } else { Ok(-unsigned) }
+        if cross.dot(&vref.to_vec()) >= 0.0 {
+            Ok(unsigned)
+        } else {
+            Ok(-unsigned)
+        }
     }
 
     /// Cross product of two unit directions.
@@ -458,7 +529,7 @@ impl std::ops::Neg for OcDir {
     }
 }
 // ── OcAx1 ─────────────────────────────────────────────────────────────────
- 
+
 /// An axis in 3-D space: an origin point and a unit direction.
 ///
 /// Corresponds to `gp_Ax1` in OCCT.
@@ -471,14 +542,17 @@ pub struct OcAx1 {
     location: OcPnt,
     direction: OcDir,
 }
- 
+
 impl OcAx1 {
     /// Creates an axis from an origin point and a unit direction.
     #[inline]
     pub fn new(location: OcPnt, direction: OcDir) -> Self {
-        Self { location, direction }
+        Self {
+            location,
+            direction,
+        }
     }
- 
+
     /// The Z axis of the reference coordinate system: origin (0,0,0),
     /// direction (0,0,1).  Corresponds to `gp_Ax1()` default constructor.
     #[inline]
@@ -489,29 +563,39 @@ impl OcAx1 {
             direction: OcDir::new(0.0, 0.0, 1.0).expect("unit Z direction"),
         }
     }
- 
+
     /// Returns the origin (location point) of this axis.
     #[inline]
-    pub fn location(&self) -> OcPnt { self.location }
- 
+    pub fn location(&self) -> OcPnt {
+        self.location
+    }
+
     /// Returns the unit direction of this axis.
     #[inline]
-    pub fn direction(&self) -> OcDir { self.direction }
- 
+    pub fn direction(&self) -> OcDir {
+        self.direction
+    }
+
     /// Returns a new axis with the direction reversed.
     ///
     /// Corresponds to `gp_Ax1::Reversed()`.
     #[inline]
     pub fn reversed(&self) -> Self {
-        Self { location: self.location, direction: self.direction.reversed() }
+        Self {
+            location: self.location,
+            direction: self.direction.reversed(),
+        }
     }
- 
+
     /// Translates this axis by vector `v` (shifts the origin; direction unchanged).
     #[inline]
     pub fn translated(&self, v: OcVec) -> Self {
-        Self { location: self.location + v, direction: self.direction }
+        Self {
+            location: self.location + v,
+            direction: self.direction,
+        }
     }
- 
+
     /// Angle between the directions of `self` and `other`, in [0, π] radians.
     ///
     /// Corresponds to `gp_Ax1::Angle()`.
@@ -522,7 +606,7 @@ impl OcAx1 {
     pub fn angle(&self, other: &OcAx1) -> f64 {
         self.direction.angle(&other.direction)
     }
- 
+
     /// Returns `true` when `self` and `other` share the same infinite line,
     /// within tolerances.
     ///
@@ -537,7 +621,7 @@ impl OcAx1 {
         point_to_axis_distance(&self.location, &other.location, &other.direction) <= lin_tol
             && point_to_axis_distance(&other.location, &self.location, &self.direction) <= lin_tol
     }
- 
+
     /// Returns `true` when the directions are approximately perpendicular:
     /// `|angle − π/2| ≤ ang_tol`.
     ///
@@ -546,7 +630,7 @@ impl OcAx1 {
     pub fn is_normal(&self, other: &OcAx1, ang_tol: f64) -> bool {
         self.direction.is_normal(&other.direction, ang_tol)
     }
- 
+
     /// Returns `true` when the directions are approximately opposite (anti-parallel):
     /// `π − angle ≤ ang_tol`.
     ///
@@ -555,7 +639,7 @@ impl OcAx1 {
     pub fn is_opposite(&self, other: &OcAx1, ang_tol: f64) -> bool {
         self.direction.is_opposite(&other.direction, ang_tol)
     }
- 
+
     /// Returns `true` when the directions are approximately parallel (same or
     /// opposite orientation): `angle ≤ ang_tol || π − angle ≤ ang_tol`.
     ///
@@ -564,27 +648,33 @@ impl OcAx1 {
     pub fn is_parallel(&self, other: &OcAx1, ang_tol: f64) -> bool {
         self.direction.is_parallel(&other.direction, ang_tol)
     }
- 
+
     /// Materialises a `gp_Ax1` for passing to an OCCT API.
     /// This is the only point at which an `OcAx1` crosses the FFI boundary.
     #[inline]
     pub(crate) fn to_ffi(&self) -> cxx::UniquePtr<ffi::GpAx1> {
         ffi::new_gp_ax1(
-            self.location.x, self.location.y, self.location.z,
-            self.direction.x(), self.direction.y(), self.direction.z(),
+            self.location.x,
+            self.location.y,
+            self.location.z,
+            self.direction.x(),
+            self.direction.y(),
+            self.direction.z(),
         )
         .expect("pre-validated OcAx1 failed to materialise — invariant violated")
     }
 }
- 
+
 impl std::ops::Neg for OcAx1 {
     type Output = OcAx1;
     #[inline]
-    fn neg(self) -> OcAx1 { self.reversed() }
+    fn neg(self) -> OcAx1 {
+        self.reversed()
+    }
 }
- 
+
 // ── OcAx2 ─────────────────────────────────────────────────────────────────
- 
+
 /// A right-handed coordinate system in 3-D space.
 ///
 /// Defined by an origin point and three mutually orthogonal unit vectors:
@@ -605,7 +695,7 @@ pub struct OcAx2 {
     /// Derived: `direction × x_dir`.  Stored to make `y_direction()` O(1).
     y_dir: OcDir,
 }
- 
+
 impl OcAx2 {
     /// Creates a right-handed coordinate system from an origin, a main
     /// direction `n`, and a hint vector `vx` for the X direction.
@@ -620,33 +710,34 @@ impl OcAx2 {
     ///
     /// Corresponds to `gp_Ax2(P, N, Vx)`.
     /// Reference: <https://dev.opencascade.org/doc/refman/html/classgp___ax2.html>
-    pub fn new(
-        location: OcPnt,
-        direction: OcDir,
-        x_dir: OcDir,
-    ) -> Result<Self, OcctError> {
+    pub fn new(location: OcPnt, direction: OcDir, x_dir: OcDir) -> Result<Self, OcctError> {
         let n = direction.to_vec();
         let vx = x_dir.to_vec();
- 
+
         // (n × vx) × n  — projects vx onto the plane perpendicular to n.
         // Zero if n ∥ vx.
-        let cross1 = n.cross(&vx);           // n × vx
+        let cross1 = n.cross(&vx); // n × vx
         let actual_x_vec = cross1.cross(&n); // (n × vx) × n
- 
+
         let actual_x = OcDir::from_vec(&actual_x_vec).map_err(|_| OcctError {
             kind: OcctErrorKind::ConstructionError,
             message: "OcAx2: direction and x_dir are parallel".to_owned(),
         })?;
- 
+
         // Right-hand rule: y = n × actual_x.  Since n and actual_x are unit
         // and mutually perpendicular, the cross product is also unit.
         let y_vec = n.cross(&actual_x.to_vec());
         let y_dir = OcDir::from_vec(&y_vec)
             .expect("y direction non-zero: n and actual_x are perpendicular — invariant");
- 
-        Ok(Self { location, direction, x_dir: actual_x, y_dir })
+
+        Ok(Self {
+            location,
+            direction,
+            x_dir: actual_x,
+            y_dir,
+        })
     }
- 
+
     /// Creates a right-handed coordinate system from an origin and a main
     /// direction, computing the X and Y directions automatically.
     ///
@@ -672,22 +763,27 @@ impl OcAx2 {
         } else {
             OcVec::new(0.0, 0.0, 1.0)
         };
- 
+
         // x_raw = direction × reference.  Non-zero because reference is not
         // parallel to direction (we chose the least-aligned axis).
         let d = direction.to_vec();
         let x_raw = d.cross(&reference);
-        let x_dir = OcDir::from_vec(&x_raw)
-            .expect("reference not parallel to direction — invariant");
- 
+        let x_dir =
+            OcDir::from_vec(&x_raw).expect("reference not parallel to direction — invariant");
+
         // y = direction × x_dir.  Unit because direction ⊥ x_dir.
         let y_vec = d.cross(&x_dir.to_vec());
-        let y_dir = OcDir::from_vec(&y_vec)
-            .expect("y direction non-zero by right-hand rule — invariant");
- 
-        Self { location, direction, x_dir, y_dir }
+        let y_dir =
+            OcDir::from_vec(&y_vec).expect("y direction non-zero by right-hand rule — invariant");
+
+        Self {
+            location,
+            direction,
+            x_dir,
+            y_dir,
+        }
     }
- 
+
     /// The reference coordinate system OXYZ: origin (0,0,0), Z axis (0,0,1),
     /// X axis (1,0,0), Y axis (0,1,0).
     ///
@@ -695,34 +791,47 @@ impl OcAx2 {
     pub fn oxyz() -> Self {
         // Constructed with explicit unit vectors — unwraps cannot panic.
         let direction = OcDir::new(0.0, 0.0, 1.0).expect("unit Z");
-        let x_dir    = OcDir::new(1.0, 0.0, 0.0).expect("unit X");
-        let y_dir    = OcDir::new(0.0, 1.0, 0.0).expect("unit Y");
-        Self { location: OcPnt::origin(), direction, x_dir, y_dir }
+        let x_dir = OcDir::new(1.0, 0.0, 0.0).expect("unit X");
+        let y_dir = OcDir::new(0.0, 1.0, 0.0).expect("unit Y");
+        Self {
+            location: OcPnt::origin(),
+            direction,
+            x_dir,
+            y_dir,
+        }
     }
- 
+
     /// Returns the origin (location point) of this coordinate system.
     #[inline]
-    pub fn location(&self) -> OcPnt { self.location }
- 
+    pub fn location(&self) -> OcPnt {
+        self.location
+    }
+
     /// Returns the main ("Z") direction of this coordinate system.
     ///
     /// Corresponds to `gp_Ax2::Direction()`.
     #[inline]
-    pub fn direction(&self) -> OcDir { self.direction }
- 
+    pub fn direction(&self) -> OcDir {
+        self.direction
+    }
+
     /// Returns the X direction of this coordinate system.
     ///
     /// Corresponds to `gp_Ax2::XDirection()`.
     #[inline]
-    pub fn x_direction(&self) -> OcDir { self.x_dir }
- 
+    pub fn x_direction(&self) -> OcDir {
+        self.x_dir
+    }
+
     /// Returns the Y direction of this coordinate system.
     ///
     /// Computed as `direction × x_direction` and stored at construction.
     /// Corresponds to `gp_Ax2::YDirection()`.
     #[inline]
-    pub fn y_direction(&self) -> OcDir { self.y_dir }
- 
+    pub fn y_direction(&self) -> OcDir {
+        self.y_dir
+    }
+
     /// Returns the main axis (origin + main direction) as an `OcAx1`.
     ///
     /// Corresponds to `gp_Ax2::Axis()`.
@@ -730,7 +839,7 @@ impl OcAx2 {
     pub fn axis(&self) -> OcAx1 {
         OcAx1::new(self.location, self.direction)
     }
- 
+
     /// Angle between the main directions of `self` and `other`, in [0, π] radians.
     ///
     /// Corresponds to `gp_Ax2::Angle()`.
@@ -738,40 +847,45 @@ impl OcAx2 {
     pub fn angle(&self, other: &OcAx2) -> f64 {
         self.direction.angle(&other.direction)
     }
- 
+
     /// Translates this coordinate system by vector `v` (shifts the origin;
     /// directions unchanged).
     #[inline]
     pub fn translated(&self, v: OcVec) -> Self {
-        Self { location: self.location + v, ..*self }
+        Self {
+            location: self.location + v,
+            ..*self
+        }
     }
- 
+
     /// Materialises a `gp_Ax2` for passing to an OCCT API.
     /// This is the only point at which an `OcAx2` crosses the FFI boundary.
     #[inline]
     pub(crate) fn to_ffi(&self) -> cxx::UniquePtr<ffi::GpAx2> {
         ffi::new_gp_ax2(
-            self.location.x,    self.location.y,    self.location.z,
-            self.direction.x(), self.direction.y(), self.direction.z(),
-            self.x_dir.x(),     self.x_dir.y(),     self.x_dir.z(),
+            self.location.x,
+            self.location.y,
+            self.location.z,
+            self.direction.x(),
+            self.direction.y(),
+            self.direction.z(),
+            self.x_dir.x(),
+            self.x_dir.y(),
+            self.x_dir.z(),
         )
         .expect("pre-validated OcAx2 failed to materialise — invariant violated")
     }
 }
- 
+
 // ── Internal geometry helpers ─────────────────────────────────────────────
- 
+
 /// Distance from `point` to the infinite line defined by `origin` and `direction`.
 ///
 /// Formula: ‖(point − origin) × direction‖
 /// Valid because `direction` is a unit vector.
 #[inline]
 fn point_to_axis_distance(point: &OcPnt, origin: &OcPnt, direction: &OcDir) -> f64 {
-    let op = OcVec::new(
-        point.x - origin.x,
-        point.y - origin.y,
-        point.z - origin.z,
-    );
+    let op = OcVec::new(point.x - origin.x, point.y - origin.y, point.z - origin.z);
     op.cross(&direction.to_vec()).magnitude()
 }
 
@@ -890,19 +1004,19 @@ mod tests {
 
     #[test]
     fn dir_is_parallel() {
-        let x  = OcDir::new(1.0, 0.0, 0.0).unwrap();
+        let x = OcDir::new(1.0, 0.0, 0.0).unwrap();
         let mx = OcDir::new(-1.0, 0.0, 0.0).unwrap();
-        let y  = OcDir::new(0.0, 1.0, 0.0).unwrap();
+        let y = OcDir::new(0.0, 1.0, 0.0).unwrap();
         assert!(x.is_parallel(&mx, 1e-10));
         assert!(!x.is_parallel(&y, 1e-10));
     }
 
     #[test]
     fn dir_angle_with_ref_sign() {
-        let x    = OcDir::new(1.0, 0.0, 0.0).unwrap();
-        let y    = OcDir::new(0.0, 1.0, 0.0).unwrap();
-        let z    = OcDir::new(0.0, 0.0, 1.0).unwrap();
-        let mz   = OcDir::new(0.0, 0.0, -1.0).unwrap();
+        let x = OcDir::new(1.0, 0.0, 0.0).unwrap();
+        let y = OcDir::new(0.0, 1.0, 0.0).unwrap();
+        let z = OcDir::new(0.0, 0.0, 1.0).unwrap();
+        let mz = OcDir::new(0.0, 0.0, -1.0).unwrap();
         // x→y measured around +z should be positive (CCW)
         let pos = x.angle_with_ref(&y, &z).unwrap();
         assert!(pos > 0.0);
@@ -921,16 +1035,16 @@ mod tests {
     mod ax_tests {
         use super::*;
         use std::f64::consts::{FRAC_PI_2, PI};
-     
+
         // ── OcAx1 ────────────────────────────────────────────────────────────
-     
+
         #[test]
         fn ax1_default_is_z_axis() {
             let a = OcAx1::z_axis();
             assert_eq!(a.location(), OcPnt::origin());
             assert!((a.direction().z() - 1.0).abs() < 1e-15);
         }
-     
+
         #[test]
         fn ax1_accessors_roundtrip() {
             let p = OcPnt::new(1.0, 2.0, 3.0);
@@ -939,7 +1053,7 @@ mod tests {
             assert_eq!(a.location(), p);
             assert_eq!(a.direction(), d);
         }
-     
+
         #[test]
         fn ax1_reversed() {
             let a = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
@@ -947,13 +1061,13 @@ mod tests {
             assert!((r.direction().z() + 1.0).abs() < 1e-15);
             assert_eq!(r.location(), OcPnt::origin());
         }
-     
+
         #[test]
         fn ax1_neg_operator() {
             let a = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
             assert_eq!(-a, a.reversed());
         }
-     
+
         #[test]
         fn ax1_translated() {
             let a = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
@@ -961,23 +1075,26 @@ mod tests {
             assert_eq!(t.location(), OcPnt::new(1.0, 2.0, 3.0));
             assert_eq!(t.direction(), a.direction());
         }
-     
+
         #[test]
         fn ax1_angle_right_angle() {
             let x = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
             let y = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 1.0, 0.0).unwrap());
             assert!((x.angle(&y) - FRAC_PI_2).abs() < 1e-12);
         }
-     
+
         #[test]
         fn ax1_is_parallel() {
-            let a  = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
-            let ma = OcAx1::new(OcPnt::new(5.0, 0.0, 0.0), OcDir::new(-1.0, 0.0, 0.0).unwrap());
-            let b  = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 1.0, 0.0).unwrap());
+            let a = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
+            let ma = OcAx1::new(
+                OcPnt::new(5.0, 0.0, 0.0),
+                OcDir::new(-1.0, 0.0, 0.0).unwrap(),
+            );
+            let b = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 1.0, 0.0).unwrap());
             assert!(a.is_parallel(&ma, 1e-10));
             assert!(!a.is_parallel(&b, 1e-10));
         }
-     
+
         #[test]
         fn ax1_is_normal() {
             let x = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
@@ -985,33 +1102,39 @@ mod tests {
             assert!(x.is_normal(&y, 1e-10));
             assert!(!x.is_normal(&x, 1e-10));
         }
-     
+
         #[test]
         fn ax1_is_opposite() {
-            let a  = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
+            let a = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
             let ma = OcAx1::new(OcPnt::origin(), OcDir::new(-1.0, 0.0, 0.0).unwrap());
             assert!(a.is_opposite(&ma, 1e-10));
             assert!(!a.is_opposite(&a, 1e-10));
         }
-     
+
         #[test]
         fn ax1_is_coaxial_same_line() {
             // Two axes on the same line, different locations.
             let a = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
-            let b = OcAx1::new(OcPnt::new(5.0, 0.0, 0.0), OcDir::new(1.0, 0.0, 0.0).unwrap());
+            let b = OcAx1::new(
+                OcPnt::new(5.0, 0.0, 0.0),
+                OcDir::new(1.0, 0.0, 0.0).unwrap(),
+            );
             assert!(a.is_coaxial(&b, 1e-10, 1e-10));
         }
-     
+
         #[test]
         fn ax1_is_coaxial_offset_line_fails() {
             // Parallel axes but offset — not coaxial.
             let a = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
-            let b = OcAx1::new(OcPnt::new(0.0, 1.0, 0.0), OcDir::new(1.0, 0.0, 0.0).unwrap());
+            let b = OcAx1::new(
+                OcPnt::new(0.0, 1.0, 0.0),
+                OcDir::new(1.0, 0.0, 0.0).unwrap(),
+            );
             assert!(!a.is_coaxial(&b, 1e-10, 0.5));
         }
-     
+
         // ── OcAx2 ────────────────────────────────────────────────────────────
-     
+
         #[test]
         fn ax2_oxyz_default() {
             let cs = OcAx2::oxyz();
@@ -1020,7 +1143,7 @@ mod tests {
             assert!((cs.x_direction().x() - 1.0).abs() < 1e-15);
             assert!((cs.y_direction().y() - 1.0).abs() < 1e-15);
         }
-     
+
         #[test]
         fn ax2_right_handed_invariant() {
             // direction must equal x_direction × y_direction for any OcAx2.
@@ -1038,12 +1161,12 @@ mod tests {
             assert!((computed_n.y - n.y).abs() < 1e-12);
             assert!((computed_n.z - n.z).abs() < 1e-12);
         }
-     
+
         #[test]
         fn ax2_new_x_dir_projected() {
             // When an oblique Vx hint is given, the stored x_dir should be
             // perpendicular to direction.
-            let n  = OcDir::new(0.0, 0.0, 1.0).unwrap();
+            let n = OcDir::new(0.0, 0.0, 1.0).unwrap();
             let vx = OcDir::new(1.0, 1.0, 0.0).unwrap(); // 45° in XY plane
             let cs = OcAx2::new(OcPnt::origin(), n, vx).unwrap();
             // actual_x must be perpendicular to n (dot = 0)
@@ -1052,25 +1175,30 @@ mod tests {
             let mag = cs.x_direction().to_vec().magnitude();
             assert!((mag - 1.0).abs() < 1e-12);
         }
-     
+
         #[test]
         fn ax2_parallel_fails() {
-            let n  = OcDir::new(0.0, 0.0, 1.0).unwrap();
+            let n = OcDir::new(0.0, 0.0, 1.0).unwrap();
             let vx = OcDir::new(0.0, 0.0, 1.0).unwrap(); // parallel to n
             assert!(OcAx2::new(OcPnt::origin(), n, vx).is_err());
         }
-     
+
         #[test]
         fn ax2_anti_parallel_fails() {
-            let n  = OcDir::new(0.0, 0.0, 1.0).unwrap();
+            let n = OcDir::new(0.0, 0.0, 1.0).unwrap();
             let vx = OcDir::new(0.0, 0.0, -1.0).unwrap(); // anti-parallel to n
             assert!(OcAx2::new(OcPnt::origin(), n, vx).is_err());
         }
-     
+
         #[test]
         fn ax2_with_direction_right_handed() {
-            for (dx, dy, dz) in [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0),
-                                 (1.0, 1.0, 0.0), (1.0, 1.0, 1.0)] {
+            for (dx, dy, dz) in [
+                (1.0, 0.0, 0.0),
+                (0.0, 1.0, 0.0),
+                (0.0, 0.0, 1.0),
+                (1.0, 1.0, 0.0),
+                (1.0, 1.0, 1.0),
+            ] {
                 let d = OcDir::new(dx, dy, dz).unwrap();
                 let cs = OcAx2::with_direction(OcPnt::origin(), d);
                 // Right-handedness: direction = x × y
@@ -1078,12 +1206,21 @@ mod tests {
                 let y = cs.y_direction().to_vec();
                 let n = cs.direction().to_vec();
                 let computed = x.cross(&y);
-                assert!((computed.x - n.x).abs() < 1e-12, "failed for ({dx},{dy},{dz})");
-                assert!((computed.y - n.y).abs() < 1e-12, "failed for ({dx},{dy},{dz})");
-                assert!((computed.z - n.z).abs() < 1e-12, "failed for ({dx},{dy},{dz})");
+                assert!(
+                    (computed.x - n.x).abs() < 1e-12,
+                    "failed for ({dx},{dy},{dz})"
+                );
+                assert!(
+                    (computed.y - n.y).abs() < 1e-12,
+                    "failed for ({dx},{dy},{dz})"
+                );
+                assert!(
+                    (computed.z - n.z).abs() < 1e-12,
+                    "failed for ({dx},{dy},{dz})"
+                );
             }
         }
-     
+
         #[test]
         fn ax2_axis_returns_correct_ax1() {
             let cs = OcAx2::oxyz();
@@ -1091,7 +1228,7 @@ mod tests {
             assert_eq!(ax.location(), cs.location());
             assert_eq!(ax.direction(), cs.direction());
         }
-     
+
         #[test]
         fn ax2_angle_between_systems() {
             let oxyz = OcAx2::oxyz();
@@ -1104,7 +1241,7 @@ mod tests {
             .unwrap();
             assert!((oxyz.angle(&rotated) - FRAC_PI_2).abs() < 1e-12);
         }
-     
+
         #[test]
         fn ax2_translated() {
             let cs = OcAx2::oxyz();
@@ -1113,7 +1250,7 @@ mod tests {
             assert_eq!(t.direction(), cs.direction());
             assert_eq!(t.x_direction(), cs.x_direction());
         }
-     
+
         #[test]
         fn point_to_axis_distance_known() {
             // Point (0,1,0) to the X axis (origin, direction X).
@@ -1124,5 +1261,4 @@ mod tests {
             assert!((dist - 1.0).abs() < 1e-12);
         }
     }
-
 }
