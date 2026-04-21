@@ -1,11 +1,8 @@
 //! Topological solid type.
 //!
-//! `OcSolid` is a closed, bounded volume in 3-D space.  This module
-//! introduces the type only; construction via extrusion (`BRepPrimAPI_MakePrism`,
-//! TKPrim) is bound in the next step.
-//!
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_topo_d_s___solid.html>
 
+use crate::topo::OcShape;
 use occt_sys::ffi;
 use std::marker::PhantomData;
 
@@ -30,6 +27,15 @@ impl std::fmt::Debug for OcSolid {
 }
 
 impl OcSolid {
+    /// Widens this solid to a general [`OcShape`] for use with shape-level
+    /// APIs such as tessellation.
+    ///
+    /// The conversion is a cheap TShape handle reference-count increment;
+    /// no geometry is copied.
+    pub fn as_shape(&self) -> OcShape {
+        OcShape::from_ffi(ffi::clone_shape(ffi::solid_as_shape(&self.inner)))
+    }
+
     pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopdsSolid>) -> Self {
         Self {
             inner,

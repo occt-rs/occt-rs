@@ -8,7 +8,7 @@
 
 use crate::error::{OcctError, OcctErrorKind};
 use crate::gp::OcPnt;
-use crate::topo::OcVertex;
+use crate::topo::{OcShape, OcVertex};
 use occt_sys::ffi;
 use std::marker::PhantomData;
 
@@ -25,6 +25,7 @@ pub struct OcEdge {
     inner: cxx::UniquePtr<ffi::TopodsEdge>,
     _not_send: PhantomData<*mut ()>,
 }
+
 impl std::fmt::Debug for OcEdge {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OcEdge").finish_non_exhaustive()
@@ -50,8 +51,7 @@ impl OcEdge {
         }
     }
 
-    /// Constructs a straight-line edge between two points, creating vertices
-    /// internally with the default tolerance (`Precision::Confusion()`).
+    /// Constructs a straight-line edge between two points.
     ///
     /// Returns `Err(ConstructionError)` if the points are coincident.
     pub fn from_pnts(p1: OcPnt, p2: OcPnt) -> Result<Self, OcctError> {
@@ -60,11 +60,15 @@ impl OcEdge {
         Self::from_vertices(&v1, &v2)
     }
 
-    /// Returns a reference to the underlying `TopoDS_Edge` for use by
-    /// other OCCT API bindings within this crate.
-    pub(crate) fn as_ffi(&self) -> &ffi::TopodsEdge {
-        &self.inner
+    /// Widens this edge to a general [`OcShape`] for use with shape-level
+    /// APIs such as tessellation.
+    ///
+    /// The conversion is a cheap TShape handle reference-count increment;
+    /// no geometry is copied.
+    pub fn as_shape(&self) -> OcShape {
+        OcShape::from_ffi(ffi::clone_shape(ffi::edge_as_shape(&self.inner)))
     }
+
     pub fn start_vertex(&self) -> OcVertex {
         OcVertex::from_ffi(ffi::edge_start_vertex(&self.inner))
     }
@@ -72,6 +76,11 @@ impl OcEdge {
     pub fn end_vertex(&self) -> OcVertex {
         OcVertex::from_ffi(ffi::edge_end_vertex(&self.inner))
     }
+
+    pub(crate) fn as_ffi(&self) -> &ffi::TopodsEdge {
+        &self.inner
+    }
+
     pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsEdge>) -> Self {
         Self {
             inner,
@@ -111,10 +120,17 @@ mod tests {
         let e = OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(0.0, 1.0, 0.0)).unwrap();
         let _ = e.clone();
     }
+
     #[test]
     fn coincident_fails_with_construction_error() {
         let p = OcPnt::new(1.0, 2.0, 3.0);
         let err = OcEdge::from_pnts(p, p).unwrap_err();
         assert_eq!(err.kind, crate::error::OcctErrorKind::ConstructionError);
+    }
+
+    #[test]
+    fn as_shape_widens() {
+        let e = OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+        let _shape = e.as_shape();
     }
 }

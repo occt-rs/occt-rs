@@ -9,15 +9,23 @@
 //
 // Toolkits in use
 // ---------------
-// TKernel   — Standard_Failure and RTTI
+// TKernel   — Standard_Failure and RTTI, Poly_Triangulation, TopLoc_Location
 // TKMath    — gp_* geometry primitives
-// TKBRep    — TopoDS_*, BRep_Tool
+// TKBRep    — TopoDS_*, BRep_Tool, TopExp_Explorer
 // TKTopAlgo — BRepBuilderAPI_Make*
 // TKPrim    — BRepPrimAPI_MakePrism
+// TKMesh    — BRepMesh_IncrementalMesh
 
 use std::path::PathBuf;
 
-const OCCT_TOOLKITS: &[&str] = &["TKernel", "TKMath", "TKBRep", "TKTopAlgo", "TKPrim"];
+const OCCT_TOOLKITS: &[&str] = &[
+    "TKernel",
+    "TKMath",
+    "TKBRep",
+    "TKTopAlgo",
+    "TKPrim",
+    "TKMesh",
+];
 
 fn main() {
     // Bridge source files.
@@ -34,6 +42,9 @@ fn main() {
     println!("cargo:rerun-if-changed=include/occt_sys/topo/wire.hxx");
     println!("cargo:rerun-if-changed=include/occt_sys/topo/face.hxx");
     println!("cargo:rerun-if-changed=include/occt_sys/topo/solid.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/topo/shape.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/topo/explorer.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/topo/mesh.hxx");
     println!("cargo:rerun-if-env-changed=OCCT_DIR");
 
     let include_paths = discover_occt();

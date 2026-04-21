@@ -15,3 +15,6 @@
 #include "topo/wire.hxx"
 #include "topo/face.hxx"
 #include "topo/solid.hxx"
+#include "topo/shape.hxx"
+#include "topo/explorer.hxx"
+#include "topo/mesh.hxx"

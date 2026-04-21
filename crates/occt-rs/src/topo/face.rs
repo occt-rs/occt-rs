@@ -7,7 +7,7 @@
 
 use crate::error::{OcctError, OcctErrorKind};
 use crate::gp::OcVec;
-use crate::topo::{OcSolid, OcWire};
+use crate::topo::{OcShape, OcSolid, OcWire};
 use occt_sys::ffi;
 use std::marker::PhantomData;
 
@@ -95,8 +95,15 @@ impl OcFace {
         OcWire::from_ffi(ffi::face_outer_wire(&self.inner))
     }
 
-    /// Returns a reference to the underlying `TopoDS_Face` for use by
-    /// other OCCT API bindings within this crate.
+    /// Widens this face to a general [`OcShape`] for use with shape-level APIs
+    /// such as tessellation.
+    ///
+    /// The conversion is a cheap TShape handle reference-count increment;
+    /// no geometry is copied.
+    pub fn as_shape(&self) -> OcShape {
+        OcShape::from_ffi(ffi::clone_shape(ffi::face_as_shape(&self.inner)))
+    }
+
     pub(crate) fn as_ffi(&self) -> &ffi::TopdsFace {
         &self.inner
     }
@@ -158,20 +165,19 @@ mod tests {
         let wire = triangle_wire();
         let face = OcFace::from_wire(&wire, true).unwrap();
         let cloned = face.clone();
-        // Both originals and clones must survive; outer_wire is readable on both.
         assert_eq!(face.outer_wire().edges().len(), 3);
         assert_eq!(cloned.outer_wire().edges().len(), 3);
     }
 
     #[test]
     fn construction_error_kind() {
-        // A wire with a single edge is not a valid closed face boundary.
         let single_edge =
             OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap();
         let open_wire = OcWire::from_edges(&[single_edge]).unwrap();
         let err = OcFace::from_wire(&open_wire, true).unwrap_err();
         assert_eq!(err.kind, crate::error::OcctErrorKind::ConstructionError);
     }
+
     #[test]
     fn extrude_triangle_produces_solid() {
         let wire = triangle_wire();
@@ -184,8 +190,14 @@ mod tests {
     fn extrude_zero_vec_fails() {
         let wire = triangle_wire();
         let face = OcFace::from_wire(&wire, true).unwrap();
-        // Zero vector has no sweep direction — OCCT should reject this.
         let result = face.extrude(OcVec::new(0.0, 0.0, 0.0));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn as_shape_widens() {
+        let wire = triangle_wire();
+        let face = OcFace::from_wire(&wire, true).unwrap();
+        let _shape = face.as_shape(); // must not panic
     }
 }

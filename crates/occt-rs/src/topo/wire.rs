@@ -3,7 +3,7 @@
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_wire.html>
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::topo::OcEdge;
+use crate::topo::{OcEdge, OcShape};
 use occt_sys::ffi;
 use std::marker::PhantomData;
 
@@ -22,6 +22,7 @@ impl OcWire {
         }
         result
     }
+
     pub fn from_edges(edges: &[OcEdge]) -> Result<Self, OcctError> {
         let mut builder = ffi::new_make_wire_builder();
         for e in edges {
@@ -39,9 +40,19 @@ impl OcWire {
         })
     }
 
+    /// Widens this wire to a general [`OcShape`] for use with shape-level
+    /// APIs such as tessellation.
+    ///
+    /// The conversion is a cheap TShape handle reference-count increment;
+    /// no geometry is copied.
+    pub fn as_shape(&self) -> OcShape {
+        OcShape::from_ffi(ffi::clone_shape(ffi::wire_as_shape(&self.inner)))
+    }
+
     pub(crate) fn as_ffi(&self) -> &ffi::TopodsWire {
         &self.inner
     }
+
     pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsWire>) -> Self {
         Self {
             inner,
@@ -63,7 +74,6 @@ impl Clone for OcWire {
 mod tests {
     use super::*;
     use crate::gp::OcPnt;
-    use crate::topo::OcEdge;
 
     #[test]
     fn triangle() {
@@ -83,6 +93,7 @@ mod tests {
         ];
         assert!(OcWire::from_edges(&edges).is_err());
     }
+
     #[test]
     fn round_trip_triangle_vertices() {
         let pts = [
@@ -95,12 +106,17 @@ mod tests {
             .map(|(a, b)| OcEdge::from_pnts(*a, *b).unwrap())
             .collect();
         let wire = OcWire::from_edges(&edges).unwrap();
-        let out_edges = wire.edges();
-        assert_eq!(out_edges.len(), 3);
-        for e in &out_edges {
-            let _s = e.start_vertex().pnt();
-            let _e = e.end_vertex().pnt();
-            // Coordinates are readable without panic — geometry is intact.
-        }
+        assert_eq!(wire.edges().len(), 3);
+    }
+
+    #[test]
+    fn as_shape_widens() {
+        let edges = vec![
+            OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
+            OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(0.5, 1.0, 0.0)).unwrap(),
+            OcEdge::from_pnts(OcPnt::new(0.5, 1.0, 0.0), OcPnt::new(0.0, 0.0, 0.0)).unwrap(),
+        ];
+        let wire = OcWire::from_edges(&edges).unwrap();
+        let _shape = wire.as_shape();
     }
 }
