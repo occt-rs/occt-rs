@@ -14,21 +14,29 @@
 //! for face in &result.faces {
 //!     println!("face {:?}: {} triangles", face.key, face.mesh.indices.len() / 3);
 //! }
+//!
+//! for edge in &result.edges {
+//!     println!("edge {:?}: {} points", edge.key, edge.points.len());
+//! }
 //! ```
 //!
 //! # Coordinate precision
 //!
-//! OCCT stores all geometry as `f64`.  Tessellation output uses `f32` —
-//! the natural precision for GPU vertex buffers.  The narrowing conversion
-//! happens at this boundary; maximum precision loss is ~1 ULP at single
-//! precision.
+//! OCCT stores all geometry as `f64`.  Tessellation output uses `f32` for triangle
+//! meshes (GPU buffer natural precision).  Edge polylines are returned as `f64`
+//! to preserve the precision of the underlying polygon data.
 //!
 //! # TopLoc_Location
 //!
-//! Node coordinates are returned without applying `TopLoc_Location`.  For
-//! shapes built with `BRepBuilderAPI_*` APIs (no STEP/IGES assembly placement),
-//! the location is always identity and coordinates are already in global space.
-//! Location support is deferred to the assembly-import PR.
+//! Edge polyline node coordinates are transformed by `TopLoc_Location` to place
+//! them in global model space. Face triangulations do not apply location
+//! (deferred work, noted as future concern).
+//!
+//! # Edge polygon availability
+//!
+//! Edge polylines are extracted via `BRep_Tool::Polygon3D`. After
+//! `BRep_Mesh_IncrementalMesh`, most edges have a direct 3D polygon. Edges
+//! without one are silently omitted from the result.
 //!
 //! # Deduplication
 //!
@@ -37,9 +45,9 @@
 //! filter on [`ShapeKey`].
 //!
 //! Reference:
-//!   `BRep_Mesh_IncrementalMesh` — <https://dev.opencascade.org/doc/refman/html/class_b_rep_mesh___incremental_mesh.html>
-//!   `TopExp_Explorer`           — <https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html>
-//!   `BRep_Tool::Triangulation`  — <https://dev.opencascade.org/doc/refman/html/class_b_rep___tool.html>
+//!   `BRep_Mesh_IncrementalMesh`       — <https://dev.opencascade.org/doc/refman/html/class_b_rep_mesh___incremental_mesh.html>
+//!   `BRep_Tool::Polygon3D`            — <https://dev.opencascade.org/doc/refman/html/class_b_rep___tool.html>
+//!   `TopExp_Explorer`                 — <https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html>
 
 use crate::error::{OcctError, OcctErrorKind};
 use crate::topo::OcShape;
@@ -48,6 +56,7 @@ use occt_sys::ffi;
 // TopAbs_ShapeEnum constants.
 // Reference: https://dev.opencascade.org/doc/refman/html/namespace_top_abs.html
 const TOP_ABS_FACE: i32 = 4;
+const TOP_ABS_EDGE: i32 = 6;
 const TOP_ABS_VERTEX: i32 = 7;
 
 // ── Public types ───────────────────────────────────────────────────────────────
@@ -97,6 +106,16 @@ pub struct TessFace {
     pub mesh: TriMesh,
 }
 
+/// A tessellated edge polyline.
+#[derive(Debug, Clone)]
+pub struct TessEdge {
+    /// Session-scoped identity of the originating `TopoDS_Edge`.
+    pub key: ShapeKey,
+    /// Polyline points in model space, transformed by `TopLoc_Location`.
+    /// Each point is `[x, y, z]`.  Returned as `f64` to preserve polygon precision.
+    pub points: Vec<[f64; 3]>,
+}
+
 /// A tessellated vertex.
 #[derive(Debug, Clone)]
 pub struct TessVertex {
@@ -107,12 +126,13 @@ pub struct TessVertex {
 }
 
 /// Output of [`compute`].
-///
-/// Edge polylines (`BRep_Tool::Polygon3D`) are deferred to a subsequent PR.
 #[derive(Debug, Clone)]
 pub struct TessellationResult {
     /// One entry per `TopoDS_Face` found in the shape.
     pub faces: Vec<TessFace>,
+    /// One entry per `TopoDS_Edge` found in the shape that has polygon data.
+    /// Edges without polygon data are omitted.
+    pub edges: Vec<TessEdge>,
     /// One entry per `TopoDS_Vertex` occurrence found in the shape.
     /// May contain duplicate keys; see module-level deduplication note.
     pub vertices: Vec<TessVertex>,
@@ -170,8 +190,6 @@ pub fn compute(
         let shape_ref = face_exp.current();
         let key = ShapeKey(ffi::shape_key(shape_ref));
         let face = ffi::shape_as_face(shape_ref);
-        // shape_ref is last used above; NLL ends the borrow of face_exp here,
-        // allowing face_exp.pin_mut().next() below.
 
         let tri = ffi::face_triangulation(&face);
         if !tri.is_null() {
@@ -203,7 +221,24 @@ pub fn compute(
         face_exp.pin_mut().next();
     }
 
-    // 3. Extract vertex positions.
+    // 3. Extract edge polylines.
+    //    Each edge is queried for BRep_Tool::Polygon3D.
+    //    Edges without a polygon are skipped.
+    let mut edges = Vec::new();
+    let mut edge_exp = ffi::new_shape_explorer(shape.as_ffi(), TOP_ABS_EDGE);
+    while edge_exp.more() {
+        let shape_ref = edge_exp.current();
+        let key = ShapeKey(ffi::shape_key(shape_ref));
+        let edge_topo = ffi::shape_as_edge(shape_ref);
+
+        if let Some(points) = try_polygon3d(&edge_topo) {
+            edges.push(TessEdge { key, points });
+        }
+
+        edge_exp.pin_mut().next();
+    }
+
+    // 4. Extract vertex positions.
     let mut vertices = Vec::new();
     let mut vtx_exp = ffi::new_shape_explorer(shape.as_ffi(), TOP_ABS_VERTEX);
     while vtx_exp.more() {
@@ -222,7 +257,41 @@ pub fn compute(
         vtx_exp.pin_mut().next();
     }
 
-    Ok(TessellationResult { faces, vertices })
+    Ok(TessellationResult {
+        faces,
+        edges,
+        vertices,
+    })
+}
+
+// ── Edge polygon extraction helper ─────────────────────────────────────────────
+
+/// Attempts to extract a Polygon3D polyline from an edge.
+/// Returns None if the edge has no direct 3D polygon.
+fn try_polygon3d(edge: &ffi::TopodsEdge) -> Option<Vec<[f64; 3]>> {
+    let poly = ffi::edge_polygon3d(edge)?;
+    let loc = ffi::edge_polygon3d_location(edge);
+    let nb_nodes = ffi::polygon3d_nb_nodes(&poly);
+
+    let mut points = Vec::with_capacity(nb_nodes as usize);
+    for i in 1..=nb_nodes {
+        let x = ffi::polygon3d_node_x(&poly, i);
+        let y = ffi::polygon3d_node_y(&poly, i);
+        let z = ffi::polygon3d_node_z(&poly, i);
+
+        // Apply location transformation to place in global model space.
+        let (tx, ty, tz) = if ffi::location_is_identity(&loc) {
+            (x, y, z)
+        } else {
+            let mut out = (0.0, 0.0, 0.0);
+            ffi::apply_location_to_point(&loc, x, y, z, &mut out.0, &mut out.1, &mut out.2);
+            out
+        };
+
+        points.push([tx, ty, tz]);
+    }
+
+    Some(points)
 }
 
 #[cfg(test)]
@@ -248,6 +317,42 @@ mod tests {
         let result = compute(&shape, 0.1, 0.5).unwrap();
         // A triangular prism has 2 triangular + 3 rectangular faces.
         assert_eq!(result.faces.len(), 5);
+    }
+
+    #[test]
+    fn prism_has_nine_edges() {
+        let shape = triangle_prism().as_shape();
+        let result = compute(&shape, 0.1, 0.5).unwrap();
+        // A triangular prism has 9 edges: 3 on bottom, 3 on top, 3 vertical.
+        assert_eq!(
+            result.edges.len(),
+            9,
+            "expected 9 edges, got {}",
+            result.edges.len()
+        );
+    }
+
+    #[test]
+    fn all_edges_have_points() {
+        let shape = triangle_prism().as_shape();
+        let result = compute(&shape, 0.1, 0.5).unwrap();
+        for edge in &result.edges {
+            assert!(
+                !edge.points.is_empty(),
+                "edge {:?} has no points",
+                edge.key
+            );
+        }
+    }
+
+    #[test]
+    fn edge_keys_are_distinct() {
+        let shape = triangle_prism().as_shape();
+        let result = compute(&shape, 0.1, 0.5).unwrap();
+        let mut keys: Vec<usize> = result.edges.iter().map(|e| e.key.0).collect();
+        keys.sort_unstable();
+        keys.dedup();
+        assert_eq!(keys.len(), result.edges.len(), "edge keys should be distinct");
     }
 
     #[test]

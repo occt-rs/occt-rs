@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "topo/edge_polygon.hxx"
 #include "topo/vertex.hxx"
 #include "topo/edge.hxx"
 #include "topo/wire.hxx"

@@ -201,5 +201,31 @@ pub mod ffi {
         fn triangle_n1(self: &PolyTriangulationHandle, i: i32) -> i32;
         fn triangle_n2(self: &PolyTriangulationHandle, i: i32) -> i32;
         fn triangle_n3(self: &PolyTriangulationHandle, i: i32) -> i32;
+        // ── Poly_Polygon3D ────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_poly___polygon3_d.html
+        type PolyPolygon3D;
+
+        fn edge_polygon3d(e: &TopodsEdge) -> UniquePtr<PolyPolygon3D>;
+        fn edge_polygon3d_location(e: &TopodsEdge) -> UniquePtr<TopLocLocation>;
+        fn polygon3d_nb_nodes(p: &PolyPolygon3D) -> i32;
+        fn polygon3d_node_x(p: &PolyPolygon3D, i: i32) -> f64;
+        fn polygon3d_node_y(p: &PolyPolygon3D, i: i32) -> f64;
+        fn polygon3d_node_z(p: &PolyPolygon3D, i: i32) -> f64;
+
+        // ── TopLoc_Location ───────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_top_loc___location.html
+        type TopLocLocation;
+
+        fn apply_location_to_point(
+            loc: &TopLocLocation,
+            x: f64,
+            y: f64,
+            z: f64,
+            out_x: &mut f64,
+            out_y: &mut f64,
+            out_z: &mut f64,
+        );
+        fn location_is_identity(loc: &TopLocLocation) -> bool;
     }
+
 }
