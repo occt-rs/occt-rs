@@ -19,7 +19,7 @@ use std::path::PathBuf;
 
 // All OCCT toolkits this crate links against.  Order matters for static
 // linking (not used here, but kept consistent): dependencies before dependents.
-const OCCT_TOOLKITS: &[&str] = &["TKernel", "TKMath", "TKBRep", "TKTopAlgo"];
+const OCCT_TOOLKITS: &[&str] = &["TKernel", "TKMath", "TKBRep", "TKTopAlgo", "TKPrim"];
 
 fn main() {
     println!("cargo:rerun-if-changed=src/lib.rs");

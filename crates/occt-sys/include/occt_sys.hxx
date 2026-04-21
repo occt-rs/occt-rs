@@ -35,6 +35,8 @@
 #include <TopoDS_Face.hxx>
 #include <BRepTools.hxx>
 #include <TopoDS_Solid.hxx>
+#include <BRepPrimAPI_MakePrism.hxx>
+#include <TopoDS.hxx>
 
 // ── Exception protocol ──────────────────────────────────────────────────────
 //
@@ -55,6 +57,55 @@
         throw std::runtime_error(std::string("OCCT:Other:") + e.what());
     } catch (...) {
         throw std::runtime_error("OCCT:Other:unknown C++ exception");
+    }
+}
+// ── BRepPrimAPI_MakePrism ─────────────────────────────────────────────────
+// Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_prim_a_p_i___make_prism.html
+// Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s.html
+//
+// BRepPrimAPI_MakePrism sweeps a shape along a vector to produce a solid.
+// Unlike BRepBuilderAPI_* builders, MakePrism computes immediately in the
+// constructor and throws Standard_Failure on failure — the factory shim
+// must wrap construction in try/catch.
+//
+// Shape() is non-const in BRepBuilderAPI_MakeShape (it advances internal
+// state); the solid() accessor is therefore exposed as a mutable method.
+//
+// History note: BRepPrimAPI_MakePrism exposes Modified(), Generated(), and
+// IsDeleted(). This builder must not be dropped before history is queried.
+// History access is deferred; do not destroy MakePrismBuilder before
+// extracting the solid AND any required history.
+
+
+struct MakePrismBuilder {
+    BRepPrimAPI_MakePrism inner;
+
+    // face is passed as TopoDS_Face; it upcasts implicitly to TopoDS_Shape
+    // in C++, as required by BRepPrimAPI_MakePrism(const TopoDS_Shape&, ...).
+    MakePrismBuilder(const TopoDS_Face& face, double vx, double vy, double vz)
+        : inner(face, gp_Vec(vx, vy, vz)) {}
+
+    bool is_done() const { return inner.IsDone(); }
+
+    // Downcasts the resulting TopoDS_Shape to TopoDS_Solid via TopoDS::Solid.
+    // Only call when is_done() is true.
+    std::unique_ptr<TopoDS_Solid> solid() {
+        return std::make_unique<TopoDS_Solid>(TopoDS::Solid(inner.Shape()));
+    }
+};
+
+// Factory. Wraps BRepPrimAPI_MakePrism construction in try/catch because
+// MakePrism computes immediately and throws on failure — it does not defer
+// failure to an IsDone()/Error() pair.
+inline std::unique_ptr<MakePrismBuilder> new_make_prism_from_face(
+    const TopoDS_Face& face, double vx, double vy, double vz)
+{
+    try {
+        return std::make_unique<MakePrismBuilder>(face, vx, vy, vz);
+    } catch (const std::runtime_error&) {
+        throw;  // don't double-wrap an already-marshalled exception
+    } catch (...) {
+        rethrow_occt_as_runtime_error();
     }
 }
 // ── TopoDS_Solid ──────────────────────────────────────────────────────────────

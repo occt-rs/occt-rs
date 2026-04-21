@@ -23,6 +23,28 @@
 pub mod ffi {
     unsafe extern "C++" {
         include!("occt_sys.hxx");
+        // ── MakePrismBuilder ─────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_prim_a_p_i___make_prism.html
+        type MakePrismBuilder;
+
+        /// Constructs a MakePrismBuilder by sweeping `face` along the vector
+        /// (vx, vy, vz).  Returns Err if OCCT throws during construction.
+        ///
+        /// History note: do not drop the builder before extracting any
+        /// Modified()/Generated()/IsDeleted() history you need.
+        fn new_make_prism_from_face(
+            face: &TopdsFace,
+            vx: f64,
+            vy: f64,
+            vz: f64,
+        ) -> Result<UniquePtr<MakePrismBuilder>>;
+
+        /// Returns true when the prism was successfully constructed.
+        fn is_done(self: &MakePrismBuilder) -> bool;
+
+        /// Returns the resulting solid.  Only call when is_done() is true.
+        /// Shape() is non-const in BRepBuilderAPI_MakeShape — requires Pin.
+        fn solid(self: Pin<&mut MakePrismBuilder>) -> UniquePtr<TopdsSolid>;
         // ── TopoDS_Solid ─────────────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___solid.html
         #[cxx_name = "TopoDS_Solid"]

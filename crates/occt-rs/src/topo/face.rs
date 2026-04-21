@@ -6,7 +6,8 @@
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_face.html>
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::topo::OcWire;
+use crate::gp::OcVec;
+use crate::topo::{OcSolid, OcWire};
 use occt_sys::ffi;
 use std::marker::PhantomData;
 
@@ -31,6 +32,31 @@ impl std::fmt::Debug for OcFace {
 }
 
 impl OcFace {
+    /// Extrudes this face along `vec` to produce a solid.
+    ///
+    /// Calls `BRepPrimAPI_MakePrism(face, vec)`.
+    /// Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_prim_a_p_i___make_prism.html>
+    ///
+    /// Returns `Err(OcctError)` when OCCT throws during construction (e.g.
+    /// degenerate face or zero vector).
+    ///
+    /// # History
+    ///
+    /// `BRepPrimAPI_MakePrism` exposes `Modified`, `Generated`, and
+    /// `IsDeleted` for shape history queries.  History access is not yet
+    /// bound — if you need it, hold on to the builder (work in progress).
+    pub fn extrude(&self, vec: OcVec) -> Result<OcSolid, OcctError> {
+        let mut builder = ffi::new_make_prism_from_face(self.as_ffi(), vec.x, vec.y, vec.z)
+            .map_err(OcctError::from)?;
+        if builder.is_done() {
+            Ok(OcSolid::from_ffi(builder.pin_mut().solid()))
+        } else {
+            Err(OcctError {
+                kind: OcctErrorKind::ConstructionError,
+                message: "BRepPrimAPI_MakePrism: IsDone() false after construction".to_owned(),
+            })
+        }
+    }
     /// Constructs a face from a closed wire.
     ///
     /// When `only_plane` is `true`, OCCT rejects the wire if it is not planar
@@ -145,5 +171,21 @@ mod tests {
         let open_wire = OcWire::from_edges(&[single_edge]).unwrap();
         let err = OcFace::from_wire(&open_wire, true).unwrap_err();
         assert_eq!(err.kind, crate::error::OcctErrorKind::ConstructionError);
+    }
+    #[test]
+    fn extrude_triangle_produces_solid() {
+        let wire = triangle_wire();
+        let face = OcFace::from_wire(&wire, true).unwrap();
+        let solid = face.extrude(OcVec::new(0.0, 0.0, 1.0));
+        assert!(solid.is_ok());
+    }
+
+    #[test]
+    fn extrude_zero_vec_fails() {
+        let wire = triangle_wire();
+        let face = OcFace::from_wire(&wire, true).unwrap();
+        // Zero vector has no sweep direction — OCCT should reject this.
+        let result = face.extrude(OcVec::new(0.0, 0.0, 0.0));
+        assert!(result.is_err());
     }
 }
