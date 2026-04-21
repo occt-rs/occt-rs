@@ -9,7 +9,7 @@
 //!   - OCCT 7.9 reference: <https://dev.opencascade.org/doc/refman/html/>
 //!   - cxx docs: <https://cxx.rs/>
 //!
-//! No derivation from opencascade-rs or any other binding crate.
+//! No derivation from any other binding crate.
 
 #[cxx::bridge]
 pub mod ffi {

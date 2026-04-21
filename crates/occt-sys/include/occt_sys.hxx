@@ -9,7 +9,7 @@
 //   OCCT 7.9 reference documentation — https://dev.opencascade.org/doc/refman/html/
 //   cxx documentation              — https://cxx.rs/
 //
-// No derivation from opencascade-rs or any other binding crate.
+// No derivation from any other binding crate.
 // See DEVELOPMENT.md for the full IP hygiene policy.
 
 #pragma once
