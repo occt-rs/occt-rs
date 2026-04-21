@@ -34,6 +34,7 @@
 #include <BRepBuilderAPI_FaceError.hxx>
 #include <TopoDS_Face.hxx>
 #include <BRepTools.hxx>
+#include <TopoDS_Solid.hxx>
 
 // ── Exception protocol ──────────────────────────────────────────────────────
 //
@@ -55,6 +56,17 @@
     } catch (...) {
         throw std::runtime_error("OCCT:Other:unknown C++ exception");
     }
+}
+// ── TopoDS_Solid ──────────────────────────────────────────────────────────────
+// Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___solid.html
+//
+// No construction path yet — OcSolid is surfaced as a type-only placeholder
+// so that MakePrism (TKPrim, next step) has a typed output to return.
+//
+// TopoDS_Solid copy shares the underlying TShape handle (ref-counted).
+ 
+inline std::unique_ptr<TopoDS_Solid> clone_solid(const TopoDS_Solid& s) {
+    return std::make_unique<TopoDS_Solid>(s);
 }
 
 // ── gp_Pnt materialisation ─────────────────────────────────────────────────

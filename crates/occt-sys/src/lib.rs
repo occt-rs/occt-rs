@@ -23,6 +23,13 @@
 pub mod ffi {
     unsafe extern "C++" {
         include!("occt_sys.hxx");
+        // ── TopoDS_Solid ─────────────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___solid.html
+        #[cxx_name = "TopoDS_Solid"]
+        type TopdsSolid;
+
+        /// Copy-constructs a TopoDS_Solid.  Called by OcSolid's Clone impl.
+        fn clone_solid(s: &TopdsSolid) -> UniquePtr<TopdsSolid>;
         // ── TopoDS_Face ──────────────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___face.html
         #[cxx_name = "TopoDS_Face"]
