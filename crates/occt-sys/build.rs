@@ -2,47 +2,50 @@
 //
 // OCCT discovery order
 // --------------------
-// 1. pkg-config: probes the libraries we use.  Works automatically when
-//    PKG_CONFIG_PATH includes OCCT's pkgconfig dir (set by the dev flake).
+// 1. pkg-config: probes the toolkits we use.
 // 2. OCCT_DIR fallback: reads the OCCT_DIR env var and emits link flags manually.
 //
-// Dynamic linking is mandatory — see DEVELOPMENT.md for the licensing rationale.
+// Dynamic linking is mandatory — see DEVELOPMENT.md.
 //
 // Toolkits in use
 // ---------------
-// TKernel    — Standard_Failure and RTTI (used by all OCCT code)
-// TKMath     — gp_* geometry primitives
-// TKBRep     — TopoDS_* topology types, BRep_Tool
-// TKTopAlgo  — BRepBuilderAPI_MakeVertex and the wider BRepBuilderAPI package
+// TKernel   — Standard_Failure and RTTI
+// TKMath    — gp_* geometry primitives
+// TKBRep    — TopoDS_*, BRep_Tool
+// TKTopAlgo — BRepBuilderAPI_Make*
+// TKPrim    — BRepPrimAPI_MakePrism
 
 use std::path::PathBuf;
 
-// All OCCT toolkits this crate links against.  Order matters for static
-// linking (not used here, but kept consistent): dependencies before dependents.
 const OCCT_TOOLKITS: &[&str] = &["TKernel", "TKMath", "TKBRep", "TKTopAlgo", "TKPrim"];
 
 fn main() {
+    // Bridge source files.
     println!("cargo:rerun-if-changed=src/lib.rs");
+    println!("cargo:rerun-if-changed=src/gp.rs");
+    println!("cargo:rerun-if-changed=src/topo.rs");
+    // C++ headers — one entry per file so incremental rebuilds are precise.
     println!("cargo:rerun-if-changed=include/occt_sys.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/exception.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/gp.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/topo.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/topo/vertex.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/topo/edge.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/topo/wire.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/topo/face.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/topo/solid.hxx");
     println!("cargo:rerun-if-env-changed=OCCT_DIR");
 
     let include_paths = discover_occt();
 
-    cxx_build::bridge("src/lib.rs")
+    cxx_build::bridges(["src/gp.rs", "src/topo.rs"])
         .flag_if_supported("-std=c++17")
         .includes(&include_paths)
-        // Our shim header lives here; resolved as `#include "occt_sys.hxx"`.
         .include("include")
         .compile("occt-sys");
 }
 
-/// Returns the OCCT header include paths and emits the necessary
-/// `cargo:rustc-link-*` directives.
 fn discover_occt() -> Vec<PathBuf> {
-    // ── pkg-config path ───────────────────────────────────────────────────
-    // Probe each toolkit individually.  pkg-config emits link flags for each.
-    // We use TKMath's include paths as representative (all toolkits share the
-    // same header directory in a standard OCCT install).
     let mut include_paths: Option<Vec<PathBuf>> = None;
     for tk in OCCT_TOOLKITS {
         match pkg_config::Config::new()
@@ -60,7 +63,6 @@ fn discover_occt() -> Vec<PathBuf> {
         return paths;
     }
 
-    // ── OCCT_DIR fallback ─────────────────────────────────────────────────
     let dir = std::env::var("OCCT_DIR").unwrap_or_else(|_| {
         panic!(
             "OCCT not found.\n\
@@ -75,8 +77,6 @@ fn discover_occt() -> Vec<PathBuf> {
         println!("cargo:rustc-link-lib=dylib={tk}");
     }
 
-    // OCCT headers can be under include/opencascade/ (typical upstream
-    // install) or directly under include/ (some distro/Nix layouts).
     for candidate in ["include/opencascade", "include"] {
         let p = PathBuf::from(&dir).join(candidate);
         if p.is_dir() {
