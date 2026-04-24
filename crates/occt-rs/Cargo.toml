@@ -1,12 +1,12 @@
 [package]
 name        = "occt-rs"
 description = "Safe Rust API for OpenCASCADE Technology (OCCT)"
-version.workspace    = true
-edition.workspace    = true
-license.workspace    = true
-repository.workspace = true
-authors.workspace    = true
+version    = "0.0.1"
+edition    = "2021"
+license    = "AGPL-3.0-only"
+repository = "https://github.com/occt-rs/occt-rs"
+authors    = [ "Ben Pieters-Hawke" ]
 
 [dependencies]
-cxx = {workspace = true}
+cxx        = "1.0.194"
 occt-sys = { path = "../occt-sys" }
