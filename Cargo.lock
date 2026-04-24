@@ -162,7 +162,7 @@ dependencies = [
 
 [[package]]
 name = "occt-rs"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "cxx",
  "occt-sys",
@@ -170,7 +170,7 @@ dependencies = [
 
 [[package]]
 name = "occt-sys"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "cxx",
  "cxx-build",

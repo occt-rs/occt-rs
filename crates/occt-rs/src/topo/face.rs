@@ -7,6 +7,7 @@
 
 use crate::error::{OcctError, OcctErrorKind};
 use crate::gp::OcVec;
+use crate::topo::shape::ShapeKey;
 use crate::topo::{OcShape, OcSolid, OcWire};
 use occt_sys::ffi;
 use std::marker::PhantomData;
@@ -32,6 +33,13 @@ impl std::fmt::Debug for OcFace {
 }
 
 impl OcFace {
+    /// Returns the session-scoped identity of this face.
+    ///
+    /// Encodes TShape pointer, Location, and Orientation — sufficient to
+    /// distinguish all placed face instances within a session.
+    pub fn shape_key(&self) -> ShapeKey {
+        ShapeKey(ffi::shape_key(ffi::face_as_shape(&self.inner)))
+    }
     /// Extrudes this face along `vec` to produce a solid.
     ///
     /// Calls `BRepPrimAPI_MakePrism(face, vec)`.

@@ -51,6 +51,7 @@
 
 use crate::error::{OcctError, OcctErrorKind};
 use crate::topo::OcShape;
+use crate::topo::shape::ShapeKey;
 use occt_sys::ffi;
 
 // TopAbs_ShapeEnum constants.
@@ -60,24 +61,6 @@ const TOP_ABS_EDGE: i32 = 6;
 const TOP_ABS_VERTEX: i32 = 7;
 
 // ── Public types ───────────────────────────────────────────────────────────────
-
-/// Within-session identity for a placed topological sub-shape instance.
-///
-/// Encodes TShape (geometry), Location (placement), and Orientation — the
-/// three components that together distinguish a placed instance in OCCT.
-/// Two faces that share underlying geometry but sit at different positions
-/// (e.g. the top and bottom caps of a `BRepPrimAPI_MakePrism` solid, which
-/// share a `TShape` but differ by `Location`) receive distinct keys.
-///
-/// The key is a hash of those three components; collisions are
-/// astronomically unlikely for any realistic number of shapes in a session.
-///
-/// **Not persistent.** Keys are meaningless across serialise/deserialise
-/// cycles and process restarts.  When the TDF attribute layer is added,
-/// `ShapeKey` values will compose with `TDF_Label` identifiers for
-/// persistent identity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ShapeKey(pub usize);
 
 /// A triangle mesh for one tessellated face.
 ///
@@ -104,6 +87,12 @@ pub struct TessFace {
     pub key: ShapeKey,
     /// Triangle mesh for this face.
     pub mesh: TriMesh,
+    /// Keys of the `TopoDS_Edge` sub-shapes bounding this face, in
+    /// `TopExp_Explorer` traversal order.
+    ///
+    /// These keys correspond to entries in [`TessellationResult::edges`] and
+    /// can be used by callers to map face ↔ edge adjacency without re-traversal.
+    pub bounding_edge_keys: Vec<ShapeKey>,
 }
 
 /// A tessellated edge polyline.
@@ -211,10 +200,21 @@ pub fn compute(
                 indices.push((tri.triangle_n2(i) - 1) as u32);
                 indices.push((tri.triangle_n3(i) - 1) as u32);
             }
+            // Collect the ShapeKeys of edges bounding this face.
+            // Uses the same TopExp_Explorer path as the top-level edge pass,
+            // but rooted at the face shape so only its boundary edges are visited.
+            let mut bounding_edge_keys = Vec::new();
+            let mut bound_exp = ffi::new_shape_explorer(shape_ref, TOP_ABS_EDGE);
+            while bound_exp.more() {
+                let e_ref = bound_exp.current();
+                bounding_edge_keys.push(ShapeKey(ffi::shape_key(e_ref)));
+                bound_exp.pin_mut().next();
+            }
 
             faces.push(TessFace {
                 key,
                 mesh: TriMesh { vertices, indices },
+                bounding_edge_keys,
             });
         }
 
@@ -410,5 +410,46 @@ mod tests {
         let result = compute(&shape, 0.1, 0.5).unwrap();
         assert_eq!(result.faces.len(), 1);
         assert!(!result.faces[0].mesh.vertices.is_empty());
+    }
+    #[test]
+    fn top_level_edges_are_subset_of_face_bounding_keys() {
+        let shape = triangle_prism().as_shape();
+        let result = compute(&shape, 0.1, 0.5).unwrap();
+
+        // Collect every edge key that appears as a face boundary.
+        let bounding_keys: std::collections::HashSet<usize> = result
+            .faces
+            .iter()
+            .flat_map(|f| f.bounding_edge_keys.iter().map(|k| k.0))
+            .collect();
+
+        // Any edge that made it into result.edges must be a boundary of some face.
+        // (The converse does not hold: bounding edges may lack Polygon3D data.)
+        for edge in &result.edges {
+            assert!(
+                bounding_keys.contains(&edge.key.0),
+                "result.edges contains key {:?} not found in any face's bounding_edge_keys",
+                edge.key
+            );
+        }
+    }
+    #[test]
+    fn triangular_prism_face_edge_counts() {
+        let shape = triangle_prism().as_shape();
+        let result = compute(&shape, 0.1, 0.5).unwrap();
+
+        // Triangular prism: 2 triangular faces (3 edges each) + 3 rectangular faces (4 edges each).
+        let tri_face_count = result
+            .faces
+            .iter()
+            .filter(|f| f.bounding_edge_keys.len() == 3)
+            .count();
+        let rect_face_count = result
+            .faces
+            .iter()
+            .filter(|f| f.bounding_edge_keys.len() == 4)
+            .count();
+        assert_eq!(tri_face_count, 2);
+        assert_eq!(rect_face_count, 3);
     }
 }

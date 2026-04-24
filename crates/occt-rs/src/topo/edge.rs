@@ -8,6 +8,7 @@
 
 use crate::error::{OcctError, OcctErrorKind};
 use crate::gp::OcPnt;
+use crate::topo::shape::ShapeKey;
 use crate::topo::{OcShape, OcVertex};
 use occt_sys::ffi;
 use std::marker::PhantomData;
@@ -33,6 +34,9 @@ impl std::fmt::Debug for OcEdge {
 }
 
 impl OcEdge {
+    pub fn shape_key(&self) -> ShapeKey {
+        ShapeKey(ffi::shape_key(ffi::edge_as_shape(&self.inner)))
+    }
     /// Constructs a straight-line edge between two existing vertices.
     ///
     /// Returns `Err(ConstructionError)` if the vertices are coincident.
