@@ -24,10 +24,10 @@ All dependencies must be MIT, Apache-2.0, BSD, or LGPL. LGPL dependencies
 
 ### Existing OCCT binding crates
 
-`opencascade-rs` and its forks are LGPL-licensed. Derivation from them —
-including copying types, method signatures, idioms, or structural
-conventions — would compromise the dual-license. This codebase must be
-clean of any such derivation.
+`occt-rs` is AGPL-licensed, with a strong CLA and dual-licencing. Deriving implementotions
+from other binding crates must be carried out with strict scrutiny so as to
+preserve the licencing hygiene. This includes copying types, method signatures, idioms, or structural
+conventions. Not maintaining hygiene here would risk compromising the dual-license. This codebase must be clean of any such derivation.
 
 ### Required sourcing discipline
 
