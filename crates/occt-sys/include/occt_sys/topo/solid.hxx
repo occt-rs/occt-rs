@@ -26,6 +26,7 @@
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Solid.hxx>
+#include <TopoDS_Shape.hxx>
 #include <gp_Vec.hxx>
 
 #include "face.hxx"
@@ -41,6 +42,13 @@ struct MakePrismBuilder {
         return std::make_unique<TopoDS_Solid>(TopoDS::Solid(inner.Shape()));
     }
 };
+
+// Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___shape.html
+// TopAbs_ShapeEnum is a C++ enum; cast to int so cxx can cross it.
+// Sourced from OCCT 7.9 documentation. No derivation from any other binding crate.
+inline int topods_shape_type(const TopoDS_Shape& shape) {
+    return static_cast<int>(shape.ShapeType());
+}
 
 // Factory.  Wraps construction in try/catch because MakePrism throws
 // rather than deferring failure to IsDone().

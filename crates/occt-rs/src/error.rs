@@ -15,6 +15,9 @@
 //! The `From<cxx::Exception>` implementation parses this format to produce
 //! a fully typed [`OcctError`].
 
+mod fuse_error;
+pub use fuse_error::*;
+
 use std::fmt;
 
 /// The typed error returned by all fallible `occt-rs` operations.

@@ -127,6 +127,8 @@ pub mod ffi {
         #[cxx_name = "TopoDS_Shape"]
         type TopodsShape;
 
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___shape.html
+        fn topods_shape_type(shape: &TopodsShape) -> i32;
         // Clone (ref-count bump only — no geometry copy).
         fn clone_shape(s: &TopodsShape) -> UniquePtr<TopodsShape>;
 

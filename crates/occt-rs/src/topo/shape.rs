@@ -13,7 +13,11 @@ use std::marker::PhantomData;
 
 use occt_sys::ffi;
 
-use crate::{topo::face::OcFace, OcEdge, OcctError};
+use crate::{
+    error::FuseError,
+    topo::{face::OcFace, ShapeType},
+    OcEdge, OcctError,
+};
 
 /// TopAbs_ShapeEnum::TopAbs_FACE.
 /// Reference: https://dev.opencascade.org/doc/refman/html/namespace_top_abs.html
@@ -62,6 +66,9 @@ impl std::fmt::Debug for OcShape {
 }
 
 impl OcShape {
+    pub fn shape_type(&self) -> ShapeType {
+        ShapeType::from(occt_sys::ffi::topods_shape_type(self.as_ffi()))
+    }
     pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsShape>) -> Self {
         Self {
             inner,
@@ -113,7 +120,7 @@ impl OcShape {
     /// Wraps `BRepAlgoAPI_Fuse` via the preferred SetArguments/SetTools/Build
     /// pattern. The builder and its history are not preserved; if Modified/
     /// Generated/IsDeleted are needed in future, promote to an explicit FuseBuilder.
-    pub fn union(&self, other: &OcShape) -> Result<OcShape, OcctError> {
+    pub fn oc_fuse(&self, other: &OcShape) -> Result<OcShape, FuseError> {
         let result = occt_sys::ffi::fuse_shapes(
             self.inner
                 .as_ref()
@@ -122,8 +129,13 @@ impl OcShape {
                 .inner
                 .as_ref()
                 .expect("OcShape invariant: inner is non-null"),
-        )?;
-        Ok(OcShape::from_ffi(result))
+        )
+        .map_err(|e| FuseError::Occt(e.into()))?;
+        let result = OcShape::from_ffi(result);
+        if result.shape_type() == ShapeType::Compound {
+            return Err(FuseError::DisjointInputs(result));
+        }
+        Ok(result)
     }
 }
 
@@ -227,7 +239,7 @@ mod tests {
         // Box A: x 0..1, Box B: x 0.5..1.5 — they overlap in x 0.5..1.
         let a = box_solid(0.0).as_shape();
         let b = box_solid(0.5).as_shape();
-        let result = a.union(&b);
+        let result = a.oc_fuse(&b);
         assert!(
             result.is_ok(),
             "fuse of overlapping solids should succeed: {:?}",
@@ -239,7 +251,7 @@ mod tests {
     fn fused_shape_tessellates_with_faces() {
         let a = box_solid(0.0).as_shape();
         let b = box_solid(0.5).as_shape();
-        let fused = a.union(&b).unwrap();
+        let fused = a.oc_fuse(&b).unwrap();
         let tess = crate::tessellate::compute(&fused, 0.1, 0.5)
             .expect("tessellation of fused shape should not fail");
         assert!(
@@ -254,7 +266,7 @@ mod tests {
         // Tessellate vertex x-coords should exceed x=1.0, proving B was included.
         let a = box_solid(0.0).as_shape();
         let b = box_solid(0.5).as_shape();
-        let fused = a.union(&b).unwrap();
+        let fused = a.oc_fuse(&b).unwrap();
         let tess = crate::tessellate::compute(&fused, 0.1, 0.5).unwrap();
         let max_x = tess
             .vertices
@@ -265,5 +277,10 @@ mod tests {
             max_x > 1.0,
             "fused shape should extend past x=1.0; max_x was {max_x}"
         );
+    }
+    #[test]
+    fn shape_type_of_solid_is_solid() {
+        let s = box_solid(0.0).as_shape();
+        assert_eq!(s.shape_type(), ShapeType::Solid);
     }
 }
