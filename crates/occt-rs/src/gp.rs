@@ -889,6 +889,318 @@ fn point_to_axis_distance(point: &OcPnt, origin: &OcPnt, direction: &OcDir) -> f
     op.cross(&direction.to_vec()).magnitude()
 }
 
+// ── OcTrsf ────────────────────────────────────────────────────────────────────
+
+/// An affine transformation: rotation, translation, mirror, scale, or composition.
+///
+/// Corresponds to `gp_Trsf` in OCCT.
+/// Reference: <https://dev.opencascade.org/doc/refman/html/classgp___trsf.html>
+///
+/// Unlike `OcPnt`/`OcVec`/`OcDir`, coordinates are NOT stored natively in Rust.
+/// `gp_Trsf` carries an internal form enum (`gp_TrsfForm`) that OCCT uses to
+/// optimise downstream operations; reconstructing from a raw 3×4 matrix would
+/// silently degrade to the general form.  The C++ value is held opaquely and
+/// crossed via [`as_ffi`] when passed to OCCT APIs.
+///
+/// # Scale and `TopLoc_Location`
+///
+/// A transform with scale ≠ 1 cannot pass through `TopLoc_Location` since
+/// OCCT 7.6.  Use [`OcShape::transformed`] (backed by `BRepBuilderAPI_Transform`)
+/// to apply non-unit scaling to shapes.
+pub struct OcTrsf {
+    inner: cxx::UniquePtr<ffi::GpTrsf>,
+}
+
+impl std::fmt::Debug for OcTrsf {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Expose the 3×4 matrix for debugging; row/col are 1-based in OCCT.
+        let mut dbg = f.debug_struct("OcTrsf");
+        for row in 1..=3i32 {
+            for col in 1..=4i32 {
+                dbg.field(&format!("m{row}{col}"), &self.value(row, col));
+            }
+        }
+        dbg.finish()
+    }
+}
+
+impl Clone for OcTrsf {
+    fn clone(&self) -> Self {
+        Self {
+            inner: ffi::clone_gp_trsf(&self.inner),
+        }
+    }
+}
+
+impl OcTrsf {
+    /// Identity transform — leaves all points unchanged.
+    pub fn identity() -> Self {
+        Self {
+            inner: ffi::new_gp_trsf_identity(),
+        }
+    }
+
+    /// Translation by vector `v`.
+    pub fn from_translation(v: OcVec) -> Self {
+        Self {
+            inner: ffi::new_gp_trsf_translation(v.x, v.y, v.z),
+        }
+    }
+
+    /// Rotation about `axis` by `angle` radians (right-hand rule).
+    ///
+    /// Infallible: `OcAx1` guarantees a unit direction, so the underlying
+    /// `gp_Dir` constructor cannot raise.  The `expect` guards against
+    /// invariant violations in the Rust layer.
+    pub fn from_rotation(axis: &OcAx1, angle: f64) -> Self {
+        let loc = axis.location();
+        let dir = axis.direction();
+        Self {
+            inner: ffi::new_gp_trsf_rotation(loc.x, loc.y, loc.z, dir.x(), dir.y(), dir.z(), angle)
+                .expect("pre-validated OcAx1 rotation failed — invariant violated"),
+        }
+    }
+
+    /// Mirror about a point (central symmetry).
+    pub fn from_mirror_point(p: OcPnt) -> Self {
+        Self {
+            inner: ffi::new_gp_trsf_mirror_point(p.x, p.y, p.z),
+        }
+    }
+
+    /// Mirror about an axis (axial symmetry).
+    ///
+    /// Infallible for the same reason as [`from_rotation`].
+    pub fn from_mirror_axis(axis: &OcAx1) -> Self {
+        let loc = axis.location();
+        let dir = axis.direction();
+        Self {
+            inner: ffi::new_gp_trsf_mirror_axis(loc.x, loc.y, loc.z, dir.x(), dir.y(), dir.z())
+                .expect("pre-validated OcAx1 mirror_axis failed — invariant violated"),
+        }
+    }
+
+    /// Mirror about a plane (planar symmetry).
+    ///
+    /// The plane is described by an [`OcAx2`]: origin, normal ("Z") direction,
+    /// and X direction.  `OcAx2` guarantees orthonormality.
+    pub fn from_mirror_plane(plane: &OcAx2) -> Self {
+        let loc = plane.location();
+        let n = plane.direction();
+        let x = plane.x_direction();
+        Self {
+            inner: ffi::new_gp_trsf_mirror_plane(
+                loc.x,
+                loc.y,
+                loc.z,
+                n.x(),
+                n.y(),
+                n.z(),
+                x.x(),
+                x.y(),
+                x.z(),
+            )
+            .expect("pre-validated OcAx2 mirror_plane failed — invariant violated"),
+        }
+    }
+
+    /// Uniform scale about `center` by `factor`.
+    ///
+    /// # Warning
+    ///
+    /// A transform with `factor ≠ 1` cannot pass through `TopLoc_Location`
+    /// since OCCT 7.6.  Apply scaling to shapes via `OcShape::transformed`
+    /// rather than `TopoDS_Shape::Located`.
+    pub fn from_scale(center: OcPnt, factor: f64) -> Self {
+        Self {
+            inner: ffi::new_gp_trsf_scale(center.x, center.y, center.z, factor),
+        }
+    }
+
+    /// Compose `self` with `other`, returning a new transform.
+    ///
+    /// Applies `other` first, then `self`: `result(P) = self(other(P))`.
+    pub fn multiplied(&self, other: &OcTrsf) -> OcTrsf {
+        OcTrsf {
+            inner: self.inner.multiplied(&other.inner),
+        }
+    }
+
+    /// Returns the inverse of this transform.
+    ///
+    /// Returns `Err` if the transform has a zero scale factor (singular matrix).
+    pub fn inverted(&self) -> Result<OcTrsf, OcctError> {
+        Ok(OcTrsf {
+            inner: self.inner.inverted().map_err(OcctError::from)?,
+        })
+    }
+
+    /// Matrix entry at 1-based `row` (1..=3) and `col` (1..=4).
+    ///
+    /// The 4th row is the implicit `[0, 0, 0, 1]` of the homogeneous matrix
+    /// and is not accessible via this method.
+    pub fn value(&self, row: i32, col: i32) -> f64 {
+        self.inner.value(row, col)
+    }
+
+    /// Returns `true` when the vectorial part has a negative determinant —
+    /// indicating a mirror or improper rotation.
+    pub fn is_negative(&self) -> bool {
+        self.inner.is_negative()
+    }
+
+    pub(crate) fn as_ffi(&self) -> &ffi::GpTrsf {
+        &self.inner
+    }
+}
+
+/// Compose two transforms: `self * rhs` applies `rhs` first, then `self`.
+impl std::ops::Mul for OcTrsf {
+    type Output = OcTrsf;
+    fn mul(self, rhs: OcTrsf) -> OcTrsf {
+        self.multiplied(&rhs)
+    }
+}
+
+/// Reference version — avoids consuming operands when composition result is
+/// needed without taking ownership.
+impl std::ops::Mul for &OcTrsf {
+    type Output = OcTrsf;
+    fn mul(self, rhs: &OcTrsf) -> OcTrsf {
+        self.multiplied(rhs)
+    }
+}
+
+#[cfg(test)]
+mod trsf_tests {
+    use super::*;
+    use std::f64::consts::{FRAC_PI_2, PI};
+
+    #[test]
+    fn identity_matrix_is_unit() {
+        let t = OcTrsf::identity();
+        // Diagonal entries should be 1; off-diagonal 0; translation col 0.
+        for row in 1..=3i32 {
+            for col in 1..=4i32 {
+                let expected = if row == col { 1.0 } else { 0.0 };
+                assert!(
+                    (t.value(row, col) - expected).abs() < 1e-12,
+                    "identity[{row},{col}] = {} (expected {expected})",
+                    t.value(row, col)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn translation_encodes_vector() {
+        let t = OcTrsf::from_translation(OcVec::new(3.0, 5.0, 7.0));
+        // Column 4 (translation part) should be [3, 5, 7].
+        assert!((t.value(1, 4) - 3.0).abs() < 1e-12);
+        assert!((t.value(2, 4) - 5.0).abs() < 1e-12);
+        assert!((t.value(3, 4) - 7.0).abs() < 1e-12);
+        // Diagonal entries should still be 1 (pure translation).
+        for row in 1..=3i32 {
+            assert!((t.value(row, row) - 1.0).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn rotation_90_around_z() {
+        let axis = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
+        let t = OcTrsf::from_rotation(&axis, FRAC_PI_2);
+        // Rotating X-axis by 90° around Z should give Y-axis.
+        // The (1,1) entry is cos(90°) ≈ 0; (2,1) is sin(90°) ≈ 1.
+        assert!((t.value(1, 1)).abs() < 1e-12, "cos(90°) should be ~0");
+        assert!((t.value(2, 1) - 1.0).abs() < 1e-12, "sin(90°) should be ~1");
+    }
+
+    #[test]
+    fn mirror_point_is_negative() {
+        let t = OcTrsf::from_mirror_point(OcPnt::origin());
+        assert!(
+            t.is_negative(),
+            "central symmetry should have negative determinant"
+        );
+    }
+
+    #[test]
+    fn mirror_plane_xy_negates_z() {
+        // Mirror about the XY plane (normal = Z axis).
+        let plane = OcAx2::oxyz(); // origin, Z normal, X direction
+        let t = OcTrsf::from_mirror_plane(&plane);
+        assert!(t.is_negative());
+        // m[3][3] should be -1 (Z component inverted).
+        assert!(
+            (t.value(3, 3) + 1.0).abs() < 1e-12,
+            "Z diagonal should be -1"
+        );
+    }
+
+    #[test]
+    fn scale_encodes_factor() {
+        let t = OcTrsf::from_scale(OcPnt::origin(), 2.0);
+        // Diagonal entries of the vectorial part should be 2.
+        assert!((t.value(1, 1) - 2.0).abs() < 1e-12);
+        assert!((t.value(2, 2) - 2.0).abs() < 1e-12);
+        assert!((t.value(3, 3) - 2.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn inverted_of_translation_is_negative_translation() {
+        let t = OcTrsf::from_translation(OcVec::new(3.0, 0.0, 0.0));
+        let inv = t.inverted().unwrap();
+        assert!(
+            (inv.value(1, 4) + 3.0).abs() < 1e-12,
+            "inverse translation should be -3"
+        );
+    }
+
+    #[test]
+    fn composition_applies_in_order() {
+        // Translate by (1,0,0) then rotate 90° around Z.
+        // The composition (rotate ∘ translate) applied to origin:
+        //   translate: (1,0,0) → (1,0,0)
+        //   rotate:    (1,0,0) → (0,1,0)   [90° around Z]
+        // t_rot * t_trans applied to (0,0,0) should yield (0,1,0).
+        let t_trans = OcTrsf::from_translation(OcVec::new(1.0, 0.0, 0.0));
+        let axis = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
+        let t_rot = OcTrsf::from_rotation(&axis, FRAC_PI_2);
+        let composed = &t_rot * &t_trans; // t_rot(t_trans(P))
+                                          // Apply to origin: translation col is the image of the origin.
+        assert!(
+            (composed.value(1, 4)).abs() < 1e-12,
+            "x-translation after rot should be ~0"
+        );
+        assert!(
+            (composed.value(2, 4) - 1.0).abs() < 1e-12,
+            "y-translation after rot should be ~1"
+        );
+    }
+
+    #[test]
+    fn clone_is_independent() {
+        let t = OcTrsf::from_translation(OcVec::new(1.0, 2.0, 3.0));
+        let c = t.clone();
+        assert!((c.value(1, 4) - 1.0).abs() < 1e-12);
+        assert!((c.value(2, 4) - 2.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn mul_operator_matches_multiplied() {
+        let t1 = OcTrsf::from_translation(OcVec::new(1.0, 0.0, 0.0));
+        let axis = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
+        let t2 = OcTrsf::from_rotation(&axis, FRAC_PI_2);
+        let via_method = t1.multiplied(&t2);
+        let via_op = &t1 * &t2;
+        for row in 1..=3i32 {
+            for col in 1..=4i32 {
+                assert!((via_method.value(row, col) - via_op.value(row, col)).abs() < 1e-15);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
