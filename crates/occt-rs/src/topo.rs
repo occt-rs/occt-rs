@@ -1,5 +1,8 @@
+pub mod chamfer;
 pub mod edge;
 pub mod face;
+pub mod fillet;
+pub mod offset;
 pub mod proximity_wire_builder;
 pub mod shape;
 pub mod shape_type;
@@ -9,8 +12,11 @@ pub mod vertex;
 pub mod wire;
 pub mod wire_builder;
 
+pub use chamfer::ChamferBuilder;
 pub use edge::OcEdge;
 pub use face::OcFace;
+pub use fillet::FilletBuilder;
+pub use offset::{OffsetShapeBuilder, ThickSolidBuilder};
 pub use proximity_wire_builder::ProximityWireBuilder;
 pub use shape::OcShape;
 pub use shape_type::ShapeType;

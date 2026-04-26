@@ -13,9 +13,10 @@ use std::marker::PhantomData;
 
 use occt_sys::ffi;
 
+use crate::topo::offset::{OffsetShapeBuilder, ThickSolidBuilder};
 use crate::{
     error::{CommonError, FuseError},
-    topo::{face::OcFace, ShapeType},
+    topo::{chamfer::ChamferBuilder, face::OcFace, fillet::FilletBuilder, ShapeType},
     OcEdge, OcctError,
 };
 
@@ -213,6 +214,58 @@ impl OcShape {
             return Err(CommonError::NoIntersection);
         }
         Ok(result)
+    }
+    /// Applies constant-radius fillets to the given edges and returns the
+    /// resulting shape.
+    ///
+    /// Convenience wrapper over [`FilletBuilder`].  For finer control (adding
+    /// edges in a loop, inspecting errors per edge) use `FilletBuilder` directly.
+    ///
+    /// `edges_with_radii` is a slice of `(radius, edge)` pairs.
+    pub fn fillet(&self, edges_with_radii: &[(f64, &OcEdge)]) -> Result<OcShape, OcctError> {
+        let mut builder = FilletBuilder::new(self)?;
+        for (radius, edge) in edges_with_radii {
+            builder.add_edge(*radius, edge)?;
+        }
+        builder.build()
+    }
+
+    /// Applies symmetric chamfers to the given edges and returns the resulting shape.
+    ///
+    /// Convenience wrapper over [`ChamferBuilder`].  For asymmetric or
+    /// distance-angle chamfers use `ChamferBuilder` directly.
+    pub fn chamfer(&self, edges_with_distances: &[(f64, &OcEdge)]) -> Result<OcShape, OcctError> {
+        let mut builder = ChamferBuilder::new(self)?;
+        for (dis, edge) in edges_with_distances {
+            builder.add_edge(*dis, edge)?;
+        }
+        builder.build()
+    }
+
+    /// Offsets all surfaces of the shape outward (positive) or inward (negative).
+    ///
+    /// Wraps `BRepOffsetAPI_MakeOffsetShape::PerformBySimple`.
+    pub fn offset_shape(&self, offset: f64) -> Result<OcShape, OcctError> {
+        OffsetShapeBuilder::new().perform(self, offset)
+    }
+
+    /// Hollows this solid by removing `closing_faces` and offsetting inward.
+    ///
+    /// `offset` is typically negative (wall thickness inward).
+    /// `tolerance` controls precision; `1e-3` is typical.
+    ///
+    /// Convenience wrapper over [`ThickSolidBuilder`].
+    pub fn thick_solid(
+        &self,
+        closing_faces: &[&OcFace],
+        offset: f64,
+        tolerance: f64,
+    ) -> Result<OcShape, OcctError> {
+        let mut builder = ThickSolidBuilder::new();
+        for face in closing_faces {
+            builder.add_closing_face(face);
+        }
+        builder.build(self, offset, tolerance)
     }
 }
 
@@ -522,5 +575,161 @@ mod tests {
             max_x >= 2.0 - 1e-4,
             "scaled max_x should be ~2.0, got {max_x}"
         );
+    }
+    #[test]
+    fn fillet_box_edges_succeeds() {
+        let s = box_solid(0.0).as_shape();
+        let edges = s.edges();
+        // Deduplicate by ShapeKey — edges() returns each edge once per adjacent face.
+        let mut seen = std::collections::HashSet::new();
+        let unique_edges: Vec<_> = edges
+            .iter()
+            .filter(|e| seen.insert(e.shape_key()))
+            .collect();
+        let result = s.fillet(&unique_edges.iter().map(|e| (0.05, *e)).collect::<Vec<_>>());
+        assert!(result.is_ok(), "fillet should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    fn fillet_builder_add_then_build() {
+        use crate::topo::FilletBuilder;
+        let s = box_solid(0.0).as_shape();
+        let edges = s.edges();
+        let mut seen = std::collections::HashSet::new();
+        let unique_edges: Vec<_> = edges
+            .iter()
+            .filter(|e| seen.insert(e.shape_key()))
+            .collect();
+        let mut builder = FilletBuilder::new(&s).unwrap();
+        for e in &unique_edges {
+            builder.add_edge(0.05, e).unwrap();
+        }
+        let result = builder.build();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn fillet_result_tessellates() {
+        let s = box_solid(0.0).as_shape();
+        let edges = s.edges();
+        let mut seen = std::collections::HashSet::new();
+        let unique_edges: Vec<_> = edges
+            .iter()
+            .filter(|e| seen.insert(e.shape_key()))
+            .collect();
+        let filleted = s
+            .fillet(&unique_edges.iter().map(|e| (0.05, *e)).collect::<Vec<_>>())
+            .unwrap();
+        let tess = crate::tessellate::compute(&filleted, 0.05, 0.5).unwrap();
+        assert!(!tess.faces.is_empty());
+    }
+    fn unique_edges(shape: &OcShape) -> Vec<OcEdge> {
+        let mut seen = std::collections::HashSet::new();
+        shape
+            .edges()
+            .into_iter()
+            .filter(|e| seen.insert(e.shape_key()))
+            .collect()
+    }
+
+    #[test]
+    fn chamfer_box_edges_succeeds() {
+        let s = box_solid(0.0).as_shape();
+        let edges = unique_edges(&s);
+        let result = s.chamfer(&edges.iter().map(|e| (0.05, e)).collect::<Vec<_>>());
+        assert!(result.is_ok(), "chamfer failed: {:?}", result.err());
+    }
+
+    #[test]
+    fn chamfer_builder_symmetric() {
+        use crate::topo::ChamferBuilder;
+        let s = box_solid(0.0).as_shape();
+        let edges = unique_edges(&s);
+        let mut builder = ChamferBuilder::new(&s).unwrap();
+        for e in &edges {
+            builder.add_edge(0.05, e).unwrap();
+        }
+        assert!(builder.build().is_ok());
+    }
+
+    #[test]
+    fn chamfer_result_tessellates() {
+        let s = box_solid(0.0).as_shape();
+        let edges = unique_edges(&s);
+        let chamfered = s
+            .chamfer(&edges.iter().map(|e| (0.05, e)).collect::<Vec<_>>())
+            .unwrap();
+        let tess = crate::tessellate::compute(&chamfered, 0.05, 0.5).unwrap();
+        assert!(!tess.faces.is_empty());
+    }
+    #[test]
+    fn offset_shape_outward_expands_bounds() {
+        let s = box_solid(0.0).as_shape();
+        let expanded = s.offset_shape(0.1).unwrap();
+        let tess = crate::tessellate::compute(&expanded, 0.05, 0.5).unwrap();
+        let max_x = tess
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            max_x > 1.0 + 0.05,
+            "expanded shape should exceed x=1.0, got {max_x}"
+        );
+    }
+
+    #[test]
+    fn thick_solid_one_face_removed() {
+        // Box 0..1. Remove the top face (max Z), hollow inward by -0.1.
+        let s = box_solid(0.0).as_shape();
+        // Find the face with highest Z centroid — that's the top.
+        let top_face = s
+            .faces()
+            .into_iter()
+            .max_by(|a, b| {
+                let za = crate::tessellate::compute(&a.as_shape(), 0.1, 0.5)
+                    .unwrap()
+                    .vertices
+                    .iter()
+                    .map(|v| v.point[2])
+                    .fold(f32::NEG_INFINITY, f32::max);
+                let zb = crate::tessellate::compute(&b.as_shape(), 0.1, 0.5)
+                    .unwrap()
+                    .vertices
+                    .iter()
+                    .map(|v| v.point[2])
+                    .fold(f32::NEG_INFINITY, f32::max);
+                za.partial_cmp(&zb).unwrap()
+            })
+            .unwrap();
+        let result = s.thick_solid(&[&top_face], -0.1, 1e-3);
+        assert!(result.is_ok(), "thick_solid failed: {:?}", result.err());
+    }
+
+    #[test]
+    fn thick_solid_result_tessellates() {
+        let s = box_solid(0.0).as_shape();
+        let top_face = s
+            .faces()
+            .into_iter()
+            .max_by(|a, b| {
+                let za = crate::tessellate::compute(&a.as_shape(), 0.1, 0.5)
+                    .unwrap()
+                    .vertices
+                    .iter()
+                    .map(|v| v.point[2])
+                    .fold(f32::NEG_INFINITY, f32::max);
+                let zb = crate::tessellate::compute(&b.as_shape(), 0.1, 0.5)
+                    .unwrap()
+                    .vertices
+                    .iter()
+                    .map(|v| v.point[2])
+                    .fold(f32::NEG_INFINITY, f32::max);
+                za.partial_cmp(&zb).unwrap()
+            })
+            .unwrap();
+        let hollowed = s.thick_solid(&[&top_face], -0.1, 1e-3).unwrap();
+        let tess = crate::tessellate::compute(&hollowed, 0.05, 0.5).unwrap();
+        assert!(!tess.faces.is_empty());
     }
 }

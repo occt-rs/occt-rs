@@ -20,6 +20,69 @@
 pub mod ffi {
     unsafe extern "C++" {
         include!("occt_sys/topo.hxx");
+        // ── MakeOffsetShapeBuilder ────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_offset_a_p_i___make_offset_shape.html
+        type MakeOffsetShapeBuilder;
+
+        fn new_make_offset_shape_builder() -> UniquePtr<MakeOffsetShapeBuilder>;
+        fn perform(
+            self: Pin<&mut MakeOffsetShapeBuilder>,
+            shape: &TopodsShape,
+            offset: f64,
+        ) -> Result<()>;
+        fn is_done(self: &MakeOffsetShapeBuilder) -> bool;
+        fn shape(self: Pin<&mut MakeOffsetShapeBuilder>) -> UniquePtr<TopodsShape>;
+
+        // ── MakeThickSolidBuilder ─────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_offset_a_p_i___make_thick_solid.html
+        type MakeThickSolidBuilder;
+
+        fn new_make_thick_solid_builder() -> UniquePtr<MakeThickSolidBuilder>;
+        fn add_closing_face(self: Pin<&mut MakeThickSolidBuilder>, face: &TopdsFace);
+        fn build(
+            self: Pin<&mut MakeThickSolidBuilder>,
+            shape: &TopodsShape,
+            offset: f64,
+            tol: f64,
+        ) -> Result<()>;
+        fn is_done(self: &MakeThickSolidBuilder) -> bool;
+        fn shape(self: Pin<&mut MakeThickSolidBuilder>) -> UniquePtr<TopodsShape>;
+        // ── MakeChamferBuilder ────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_fillet_a_p_i___make_chamfer.html
+        type MakeChamferBuilder;
+
+        fn new_make_chamfer_builder(shape: &TopodsShape) -> Result<UniquePtr<MakeChamferBuilder>>;
+        fn add_edge(self: Pin<&mut MakeChamferBuilder>, dis: f64, edge: &TopodsEdge) -> Result<()>;
+        fn add_edge_asymmetric(
+            self: Pin<&mut MakeChamferBuilder>,
+            dis1: f64,
+            dis2: f64,
+            edge: &TopodsEdge,
+            face: &TopdsFace,
+        ) -> Result<()>;
+        fn add_edge_dist_angle(
+            self: Pin<&mut MakeChamferBuilder>,
+            dis: f64,
+            angle: f64,
+            edge: &TopodsEdge,
+            face: &TopdsFace,
+        ) -> Result<()>;
+        fn build(self: Pin<&mut MakeChamferBuilder>) -> Result<()>;
+        fn is_done(self: &MakeChamferBuilder) -> bool;
+        fn shape(self: Pin<&mut MakeChamferBuilder>) -> UniquePtr<TopodsShape>;
+        // ── MakeFilletBuilder ─────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_fillet_a_p_i___make_fillet.html
+        type MakeFilletBuilder;
+
+        fn new_make_fillet_builder(shape: &TopodsShape) -> Result<UniquePtr<MakeFilletBuilder>>;
+        fn add_edge(
+            self: Pin<&mut MakeFilletBuilder>,
+            radius: f64,
+            edge: &TopodsEdge,
+        ) -> Result<()>;
+        fn build(self: Pin<&mut MakeFilletBuilder>) -> Result<()>;
+        fn is_done(self: &MakeFilletBuilder) -> bool;
+        fn shape(self: Pin<&mut MakeFilletBuilder>) -> UniquePtr<TopodsShape>;
         // ── Boolean operations ────────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___fuse.html
         fn fuse_shapes(s1: &TopodsShape, s2: &TopodsShape) -> Result<UniquePtr<TopodsShape>>;

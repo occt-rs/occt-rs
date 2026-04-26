@@ -21,3 +21,6 @@
 #include "topo/mesh.hxx"
 #include "topo/bool_op.hxx"
 #include "topo/transform.hxx"
+#include "topo/fillet.hxx"
+#include "topo/chamfer.hxx"
+#include "topo/offset.hxx"

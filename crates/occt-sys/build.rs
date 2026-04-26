@@ -26,6 +26,8 @@ const OCCT_TOOLKITS: &[&str] = &[
     "TKPrim",
     "TKMesh",
     "TKBO",
+    "TKFillet",
+    "TKOffset",
 ];
 
 fn main() {
