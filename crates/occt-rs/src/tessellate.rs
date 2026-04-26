@@ -50,8 +50,8 @@
 //!   `TopExp_Explorer`                 — <https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html>
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::topo::OcShape;
 use crate::topo::shape::ShapeKey;
+use crate::topo::OcShape;
 use occt_sys::ffi;
 
 // TopAbs_ShapeEnum constants.

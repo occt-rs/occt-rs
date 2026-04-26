@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 
 use occt_sys::ffi;
 
-use crate::{OcEdge, topo::face::OcFace};
+use crate::{topo::face::OcFace, OcEdge};
 
 /// TopAbs_ShapeEnum::TopAbs_FACE.
 /// Reference: https://dev.opencascade.org/doc/refman/html/namespace_top_abs.html
@@ -90,7 +90,7 @@ impl OcShape {
         }
         result
     }
-    
+
     /// Returns all `TopoDS_Edge` sub-shapes of this shape as typed wrappers.
     ///
     /// Traverses using `TopExp_Explorer` with `TopAbs_EDGE`.  Results are in
