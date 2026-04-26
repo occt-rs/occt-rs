@@ -158,6 +158,36 @@ impl OcShape {
         .map_err(|e| OcctError::from(e))?;
         Ok(OcShape::from_ffi(result))
     }
+    /// Applies `trsf` to a copy of this shape, returning a new independent `OcShape`.
+    ///
+    /// Wraps `BRepBuilderAPI_Transform(shape, trsf, copy=true)`.  The result
+    /// geometry is fully independent of `self`; no TShape handles are shared.
+    ///
+    /// Scaling (scale ≠ 1) is handled correctly here because the transform is
+    /// applied at the geometry level — `BRepBuilderAPI_Transform` rewrites
+    /// underlying curves and surfaces.  This is the correct path for scaling;
+    /// `TopLoc_Location` rejects scale ≠ 1 since OCCT 7.6.
+    ///
+    /// Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___transform.html>
+    pub fn transformed(&self, trsf: &crate::gp::OcTrsf) -> Result<OcShape, OcctError> {
+        let result = occt_sys::ffi::transform_shape(
+            self.as_ffi(),
+            trsf.value(1, 1),
+            trsf.value(1, 2),
+            trsf.value(1, 3),
+            trsf.value(1, 4),
+            trsf.value(2, 1),
+            trsf.value(2, 2),
+            trsf.value(2, 3),
+            trsf.value(2, 4),
+            trsf.value(3, 1),
+            trsf.value(3, 2),
+            trsf.value(3, 3),
+            trsf.value(3, 4),
+        )
+        .map_err(OcctError::from)?;
+        Ok(OcShape::from_ffi(result))
+    }
 
     /// Intersect `self` with `other`, returning a new `OcShape`.
     ///
@@ -441,6 +471,56 @@ mod tests {
             matches!(result, Err(CommonError::NoIntersection)),
             "common of disjoint solids should return NoIntersection, got: {:?}",
             result.ok().map(|_| "Ok")
+        );
+    }
+    #[test]
+    fn translated_shape_moves_vertices() {
+        let s = box_solid(0.0).as_shape();
+        let trsf = crate::gp::OcTrsf::from_translation(OcVec::new(5.0, 0.0, 0.0));
+        let moved = s.transformed(&trsf).unwrap();
+        let tess = crate::tessellate::compute(&moved, 0.1, 0.5).unwrap();
+        let min_x = tess
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::INFINITY, f32::min);
+        assert!(min_x >= 5.0 - 1e-4, "min_x should be ~5.0, got {min_x}");
+    }
+
+    #[test]
+    fn transformed_is_independent_of_source() {
+        // Verify copy=true: the source shape's vertices are unaffected.
+        let s = box_solid(0.0).as_shape();
+        let trsf = crate::gp::OcTrsf::from_translation(OcVec::new(10.0, 0.0, 0.0));
+        let _moved = s.transformed(&trsf).unwrap();
+        // Tessellate the original — it must still sit at x=0..1.
+        let tess = crate::tessellate::compute(&s, 0.1, 0.5).unwrap();
+        let max_x = tess
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            max_x <= 1.0 + 1e-4,
+            "source should be unmodified, max_x={max_x}"
+        );
+    }
+
+    #[test]
+    fn scale_applied_via_transformed() {
+        // Uniform scale by 2 about origin: box 0..1 should become 0..2.
+        let s = box_solid(0.0).as_shape();
+        let trsf = crate::gp::OcTrsf::from_scale(OcPnt::origin(), 2.0);
+        let scaled = s.transformed(&trsf).unwrap();
+        let tess = crate::tessellate::compute(&scaled, 0.1, 0.5).unwrap();
+        let max_x = tess
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            max_x >= 2.0 - 1e-4,
+            "scaled max_x should be ~2.0, got {max_x}"
         );
     }
 }

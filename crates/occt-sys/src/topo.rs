@@ -27,6 +27,22 @@ pub mod ffi {
         fn cut_shapes(s1: &TopodsShape, s2: &TopodsShape) -> Result<UniquePtr<TopodsShape>>;
         // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___common.html
         fn common_shapes(s1: &TopodsShape, s2: &TopodsShape) -> Result<UniquePtr<TopodsShape>>;
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___transform.html
+        fn transform_shape(
+            shape: &TopodsShape,
+            r11: f64,
+            r12: f64,
+            r13: f64,
+            t1: f64,
+            r21: f64,
+            r22: f64,
+            r23: f64,
+            t2: f64,
+            r31: f64,
+            r32: f64,
+            r33: f64,
+            t3: f64,
+        ) -> Result<UniquePtr<TopodsShape>>;
 
         // ── TopoDS_Vertex ─────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___vertex.html
@@ -99,6 +115,16 @@ pub mod ffi {
         type MakeFaceBuilder;
 
         fn new_make_face_from_wire(w: &TopodsWire, only_plane: bool) -> UniquePtr<MakeFaceBuilder>;
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_face.html
+        fn new_make_face_from_plane_and_wire(
+            px: f64,
+            py: f64,
+            pz: f64,
+            nx: f64,
+            ny: f64,
+            nz: f64,
+            w: &TopodsWire,
+        ) -> Result<UniquePtr<MakeFaceBuilder>>;
         fn is_done(self: &MakeFaceBuilder) -> bool;
         fn error(self: &MakeFaceBuilder) -> i32;
         fn face(self: Pin<&mut MakeFaceBuilder>) -> UniquePtr<TopdsFace>;

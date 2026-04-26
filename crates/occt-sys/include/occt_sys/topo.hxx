@@ -20,3 +20,4 @@
 #include "topo/explorer.hxx"
 #include "topo/mesh.hxx"
 #include "topo/bool_op.hxx"
+#include "topo/transform.hxx"
