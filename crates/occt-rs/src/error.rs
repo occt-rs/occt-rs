@@ -17,6 +17,8 @@
 
 mod fuse_error;
 pub use fuse_error::*;
+mod common_error;
+pub use common_error::*;
 
 use std::fmt;
 

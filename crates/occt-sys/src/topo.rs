@@ -23,6 +23,10 @@ pub mod ffi {
         // ── Boolean operations ────────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___fuse.html
         fn fuse_shapes(s1: &TopodsShape, s2: &TopodsShape) -> Result<UniquePtr<TopodsShape>>;
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___cut.html
+        fn cut_shapes(s1: &TopodsShape, s2: &TopodsShape) -> Result<UniquePtr<TopodsShape>>;
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___common.html
+        fn common_shapes(s1: &TopodsShape, s2: &TopodsShape) -> Result<UniquePtr<TopodsShape>>;
 
         // ── TopoDS_Vertex ─────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___vertex.html
@@ -129,6 +133,7 @@ pub mod ffi {
 
         // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___shape.html
         fn topods_shape_type(shape: &TopodsShape) -> i32;
+        fn topods_compound_child_count(shape: &TopodsShape) -> i32;
         // Clone (ref-count bump only — no geometry copy).
         fn clone_shape(s: &TopodsShape) -> UniquePtr<TopodsShape>;
 

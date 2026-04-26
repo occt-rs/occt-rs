@@ -27,6 +27,7 @@
 #include <TopoDS.hxx>
 #include <TopoDS_Solid.hxx>
 #include <TopoDS_Shape.hxx>
+#include <TopoDS_Iterator.hxx>
 #include <gp_Vec.hxx>
 
 #include "face.hxx"
@@ -67,4 +68,11 @@ inline std::unique_ptr<MakePrismBuilder> new_make_prism_from_face(
 // TopoDS_Solid copy shares the underlying TShape handle (ref-counted).
 inline std::unique_ptr<TopoDS_Solid> clone_solid(const TopoDS_Solid& s) {
     return std::make_unique<TopoDS_Solid>(s);
+}
+// Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___iterator.html
+// Counts direct children of a TopoDS_Shape (meaningful on Compound).
+inline int topods_compound_child_count(const TopoDS_Shape& shape) {
+    int n = 0;
+    for (TopoDS_Iterator it(shape); it.More(); it.Next()) { ++n; }
+    return n;
 }

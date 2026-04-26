@@ -14,7 +14,7 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::{
-    error::FuseError,
+    error::{CommonError, FuseError},
     topo::{face::OcFace, ShapeType},
     OcEdge, OcctError,
 };
@@ -132,8 +132,55 @@ impl OcShape {
         )
         .map_err(|e| FuseError::Occt(e.into()))?;
         let result = OcShape::from_ffi(result);
-        if result.shape_type() == ShapeType::Compound {
+        if result.shape_type() == ShapeType::Compound
+            && occt_sys::ffi::topods_compound_child_count(result.as_ffi()) > 1
+        {
             return Err(FuseError::DisjointInputs(result));
+        }
+        Ok(result)
+    }
+    /// Subtract `tool` from `self`, returning a new `OcShape`.
+    ///
+    /// Wraps `BRepAlgoAPI_Cut` via the preferred SetArguments/SetTools/Build
+    /// pattern. `self` is the "object" (left operand); `tool` is subtracted from it.
+    ///
+    /// For disjoint inputs, OCCT returns `self` unchanged as a solid — this is
+    /// a valid `Ok` result. No compound detection is needed.
+    pub fn oc_cut(&self, tool: &OcShape) -> Result<OcShape, OcctError> {
+        let result = occt_sys::ffi::cut_shapes(
+            self.inner
+                .as_ref()
+                .expect("OcShape invariant: inner is non-null"),
+            tool.inner
+                .as_ref()
+                .expect("OcShape invariant: inner is non-null"),
+        )
+        .map_err(|e| OcctError::from(e))?;
+        Ok(OcShape::from_ffi(result))
+    }
+
+    /// Intersect `self` with `other`, returning a new `OcShape`.
+    ///
+    /// Wraps `BRepAlgoAPI_Common` via the preferred SetArguments/SetTools/Build
+    /// pattern.
+    ///
+    /// Returns `Err(CommonError::NoIntersection)` when the inputs are disjoint —
+    /// OCCT returns an empty `TopoDS_Compound` in this case (`IsDone()==true`).
+    /// The empty compound is not forwarded to the caller.
+    pub fn oc_common(&self, other: &OcShape) -> Result<OcShape, CommonError> {
+        let result = occt_sys::ffi::common_shapes(
+            self.inner
+                .as_ref()
+                .expect("OcShape invariant: inner is non-null"),
+            other
+                .inner
+                .as_ref()
+                .expect("OcShape invariant: inner is non-null"),
+        )
+        .map_err(|e| CommonError::Occt(e.into()))?;
+        let result = OcShape::from_ffi(result);
+        if occt_sys::ffi::topods_compound_child_count(result.as_ffi()) == 0 {
+            return Err(CommonError::NoIntersection);
         }
         Ok(result)
     }
@@ -282,5 +329,118 @@ mod tests {
     fn shape_type_of_solid_is_solid() {
         let s = box_solid(0.0).as_shape();
         assert_eq!(s.shape_type(), ShapeType::Solid);
+    }
+    #[test]
+    fn cut_overlapping_solids_succeeds() {
+        // Box A: x 0..1, Box B: x 0.5..1.5 — A minus B should leave x 0..0.5 region.
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(0.5).as_shape();
+        let result = a.oc_cut(&b);
+        assert!(
+            result.is_ok(),
+            "cut of overlapping solids should succeed: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn cut_disjoint_solids_returns_argument_unchanged() {
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(10.0).as_shape();
+        let result = a.oc_cut(&b);
+        assert!(
+            result.is_ok(),
+            "cut of disjoint solids should succeed: {:?}",
+            result.err()
+        );
+        // OCCT wraps the result in a TopoDS_Compound (as with all boolean ops).
+        // The compound contains the argument shape unchanged.
+        let tess = crate::tessellate::compute(&result.unwrap(), 0.1, 0.5).unwrap();
+        assert!(
+            !tess.faces.is_empty(),
+            "disjoint cut result should tessellate"
+        );
+    }
+
+    #[test]
+    fn cut_is_noncommutative() {
+        // A.cut(B) and B.cut(A) should produce geometrically distinct results.
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(0.5).as_shape();
+        let a_minus_b = a.oc_cut(&b).unwrap();
+        let b_minus_a = b.oc_cut(&a).unwrap();
+        let tess_ab = crate::tessellate::compute(&a_minus_b, 0.1, 0.5).unwrap();
+        let tess_ba = crate::tessellate::compute(&b_minus_a, 0.1, 0.5).unwrap();
+        // A−B should not extend past x=0.5 (the tool removed that part).
+        let max_x_ab = tess_ab
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        // B−A should not extend below x=0.5.
+        let min_x_ba = tess_ba
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::INFINITY, f32::min);
+        assert!(
+            max_x_ab <= 0.5 + 1e-4,
+            "A-B should not extend past x=0.5, got {max_x_ab}"
+        );
+        assert!(
+            min_x_ba >= 0.5 - 1e-4,
+            "B-A should not extend below x=0.5, got {min_x_ba}"
+        );
+    }
+
+    #[test]
+    fn common_overlapping_solids_succeeds() {
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(0.5).as_shape();
+        let result = a.oc_common(&b);
+        assert!(
+            result.is_ok(),
+            "common of overlapping solids should succeed: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn common_overlap_region_is_correct() {
+        // Intersection of x 0..1 and x 0.5..1.5 should be x 0.5..1.
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(0.5).as_shape();
+        let common = a.oc_common(&b).unwrap();
+        let tess = crate::tessellate::compute(&common, 0.1, 0.5).unwrap();
+        let min_x = tess
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::INFINITY, f32::min);
+        let max_x = tess
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            min_x >= 0.5 - 1e-4,
+            "common min_x should be ~0.5, got {min_x}"
+        );
+        assert!(
+            max_x <= 1.0 + 1e-4,
+            "common max_x should be ~1.0, got {max_x}"
+        );
+    }
+
+    #[test]
+    fn common_disjoint_solids_returns_no_intersection() {
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(10.0).as_shape();
+        let result = a.oc_common(&b);
+        assert!(
+            matches!(result, Err(CommonError::NoIntersection)),
+            "common of disjoint solids should return NoIntersection, got: {:?}",
+            result.ok().map(|_| "Ok")
+        );
     }
 }
