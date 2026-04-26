@@ -20,6 +20,9 @@
 pub mod ffi {
     unsafe extern "C++" {
         include!("occt_sys/topo.hxx");
+        // ── Boolean operations ────────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___fuse.html
+        fn fuse_shapes(s1: &TopodsShape, s2: &TopodsShape) -> Result<UniquePtr<TopodsShape>>;
 
         // ── TopoDS_Vertex ─────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___vertex.html

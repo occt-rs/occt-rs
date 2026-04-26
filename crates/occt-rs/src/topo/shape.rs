@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 
 use occt_sys::ffi;
 
-use crate::{topo::face::OcFace, OcEdge};
+use crate::{topo::face::OcFace, OcEdge, OcctError};
 
 /// TopAbs_ShapeEnum::TopAbs_FACE.
 /// Reference: https://dev.opencascade.org/doc/refman/html/namespace_top_abs.html
@@ -108,6 +108,23 @@ impl OcShape {
         }
         result
     }
+    /// Fuse (union) this shape with `other`, returning a new `OcShape`.
+    ///
+    /// Wraps `BRepAlgoAPI_Fuse` via the preferred SetArguments/SetTools/Build
+    /// pattern. The builder and its history are not preserved; if Modified/
+    /// Generated/IsDeleted are needed in future, promote to an explicit FuseBuilder.
+    pub fn union(&self, other: &OcShape) -> Result<OcShape, OcctError> {
+        let result = occt_sys::ffi::fuse_shapes(
+            self.inner
+                .as_ref()
+                .expect("OcShape invariant: inner is non-null"),
+            other
+                .inner
+                .as_ref()
+                .expect("OcShape invariant: inner is non-null"),
+        )?;
+        Ok(OcShape::from_ffi(result))
+    }
 }
 
 impl Clone for OcShape {
@@ -125,6 +142,7 @@ mod tests {
     use super::*;
     use crate::gp::OcPnt;
     use crate::topo::{OcEdge, OcFace, OcWire};
+    use crate::OcVec;
 
     fn triangle_face() -> OcFace {
         let edges = vec![
@@ -187,5 +205,65 @@ mod tests {
         // TopExp_Explorer visits each edge once per adjacent face, so a prism's
         // 9 edges appear 18 times (each edge bounds exactly 2 faces).
         assert_eq!(solid.as_shape().edges().len(), 18);
+    }
+    // A 1×1 square face in the XY plane, offset by `x_offset` on X,
+    // extruded 1 unit along Z to produce a unit box.
+    fn box_solid(x_offset: f64) -> crate::topo::OcSolid {
+        let x0 = x_offset;
+        let x1 = x_offset + 1.0;
+        let edges = vec![
+            OcEdge::from_pnts(OcPnt::new(x0, 0.0, 0.0), OcPnt::new(x1, 0.0, 0.0)).unwrap(),
+            OcEdge::from_pnts(OcPnt::new(x1, 0.0, 0.0), OcPnt::new(x1, 1.0, 0.0)).unwrap(),
+            OcEdge::from_pnts(OcPnt::new(x1, 1.0, 0.0), OcPnt::new(x0, 1.0, 0.0)).unwrap(),
+            OcEdge::from_pnts(OcPnt::new(x0, 1.0, 0.0), OcPnt::new(x0, 0.0, 0.0)).unwrap(),
+        ];
+        let wire = OcWire::from_edges(&edges).unwrap();
+        let face = OcFace::from_wire(&wire, true).unwrap();
+        face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap()
+    }
+
+    #[test]
+    fn fuse_overlapping_solids_succeeds() {
+        // Box A: x 0..1, Box B: x 0.5..1.5 — they overlap in x 0.5..1.
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(0.5).as_shape();
+        let result = a.union(&b);
+        assert!(
+            result.is_ok(),
+            "fuse of overlapping solids should succeed: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn fused_shape_tessellates_with_faces() {
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(0.5).as_shape();
+        let fused = a.union(&b).unwrap();
+        let tess = crate::tessellate::compute(&fused, 0.1, 0.5)
+            .expect("tessellation of fused shape should not fail");
+        assert!(
+            !tess.faces.is_empty(),
+            "fused shape should produce at least one tessellated face"
+        );
+    }
+
+    #[test]
+    fn fuse_is_not_identity_of_either_input() {
+        // The fused bounding box spans both inputs.
+        // Tessellate vertex x-coords should exceed x=1.0, proving B was included.
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(0.5).as_shape();
+        let fused = a.union(&b).unwrap();
+        let tess = crate::tessellate::compute(&fused, 0.1, 0.5).unwrap();
+        let max_x = tess
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            max_x > 1.0,
+            "fused shape should extend past x=1.0; max_x was {max_x}"
+        );
     }
 }

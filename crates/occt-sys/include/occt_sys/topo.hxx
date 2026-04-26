@@ -19,3 +19,4 @@
 #include "topo/shape.hxx"
 #include "topo/explorer.hxx"
 #include "topo/mesh.hxx"
+#include "topo/bool_op.hxx"
