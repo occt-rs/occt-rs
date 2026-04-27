@@ -2,6 +2,11 @@
 
 Rust bindings for [OpenCASCADE Technology (OCCT)](https://dev.opencascade.org/), a geometric modelling kernel.
 
+This is not an official project, or crate. This is an indipendant project.
+
+Any concerns held by OpenCASCADE that can be shared publicly should be raised as an issue on Github. If you prefer to discuss privately, you can reach the project owner in the email provided in the root Cargo.toml
+
+
 > **Status:** Early development. No stable API yet.
 
 ## Building
