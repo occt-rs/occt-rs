@@ -12,6 +12,12 @@ pub mod vertex;
 pub mod wire;
 pub mod wire_builder;
 
+// ocaf
+pub mod application;
+pub mod attributes;
+pub mod document;
+pub mod label;
+
 pub use chamfer::ChamferBuilder;
 pub use edge::OcEdge;
 pub use face::OcFace;
@@ -25,3 +31,8 @@ pub use solid::OcSolid;
 pub use vertex::OcVertex;
 pub use wire::OcWire;
 pub use wire_builder::KeyedWireBuilder;
+
+pub use application::OcApplication;
+pub use attributes::{OcInteger, OcName, OcReal};
+pub use document::{Command as OcCommand, OcDocument};
+pub use label::{OcChildIterator, OcLabel};

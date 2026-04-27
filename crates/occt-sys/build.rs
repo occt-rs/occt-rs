@@ -28,6 +28,10 @@ const OCCT_TOOLKITS: &[&str] = &[
     "TKBO",
     "TKFillet",
     "TKOffset",
+    "TKCAF",
+    "TKCDF",
+    "TKDCAF",
+    "TKLCAF",
 ];
 
 fn main() {
@@ -48,6 +52,10 @@ fn main() {
     println!("cargo:rerun-if-changed=include/occt_sys/topo/shape.hxx");
     println!("cargo:rerun-if-changed=include/occt_sys/topo/explorer.hxx");
     println!("cargo:rerun-if-changed=include/occt_sys/topo/mesh.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/ocaf/label.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/ocaf/document.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/ocaf/application.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/ocaf/attributes.hxx");
     // println!("cargo:rerun-if-changed=include/occt_sys/topo/edge_polygon.hxx");
     println!("cargo:rerun-if-env-changed=OCCT_DIR");
 

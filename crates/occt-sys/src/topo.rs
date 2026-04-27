@@ -20,6 +20,112 @@
 pub mod ffi {
     unsafe extern "C++" {
         include!("occt_sys/topo.hxx");
+        // ── TDataStdNameHandle ────────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_Name) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___name.html
+        type TDataStdNameHandle;
+
+        // Set: static on TDataStd_Name; attaches or updates the attribute on label.
+        // Must be called inside an open command scope.
+        fn tdatastd_name_set(
+            label: &TdfLabel,
+            value: &str,
+        ) -> Result<UniquePtr<TDataStdNameHandle>>;
+        // Get: const — reads the string value as UTF-8.
+        fn tdatastd_name_get(h: &TDataStdNameHandle) -> String;
+        // Find: returns nullptr (None on Rust side) when attribute is absent.
+        fn tdatastd_name_find(label: &TdfLabel) -> UniquePtr<TDataStdNameHandle>;
+
+        // ── TDataStdIntegerHandle ─────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___integer.html
+        type TDataStdIntegerHandle;
+
+        fn tdatastd_integer_set(
+            label: &TdfLabel,
+            value: i32,
+        ) -> Result<UniquePtr<TDataStdIntegerHandle>>;
+        fn tdatastd_integer_get(h: &TDataStdIntegerHandle) -> i32;
+        fn tdatastd_integer_find(label: &TdfLabel) -> UniquePtr<TDataStdIntegerHandle>;
+
+        // ── TDataStdRealHandle ────────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___real.html
+        type TDataStdRealHandle;
+
+        fn tdatastd_real_set(label: &TdfLabel, value: f64)
+            -> Result<UniquePtr<TDataStdRealHandle>>;
+        fn tdatastd_real_get(h: &TDataStdRealHandle) -> f64;
+        fn tdatastd_real_find(label: &TdfLabel) -> UniquePtr<TDataStdRealHandle>;
+        // ── TdfLabel ──────────────────────────────────────────────────────────────
+        // Shim holding TDF_Label by value.  TDF_Label is a non-owning reference
+        // into a TDF_Data tree; the Rust wrapper carries a lifetime parameter
+        // to enforce that labels cannot outlive the document that owns the tree.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_d_f___label.html
+        type TdfLabel;
+
+        fn clone_tdf_label(l: &TdfLabel) -> UniquePtr<TdfLabel>;
+
+        // Const queries — TDF_Label const methods.
+        fn tdf_label_is_null(l: &TdfLabel) -> bool;
+        fn tdf_label_is_root(l: &TdfLabel) -> bool;
+        fn tdf_label_tag(l: &TdfLabel) -> i32;
+        fn tdf_label_father(l: &TdfLabel) -> UniquePtr<TdfLabel>;
+        // FindChild is const on TDF_Label even when create=true; the label
+        // value itself is unchanged — only the external tree is mutated.
+        fn tdf_label_find_child(l: &TdfLabel, tag: i32, create: bool) -> UniquePtr<TdfLabel>;
+        fn tdf_label_has_attribute(l: &TdfLabel) -> bool;
+        fn tdf_label_nb_attributes(l: &TdfLabel) -> i32;
+        // Entry string, e.g. "0:1:2:3".
+        fn tdf_label_entry(l: &TdfLabel) -> String;
+
+        // ── TdfChildIteratorShim ──────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_d_f___child_iterator.html
+        type TdfChildIteratorShim;
+
+        fn new_tdf_child_iterator(
+            label: &TdfLabel,
+            all_levels: bool,
+        ) -> UniquePtr<TdfChildIteratorShim>;
+        fn more(self: &TdfChildIteratorShim) -> bool;
+        fn next(self: Pin<&mut TdfChildIteratorShim>);
+        // value() is const — reads current label without advancing.
+        fn value(self: &TdfChildIteratorShim) -> UniquePtr<TdfLabel>;
+
+        // ── DocumentHandle ────────────────────────────────────────────────────────
+        // Shim holding Handle(TDocStd_Document) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_doc_std___document.html
+        type DocumentHandle;
+
+        // document_main: const — returns the root label of the user data section.
+        fn document_main(doc: &DocumentHandle) -> UniquePtr<TdfLabel>;
+
+        // Const queries.
+        fn document_get_available_undos(doc: &DocumentHandle) -> i32;
+        fn document_get_available_redos(doc: &DocumentHandle) -> i32;
+
+        // Non-const command / transaction operations.
+        fn document_new_command(doc: Pin<&mut DocumentHandle>) -> Result<()>;
+        fn document_commit_command(doc: Pin<&mut DocumentHandle>) -> Result<bool>;
+        fn document_abort_command(doc: Pin<&mut DocumentHandle>) -> Result<()>;
+        fn document_undo(doc: Pin<&mut DocumentHandle>) -> Result<bool>;
+        fn document_redo(doc: Pin<&mut DocumentHandle>) -> Result<bool>;
+        fn document_set_undo_limit(doc: Pin<&mut DocumentHandle>, n: i32);
+
+        // ── ApplicationHandle ─────────────────────────────────────────────────────
+        // Shim holding Handle(TDocStd_Application) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_doc_std___application.html
+        type ApplicationHandle;
+
+        fn new_application() -> UniquePtr<ApplicationHandle>;
+        // Non-const: registers the new document with the application.
+        fn application_new_document(
+            app: Pin<&mut ApplicationHandle>,
+            format: &str,
+        ) -> Result<UniquePtr<DocumentHandle>>;
+
         // ── MakeOffsetShapeBuilder ────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_offset_a_p_i___make_offset_shape.html
         type MakeOffsetShapeBuilder;

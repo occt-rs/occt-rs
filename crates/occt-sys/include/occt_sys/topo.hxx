@@ -24,3 +24,8 @@
 #include "topo/fillet.hxx"
 #include "topo/chamfer.hxx"
 #include "topo/offset.hxx"
+
+#include "ocaf/label.hxx"
+#include "ocaf/document.hxx"
+#include "ocaf/application.hxx"
+#include "ocaf/attributes.hxx"
