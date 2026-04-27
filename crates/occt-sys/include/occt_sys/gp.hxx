@@ -22,8 +22,139 @@
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
+#include <gp_Trsf.hxx>
 
 #include "exception.hxx"
+
+// ── gp_Trsf shim struct and factory functions ──────────────────────────────────
+// Reference: https://dev.opencascade.org/doc/refman/html/classgp___trsf.html
+//
+// gp_Trsf represents an affine transformation (rotation, translation, mirror,
+// scale, or composition). OCCT stores a form enum internally for optimisation;
+// storing the raw 3×4 matrix in Rust and reconstructing would lose that state,
+// so gp_Trsf is held opaquely behind a GpTrsf shim struct.
+//
+// NOTE: gp_Trsf with scale ≠ 1 cannot pass through TopLoc_Location since
+// OCCT 7.6. Use BRepBuilderAPI_Transform to apply scaling to shapes (A4).
+//
+// Sourced from OCCT 7.9 documentation.
+// No derivation from any other binding crate.
+
+struct GpTrsf {
+    gp_Trsf inner;
+
+    GpTrsf() {}  // identity — gp_Trsf() default constructor is identity
+
+    // ── Const accessors ────────────────────────────────────────────────────
+
+    // Value(Row, Col): 1-based, rows 1..3, cols 1..4.
+    double value(int row, int col) const { return inner.Value(row, col); }
+
+    // IsNegative: true when the vectorial part has negative determinant
+    // (mirror or improper rotation).
+    bool is_negative() const { return inner.IsNegative(); }
+
+    // Multiplied: composition, returning a new transform.
+    // Semantics: result(P) = self(other(P)) — other is applied first.
+    // gp_Trsf::Multiplied is const and does not throw.
+    std::unique_ptr<GpTrsf> multiplied(const GpTrsf& other) const {
+        auto result = std::make_unique<GpTrsf>();
+        result->inner = inner.Multiplied(other.inner);
+        return result;
+    }
+
+    // Inverted: throws Standard_ConstructionError on singular matrix (scale = 0).
+    std::unique_ptr<GpTrsf> inverted() const {
+        try {
+            auto result = std::make_unique<GpTrsf>();
+            result->inner = inner.Inverted();
+            return result;
+        } catch (const std::runtime_error&) {
+            throw;
+        } catch (...) {
+            rethrow_occt_as_runtime_error();
+        }
+    }
+};
+
+inline std::unique_ptr<GpTrsf> clone_gp_trsf(const GpTrsf& t) {
+    auto result = std::make_unique<GpTrsf>();
+    result->inner = t.inner;
+    return result;
+}
+
+inline std::unique_ptr<GpTrsf> new_gp_trsf_identity() {
+    return std::make_unique<GpTrsf>();
+}
+
+// SetTranslation(V: gp_Vec) — non-const on gp_Trsf; called on a fresh instance.
+inline std::unique_ptr<GpTrsf> new_gp_trsf_translation(double vx, double vy, double vz) {
+    auto t = std::make_unique<GpTrsf>();
+    t->inner.SetTranslation(gp_Vec(vx, vy, vz));
+    return t;
+}
+
+// SetRotation(A1, Ang) — direction components are unit-magnitude (guaranteed by OcAx1).
+inline std::unique_ptr<GpTrsf> new_gp_trsf_rotation(
+    double px, double py, double pz,
+    double dx, double dy, double dz,
+    double angle)
+{
+    try {
+        auto t = std::make_unique<GpTrsf>();
+        t->inner.SetRotation(gp_Ax1(gp_Pnt(px, py, pz), gp_Dir(dx, dy, dz)), angle);
+        return t;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// SetMirror(P: gp_Pnt) — central symmetry about a point.
+inline std::unique_ptr<GpTrsf> new_gp_trsf_mirror_point(double x, double y, double z) {
+    auto t = std::make_unique<GpTrsf>();
+    t->inner.SetMirror(gp_Pnt(x, y, z));
+    return t;
+}
+
+// SetMirror(A1: gp_Ax1) — axial symmetry about a line.
+inline std::unique_ptr<GpTrsf> new_gp_trsf_mirror_axis(
+    double px, double py, double pz,
+    double dx, double dy, double dz)
+{
+    try {
+        auto t = std::make_unique<GpTrsf>();
+        t->inner.SetMirror(gp_Ax1(gp_Pnt(px, py, pz), gp_Dir(dx, dy, dz)));
+        return t;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// SetMirror(A2: gp_Ax2) — planar symmetry; plane defined by origin, normal, and X direction.
+inline std::unique_ptr<GpTrsf> new_gp_trsf_mirror_plane(
+    double px, double py, double pz,
+    double nx, double ny, double nz,
+    double xx, double xy, double xz)
+{
+    try {
+        auto t = std::make_unique<GpTrsf>();
+        t->inner.SetMirror(gp_Ax2(gp_Pnt(px, py, pz), gp_Dir(nx, ny, nz), gp_Dir(xx, xy, xz)));
+        return t;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// SetScale(P: gp_Pnt, S: f64) — uniform scale about a center point.
+// WARNING: scale ≠ 1 cannot pass through TopLoc_Location since OCCT 7.6.
+// Use BRepBuilderAPI_Transform (OcShape::transformed, task A4) for scaling shapes.
+inline std::unique_ptr<GpTrsf> new_gp_trsf_scale(
+    double px, double py, double pz, double s)
+{
+    auto t = std::make_unique<GpTrsf>();
+    t->inner.SetScale(gp_Pnt(px, py, pz), s);
+    return t;
+}
+
+
+
 
 inline std::unique_ptr<gp_Pnt> new_gp_pnt_xyz(double x, double y, double z) {
     return std::make_unique<gp_Pnt>(x, y, z);

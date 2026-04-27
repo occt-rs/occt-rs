@@ -13,7 +13,12 @@ use std::marker::PhantomData;
 
 use occt_sys::ffi;
 
-use crate::{topo::face::OcFace, OcEdge, OcctError};
+use crate::topo::offset::{OffsetShapeBuilder, ThickSolidBuilder};
+use crate::{
+    error::{CommonError, FuseError},
+    topo::{chamfer::ChamferBuilder, face::OcFace, fillet::FilletBuilder, ShapeType},
+    OcEdge, OcctError,
+};
 
 /// TopAbs_ShapeEnum::TopAbs_FACE.
 /// Reference: https://dev.opencascade.org/doc/refman/html/namespace_top_abs.html
@@ -62,6 +67,9 @@ impl std::fmt::Debug for OcShape {
 }
 
 impl OcShape {
+    pub fn shape_type(&self) -> ShapeType {
+        ShapeType::from(occt_sys::ffi::topods_shape_type(self.as_ffi()))
+    }
     pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsShape>) -> Self {
         Self {
             inner,
@@ -113,7 +121,7 @@ impl OcShape {
     /// Wraps `BRepAlgoAPI_Fuse` via the preferred SetArguments/SetTools/Build
     /// pattern. The builder and its history are not preserved; if Modified/
     /// Generated/IsDeleted are needed in future, promote to an explicit FuseBuilder.
-    pub fn union(&self, other: &OcShape) -> Result<OcShape, OcctError> {
+    pub fn oc_fuse(&self, other: &OcShape) -> Result<OcShape, FuseError> {
         let result = occt_sys::ffi::fuse_shapes(
             self.inner
                 .as_ref()
@@ -122,8 +130,142 @@ impl OcShape {
                 .inner
                 .as_ref()
                 .expect("OcShape invariant: inner is non-null"),
-        )?;
+        )
+        .map_err(|e| FuseError::Occt(e.into()))?;
+        let result = OcShape::from_ffi(result);
+        if result.shape_type() == ShapeType::Compound
+            && occt_sys::ffi::topods_compound_child_count(result.as_ffi()) > 1
+        {
+            return Err(FuseError::DisjointInputs(result));
+        }
+        Ok(result)
+    }
+    /// Subtract `tool` from `self`, returning a new `OcShape`.
+    ///
+    /// Wraps `BRepAlgoAPI_Cut` via the preferred SetArguments/SetTools/Build
+    /// pattern. `self` is the "object" (left operand); `tool` is subtracted from it.
+    ///
+    /// For disjoint inputs, OCCT returns `self` unchanged as a solid — this is
+    /// a valid `Ok` result. No compound detection is needed.
+    pub fn oc_cut(&self, tool: &OcShape) -> Result<OcShape, OcctError> {
+        let result = occt_sys::ffi::cut_shapes(
+            self.inner
+                .as_ref()
+                .expect("OcShape invariant: inner is non-null"),
+            tool.inner
+                .as_ref()
+                .expect("OcShape invariant: inner is non-null"),
+        )
+        .map_err(|e| OcctError::from(e))?;
         Ok(OcShape::from_ffi(result))
+    }
+    /// Applies `trsf` to a copy of this shape, returning a new independent `OcShape`.
+    ///
+    /// Wraps `BRepBuilderAPI_Transform(shape, trsf, copy=true)`.  The result
+    /// geometry is fully independent of `self`; no TShape handles are shared.
+    ///
+    /// Scaling (scale ≠ 1) is handled correctly here because the transform is
+    /// applied at the geometry level — `BRepBuilderAPI_Transform` rewrites
+    /// underlying curves and surfaces.  This is the correct path for scaling;
+    /// `TopLoc_Location` rejects scale ≠ 1 since OCCT 7.6.
+    ///
+    /// Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___transform.html>
+    pub fn transformed(&self, trsf: &crate::gp::OcTrsf) -> Result<OcShape, OcctError> {
+        let result = occt_sys::ffi::transform_shape(
+            self.as_ffi(),
+            trsf.value(1, 1),
+            trsf.value(1, 2),
+            trsf.value(1, 3),
+            trsf.value(1, 4),
+            trsf.value(2, 1),
+            trsf.value(2, 2),
+            trsf.value(2, 3),
+            trsf.value(2, 4),
+            trsf.value(3, 1),
+            trsf.value(3, 2),
+            trsf.value(3, 3),
+            trsf.value(3, 4),
+        )
+        .map_err(OcctError::from)?;
+        Ok(OcShape::from_ffi(result))
+    }
+
+    /// Intersect `self` with `other`, returning a new `OcShape`.
+    ///
+    /// Wraps `BRepAlgoAPI_Common` via the preferred SetArguments/SetTools/Build
+    /// pattern.
+    ///
+    /// Returns `Err(CommonError::NoIntersection)` when the inputs are disjoint —
+    /// OCCT returns an empty `TopoDS_Compound` in this case (`IsDone()==true`).
+    /// The empty compound is not forwarded to the caller.
+    pub fn oc_common(&self, other: &OcShape) -> Result<OcShape, CommonError> {
+        let result = occt_sys::ffi::common_shapes(
+            self.inner
+                .as_ref()
+                .expect("OcShape invariant: inner is non-null"),
+            other
+                .inner
+                .as_ref()
+                .expect("OcShape invariant: inner is non-null"),
+        )
+        .map_err(|e| CommonError::Occt(e.into()))?;
+        let result = OcShape::from_ffi(result);
+        if occt_sys::ffi::topods_compound_child_count(result.as_ffi()) == 0 {
+            return Err(CommonError::NoIntersection);
+        }
+        Ok(result)
+    }
+    /// Applies constant-radius fillets to the given edges and returns the
+    /// resulting shape.
+    ///
+    /// Convenience wrapper over [`FilletBuilder`].  For finer control (adding
+    /// edges in a loop, inspecting errors per edge) use `FilletBuilder` directly.
+    ///
+    /// `edges_with_radii` is a slice of `(radius, edge)` pairs.
+    pub fn fillet(&self, edges_with_radii: &[(f64, &OcEdge)]) -> Result<OcShape, OcctError> {
+        let mut builder = FilletBuilder::new(self)?;
+        for (radius, edge) in edges_with_radii {
+            builder.add_edge(*radius, edge)?;
+        }
+        builder.build()
+    }
+
+    /// Applies symmetric chamfers to the given edges and returns the resulting shape.
+    ///
+    /// Convenience wrapper over [`ChamferBuilder`].  For asymmetric or
+    /// distance-angle chamfers use `ChamferBuilder` directly.
+    pub fn chamfer(&self, edges_with_distances: &[(f64, &OcEdge)]) -> Result<OcShape, OcctError> {
+        let mut builder = ChamferBuilder::new(self)?;
+        for (dis, edge) in edges_with_distances {
+            builder.add_edge(*dis, edge)?;
+        }
+        builder.build()
+    }
+
+    /// Offsets all surfaces of the shape outward (positive) or inward (negative).
+    ///
+    /// Wraps `BRepOffsetAPI_MakeOffsetShape::PerformBySimple`.
+    pub fn offset_shape(&self, offset: f64) -> Result<OcShape, OcctError> {
+        OffsetShapeBuilder::new().perform(self, offset)
+    }
+
+    /// Hollows this solid by removing `closing_faces` and offsetting inward.
+    ///
+    /// `offset` is typically negative (wall thickness inward).
+    /// `tolerance` controls precision; `1e-3` is typical.
+    ///
+    /// Convenience wrapper over [`ThickSolidBuilder`].
+    pub fn thick_solid(
+        &self,
+        closing_faces: &[&OcFace],
+        offset: f64,
+        tolerance: f64,
+    ) -> Result<OcShape, OcctError> {
+        let mut builder = ThickSolidBuilder::new();
+        for face in closing_faces {
+            builder.add_closing_face(face);
+        }
+        builder.build(self, offset, tolerance)
     }
 }
 
@@ -227,7 +369,7 @@ mod tests {
         // Box A: x 0..1, Box B: x 0.5..1.5 — they overlap in x 0.5..1.
         let a = box_solid(0.0).as_shape();
         let b = box_solid(0.5).as_shape();
-        let result = a.union(&b);
+        let result = a.oc_fuse(&b);
         assert!(
             result.is_ok(),
             "fuse of overlapping solids should succeed: {:?}",
@@ -239,7 +381,7 @@ mod tests {
     fn fused_shape_tessellates_with_faces() {
         let a = box_solid(0.0).as_shape();
         let b = box_solid(0.5).as_shape();
-        let fused = a.union(&b).unwrap();
+        let fused = a.oc_fuse(&b).unwrap();
         let tess = crate::tessellate::compute(&fused, 0.1, 0.5)
             .expect("tessellation of fused shape should not fail");
         assert!(
@@ -254,7 +396,7 @@ mod tests {
         // Tessellate vertex x-coords should exceed x=1.0, proving B was included.
         let a = box_solid(0.0).as_shape();
         let b = box_solid(0.5).as_shape();
-        let fused = a.union(&b).unwrap();
+        let fused = a.oc_fuse(&b).unwrap();
         let tess = crate::tessellate::compute(&fused, 0.1, 0.5).unwrap();
         let max_x = tess
             .vertices
@@ -265,5 +407,329 @@ mod tests {
             max_x > 1.0,
             "fused shape should extend past x=1.0; max_x was {max_x}"
         );
+    }
+    #[test]
+    fn shape_type_of_solid_is_solid() {
+        let s = box_solid(0.0).as_shape();
+        assert_eq!(s.shape_type(), ShapeType::Solid);
+    }
+    #[test]
+    fn cut_overlapping_solids_succeeds() {
+        // Box A: x 0..1, Box B: x 0.5..1.5 — A minus B should leave x 0..0.5 region.
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(0.5).as_shape();
+        let result = a.oc_cut(&b);
+        assert!(
+            result.is_ok(),
+            "cut of overlapping solids should succeed: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn cut_disjoint_solids_returns_argument_unchanged() {
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(10.0).as_shape();
+        let result = a.oc_cut(&b);
+        assert!(
+            result.is_ok(),
+            "cut of disjoint solids should succeed: {:?}",
+            result.err()
+        );
+        // OCCT wraps the result in a TopoDS_Compound (as with all boolean ops).
+        // The compound contains the argument shape unchanged.
+        let tess = crate::tessellate::compute(&result.unwrap(), 0.1, 0.5).unwrap();
+        assert!(
+            !tess.faces.is_empty(),
+            "disjoint cut result should tessellate"
+        );
+    }
+
+    #[test]
+    fn cut_is_noncommutative() {
+        // A.cut(B) and B.cut(A) should produce geometrically distinct results.
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(0.5).as_shape();
+        let a_minus_b = a.oc_cut(&b).unwrap();
+        let b_minus_a = b.oc_cut(&a).unwrap();
+        let tess_ab = crate::tessellate::compute(&a_minus_b, 0.1, 0.5).unwrap();
+        let tess_ba = crate::tessellate::compute(&b_minus_a, 0.1, 0.5).unwrap();
+        // A−B should not extend past x=0.5 (the tool removed that part).
+        let max_x_ab = tess_ab
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        // B−A should not extend below x=0.5.
+        let min_x_ba = tess_ba
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::INFINITY, f32::min);
+        assert!(
+            max_x_ab <= 0.5 + 1e-4,
+            "A-B should not extend past x=0.5, got {max_x_ab}"
+        );
+        assert!(
+            min_x_ba >= 0.5 - 1e-4,
+            "B-A should not extend below x=0.5, got {min_x_ba}"
+        );
+    }
+
+    #[test]
+    fn common_overlapping_solids_succeeds() {
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(0.5).as_shape();
+        let result = a.oc_common(&b);
+        assert!(
+            result.is_ok(),
+            "common of overlapping solids should succeed: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn common_overlap_region_is_correct() {
+        // Intersection of x 0..1 and x 0.5..1.5 should be x 0.5..1.
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(0.5).as_shape();
+        let common = a.oc_common(&b).unwrap();
+        let tess = crate::tessellate::compute(&common, 0.1, 0.5).unwrap();
+        let min_x = tess
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::INFINITY, f32::min);
+        let max_x = tess
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            min_x >= 0.5 - 1e-4,
+            "common min_x should be ~0.5, got {min_x}"
+        );
+        assert!(
+            max_x <= 1.0 + 1e-4,
+            "common max_x should be ~1.0, got {max_x}"
+        );
+    }
+
+    #[test]
+    fn common_disjoint_solids_returns_no_intersection() {
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(10.0).as_shape();
+        let result = a.oc_common(&b);
+        assert!(
+            matches!(result, Err(CommonError::NoIntersection)),
+            "common of disjoint solids should return NoIntersection, got: {:?}",
+            result.ok().map(|_| "Ok")
+        );
+    }
+    #[test]
+    fn translated_shape_moves_vertices() {
+        let s = box_solid(0.0).as_shape();
+        let trsf = crate::gp::OcTrsf::from_translation(OcVec::new(5.0, 0.0, 0.0));
+        let moved = s.transformed(&trsf).unwrap();
+        let tess = crate::tessellate::compute(&moved, 0.1, 0.5).unwrap();
+        let min_x = tess
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::INFINITY, f32::min);
+        assert!(min_x >= 5.0 - 1e-4, "min_x should be ~5.0, got {min_x}");
+    }
+
+    #[test]
+    fn transformed_is_independent_of_source() {
+        // Verify copy=true: the source shape's vertices are unaffected.
+        let s = box_solid(0.0).as_shape();
+        let trsf = crate::gp::OcTrsf::from_translation(OcVec::new(10.0, 0.0, 0.0));
+        let _moved = s.transformed(&trsf).unwrap();
+        // Tessellate the original — it must still sit at x=0..1.
+        let tess = crate::tessellate::compute(&s, 0.1, 0.5).unwrap();
+        let max_x = tess
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            max_x <= 1.0 + 1e-4,
+            "source should be unmodified, max_x={max_x}"
+        );
+    }
+
+    #[test]
+    fn scale_applied_via_transformed() {
+        // Uniform scale by 2 about origin: box 0..1 should become 0..2.
+        let s = box_solid(0.0).as_shape();
+        let trsf = crate::gp::OcTrsf::from_scale(OcPnt::origin(), 2.0);
+        let scaled = s.transformed(&trsf).unwrap();
+        let tess = crate::tessellate::compute(&scaled, 0.1, 0.5).unwrap();
+        let max_x = tess
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            max_x >= 2.0 - 1e-4,
+            "scaled max_x should be ~2.0, got {max_x}"
+        );
+    }
+    #[test]
+    fn fillet_box_edges_succeeds() {
+        let s = box_solid(0.0).as_shape();
+        let edges = s.edges();
+        // Deduplicate by ShapeKey — edges() returns each edge once per adjacent face.
+        let mut seen = std::collections::HashSet::new();
+        let unique_edges: Vec<_> = edges
+            .iter()
+            .filter(|e| seen.insert(e.shape_key()))
+            .collect();
+        let result = s.fillet(&unique_edges.iter().map(|e| (0.05, *e)).collect::<Vec<_>>());
+        assert!(result.is_ok(), "fillet should succeed: {:?}", result.err());
+    }
+
+    #[test]
+    fn fillet_builder_add_then_build() {
+        use crate::topo::FilletBuilder;
+        let s = box_solid(0.0).as_shape();
+        let edges = s.edges();
+        let mut seen = std::collections::HashSet::new();
+        let unique_edges: Vec<_> = edges
+            .iter()
+            .filter(|e| seen.insert(e.shape_key()))
+            .collect();
+        let mut builder = FilletBuilder::new(&s).unwrap();
+        for e in &unique_edges {
+            builder.add_edge(0.05, e).unwrap();
+        }
+        let result = builder.build();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn fillet_result_tessellates() {
+        let s = box_solid(0.0).as_shape();
+        let edges = s.edges();
+        let mut seen = std::collections::HashSet::new();
+        let unique_edges: Vec<_> = edges
+            .iter()
+            .filter(|e| seen.insert(e.shape_key()))
+            .collect();
+        let filleted = s
+            .fillet(&unique_edges.iter().map(|e| (0.05, *e)).collect::<Vec<_>>())
+            .unwrap();
+        let tess = crate::tessellate::compute(&filleted, 0.05, 0.5).unwrap();
+        assert!(!tess.faces.is_empty());
+    }
+    fn unique_edges(shape: &OcShape) -> Vec<OcEdge> {
+        let mut seen = std::collections::HashSet::new();
+        shape
+            .edges()
+            .into_iter()
+            .filter(|e| seen.insert(e.shape_key()))
+            .collect()
+    }
+
+    #[test]
+    fn chamfer_box_edges_succeeds() {
+        let s = box_solid(0.0).as_shape();
+        let edges = unique_edges(&s);
+        let result = s.chamfer(&edges.iter().map(|e| (0.05, e)).collect::<Vec<_>>());
+        assert!(result.is_ok(), "chamfer failed: {:?}", result.err());
+    }
+
+    #[test]
+    fn chamfer_builder_symmetric() {
+        use crate::topo::ChamferBuilder;
+        let s = box_solid(0.0).as_shape();
+        let edges = unique_edges(&s);
+        let mut builder = ChamferBuilder::new(&s).unwrap();
+        for e in &edges {
+            builder.add_edge(0.05, e).unwrap();
+        }
+        assert!(builder.build().is_ok());
+    }
+
+    #[test]
+    fn chamfer_result_tessellates() {
+        let s = box_solid(0.0).as_shape();
+        let edges = unique_edges(&s);
+        let chamfered = s
+            .chamfer(&edges.iter().map(|e| (0.05, e)).collect::<Vec<_>>())
+            .unwrap();
+        let tess = crate::tessellate::compute(&chamfered, 0.05, 0.5).unwrap();
+        assert!(!tess.faces.is_empty());
+    }
+    #[test]
+    fn offset_shape_outward_expands_bounds() {
+        let s = box_solid(0.0).as_shape();
+        let expanded = s.offset_shape(0.1).unwrap();
+        let tess = crate::tessellate::compute(&expanded, 0.05, 0.5).unwrap();
+        let max_x = tess
+            .vertices
+            .iter()
+            .map(|v| v.point[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            max_x > 1.0 + 0.05,
+            "expanded shape should exceed x=1.0, got {max_x}"
+        );
+    }
+
+    #[test]
+    fn thick_solid_one_face_removed() {
+        // Box 0..1. Remove the top face (max Z), hollow inward by -0.1.
+        let s = box_solid(0.0).as_shape();
+        // Find the face with highest Z centroid — that's the top.
+        let top_face = s
+            .faces()
+            .into_iter()
+            .max_by(|a, b| {
+                let za = crate::tessellate::compute(&a.as_shape(), 0.1, 0.5)
+                    .unwrap()
+                    .vertices
+                    .iter()
+                    .map(|v| v.point[2])
+                    .fold(f32::NEG_INFINITY, f32::max);
+                let zb = crate::tessellate::compute(&b.as_shape(), 0.1, 0.5)
+                    .unwrap()
+                    .vertices
+                    .iter()
+                    .map(|v| v.point[2])
+                    .fold(f32::NEG_INFINITY, f32::max);
+                za.partial_cmp(&zb).unwrap()
+            })
+            .unwrap();
+        let result = s.thick_solid(&[&top_face], -0.1, 1e-3);
+        assert!(result.is_ok(), "thick_solid failed: {:?}", result.err());
+    }
+
+    #[test]
+    fn thick_solid_result_tessellates() {
+        let s = box_solid(0.0).as_shape();
+        let top_face = s
+            .faces()
+            .into_iter()
+            .max_by(|a, b| {
+                let za = crate::tessellate::compute(&a.as_shape(), 0.1, 0.5)
+                    .unwrap()
+                    .vertices
+                    .iter()
+                    .map(|v| v.point[2])
+                    .fold(f32::NEG_INFINITY, f32::max);
+                let zb = crate::tessellate::compute(&b.as_shape(), 0.1, 0.5)
+                    .unwrap()
+                    .vertices
+                    .iter()
+                    .map(|v| v.point[2])
+                    .fold(f32::NEG_INFINITY, f32::max);
+                za.partial_cmp(&zb).unwrap()
+            })
+            .unwrap();
+        let hollowed = s.thick_solid(&[&top_face], -0.1, 1e-3).unwrap();
+        let tess = crate::tessellate::compute(&hollowed, 0.05, 0.5).unwrap();
+        assert!(!tess.faces.is_empty());
     }
 }
