@@ -6,8 +6,11 @@ resolver = "2"
 version    = "0.1.0"
 edition    = "2021"
 license    = "AGPL-3.0-only"
-repository = "https://github.com/Ben-PH/occt-rs"
-authors    = ["Ben Pieters-Hawke"]
+repository = "https://github.com/occt-rs/occt-rs"
+homepage = "https://github.com/occt-rs/occt-rs"
+description = "Rust bindings for OpenCASCADE (OCCT) geometry kernel"
+readme = "README.md"
+authors    = ["Ben Pieters-Hawke <benphawke@gmail.com>"]
 
 [workspace.dependencies]
 cxx        = "1.0.194"
