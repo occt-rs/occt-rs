@@ -11,6 +11,7 @@
 //!
 //! No derivation from any other binding crate.
 
+#[allow(clippy::too_many_arguments)]
 #[cxx::bridge]
 pub mod ffi {
     unsafe extern "C++" {
@@ -73,5 +74,54 @@ pub mod ffi {
             xy: f64,
             xz: f64,
         ) -> Result<UniquePtr<GpAx2>>;
+        // ── GpTrsf ───────────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/classgp___trsf.html
+        //
+        // gp_Trsf is held opaquely: its internal form enum is OCCT-managed state
+        // that cannot be faithfully represented as a plain Rust struct.
+        // Stored as UniquePtr<GpTrsf>; crossed via as_ffi() when passed to
+        // higher-level OCCT APIs (BRepBuilderAPI_Transform, etc.).
+        type GpTrsf;
+
+        fn new_gp_trsf_identity() -> UniquePtr<GpTrsf>;
+        fn clone_gp_trsf(t: &GpTrsf) -> UniquePtr<GpTrsf>;
+
+        fn new_gp_trsf_translation(vx: f64, vy: f64, vz: f64) -> UniquePtr<GpTrsf>;
+        fn new_gp_trsf_rotation(
+            px: f64,
+            py: f64,
+            pz: f64,
+            dx: f64,
+            dy: f64,
+            dz: f64,
+            angle: f64,
+        ) -> Result<UniquePtr<GpTrsf>>;
+        fn new_gp_trsf_mirror_point(x: f64, y: f64, z: f64) -> UniquePtr<GpTrsf>;
+        fn new_gp_trsf_mirror_axis(
+            px: f64,
+            py: f64,
+            pz: f64,
+            dx: f64,
+            dy: f64,
+            dz: f64,
+        ) -> Result<UniquePtr<GpTrsf>>;
+        fn new_gp_trsf_mirror_plane(
+            px: f64,
+            py: f64,
+            pz: f64,
+            nx: f64,
+            ny: f64,
+            nz: f64,
+            xx: f64,
+            xy: f64,
+            xz: f64,
+        ) -> Result<UniquePtr<GpTrsf>>;
+        fn new_gp_trsf_scale(px: f64, py: f64, pz: f64, s: f64) -> UniquePtr<GpTrsf>;
+
+        // Const methods.
+        fn value(self: &GpTrsf, row: i32, col: i32) -> f64;
+        fn is_negative(self: &GpTrsf) -> bool;
+        fn multiplied(self: &GpTrsf, other: &GpTrsf) -> UniquePtr<GpTrsf>;
+        fn inverted(self: &GpTrsf) -> Result<UniquePtr<GpTrsf>>;
     }
 }

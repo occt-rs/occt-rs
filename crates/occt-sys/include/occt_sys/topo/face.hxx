@@ -23,13 +23,20 @@
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepTools.hxx>
 #include <TopoDS_Face.hxx>
+#include <gp_Pln.hxx>
 
 #include "wire.hxx"
+#include "../exception.hxx"
 
 struct MakeFaceBuilder {
     BRepBuilderAPI_MakeFace inner;
     MakeFaceBuilder(const TopoDS_Wire& w, bool only_plane)
         : inner(w, only_plane ? Standard_True : Standard_False) {}
+    // BRepBuilderAPI_MakeFace(const gp_Pln&, const TopoDS_Wire&, Standard_Boolean Inside)
+    // Inside=Standard_True: wire is the outer boundary; face is the bounded interior.
+    // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_face.html
+    MakeFaceBuilder(const gp_Pln& pln, const TopoDS_Wire& w)
+        : inner(pln, w, Standard_True) {}
     bool is_done() const { return inner.IsDone(); }
     int  error()   const { return static_cast<int>(inner.Error()); }
     std::unique_ptr<TopoDS_Face> face() {
@@ -41,6 +48,22 @@ inline std::unique_ptr<MakeFaceBuilder> new_make_face_from_wire(
     const TopoDS_Wire& w, bool only_plane)
 {
     return std::make_unique<MakeFaceBuilder>(w, only_plane);
+}
+
+// Constructs a face on an explicitly provided plane.
+// px/py/pz: a point on the plane.  nx/ny/nz: the plane normal (need not be unit).
+// gp_Dir normalises the components; throws Standard_ConstructionError on zero magnitude.
+// gp_Pln reference: https://dev.opencascade.org/doc/refman/html/classgp___pln.html
+inline std::unique_ptr<MakeFaceBuilder> new_make_face_from_plane_and_wire(
+    double px, double py, double pz,
+    double nx, double ny, double nz,
+    const TopoDS_Wire& w)
+{
+    try {
+        gp_Pln pln(gp_Pnt(px, py, pz), gp_Dir(nx, ny, nz));
+        return std::make_unique<MakeFaceBuilder>(pln, w);
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
 }
 
 // TopoDS_Face copy shares the underlying TShape handle (ref-counted).

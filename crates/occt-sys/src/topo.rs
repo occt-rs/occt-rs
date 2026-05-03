@@ -20,6 +20,227 @@
 pub mod ffi {
     unsafe extern "C++" {
         include!("occt_sys/topo.hxx");
+        // ---------------------------------------------------------------------------
+        // TNaming — topological naming attribute (DOC-1)
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_naming___builder.html
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_naming___named_shape.html
+        // ---------------------------------------------------------------------------
+
+        type TnamingNamedShapeHandle;
+        fn is_null(self: &TnamingNamedShapeHandle) -> bool;
+
+        // Builder — must be used inside an open Command
+        type TnamingBuilderShim;
+        fn new_tnaming_builder(label: &TdfLabel) -> UniquePtr<TnamingBuilderShim>;
+        fn generated_fresh(self: Pin<&mut TnamingBuilderShim>, s: &TopodsShape);
+        fn generated_from(
+            self: Pin<&mut TnamingBuilderShim>,
+            old_s: &TopodsShape,
+            new_s: &TopodsShape,
+        );
+        fn modify(self: Pin<&mut TnamingBuilderShim>, old_s: &TopodsShape, new_s: &TopodsShape);
+        fn delete_shape(self: Pin<&mut TnamingBuilderShim>, old_s: &TopodsShape);
+        fn select(self: Pin<&mut TnamingBuilderShim>, s: &TopodsShape, in_s: &TopodsShape);
+        fn named_shape(self: &TnamingBuilderShim) -> UniquePtr<TnamingNamedShapeHandle>;
+
+        // NamedShape read-side
+        fn find_tnaming_named_shape(lw: &TdfLabel, out: Pin<&mut TnamingNamedShapeHandle>) -> bool;
+        fn tnaming_named_shape_get(h: &TnamingNamedShapeHandle) -> UniquePtr<TopodsShape>;
+        fn tnaming_named_shape_evolution(h: &TnamingNamedShapeHandle) -> i32;
+        fn tnaming_tool_original_shape(h: &TnamingNamedShapeHandle) -> UniquePtr<TopodsShape>;
+        fn new_tnaming_named_shape_handle() -> UniquePtr<TnamingNamedShapeHandle>;
+        // ── TDataStdNameHandle ────────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_Name) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___name.html
+        type TDataStdNameHandle;
+
+        // Set: static on TDataStd_Name; attaches or updates the attribute on label.
+        // Must be called inside an open command scope.
+        fn tdatastd_name_set(
+            label: &TdfLabel,
+            value: &str,
+        ) -> Result<UniquePtr<TDataStdNameHandle>>;
+        // Get: const — reads the string value as UTF-8.
+        fn tdatastd_name_get(h: &TDataStdNameHandle) -> String;
+        // Find: returns nullptr (None on Rust side) when attribute is absent.
+        fn tdatastd_name_find(label: &TdfLabel) -> UniquePtr<TDataStdNameHandle>;
+
+        // ── TDataStdIntegerHandle ─────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___integer.html
+        type TDataStdIntegerHandle;
+
+        fn tdatastd_integer_set(
+            label: &TdfLabel,
+            value: i32,
+        ) -> Result<UniquePtr<TDataStdIntegerHandle>>;
+        fn tdatastd_integer_get(h: &TDataStdIntegerHandle) -> i32;
+        fn tdatastd_integer_find(label: &TdfLabel) -> UniquePtr<TDataStdIntegerHandle>;
+
+        // ── TDataStdRealHandle ────────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___real.html
+        type TDataStdRealHandle;
+
+        fn tdatastd_real_set(label: &TdfLabel, value: f64)
+            -> Result<UniquePtr<TDataStdRealHandle>>;
+        fn tdatastd_real_get(h: &TDataStdRealHandle) -> f64;
+        fn tdatastd_real_find(label: &TdfLabel) -> UniquePtr<TDataStdRealHandle>;
+        // ── TdfLabel ──────────────────────────────────────────────────────────────
+        // Shim holding TDF_Label by value.  TDF_Label is a non-owning reference
+        // into a TDF_Data tree; the Rust wrapper carries a lifetime parameter
+        // to enforce that labels cannot outlive the document that owns the tree.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_d_f___label.html
+        type TdfLabel;
+
+        fn clone_tdf_label(l: &TdfLabel) -> UniquePtr<TdfLabel>;
+
+        // Const queries — TDF_Label const methods.
+        fn tdf_label_is_null(l: &TdfLabel) -> bool;
+        fn tdf_label_is_root(l: &TdfLabel) -> bool;
+        fn tdf_label_tag(l: &TdfLabel) -> i32;
+        fn tdf_label_father(l: &TdfLabel) -> UniquePtr<TdfLabel>;
+        // FindChild is const on TDF_Label even when create=true; the label
+        // value itself is unchanged — only the external tree is mutated.
+        fn tdf_label_find_child(l: &TdfLabel, tag: i32, create: bool) -> UniquePtr<TdfLabel>;
+        fn tdf_label_has_attribute(l: &TdfLabel) -> bool;
+        fn tdf_label_nb_attributes(l: &TdfLabel) -> i32;
+        // Entry string, e.g. "0:1:2:3".
+        fn tdf_label_entry(l: &TdfLabel) -> String;
+
+        // ── TdfChildIteratorShim ──────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_d_f___child_iterator.html
+        type TdfChildIteratorShim;
+
+        fn new_tdf_child_iterator(
+            label: &TdfLabel,
+            all_levels: bool,
+        ) -> UniquePtr<TdfChildIteratorShim>;
+        fn more(self: &TdfChildIteratorShim) -> bool;
+        fn next(self: Pin<&mut TdfChildIteratorShim>);
+        // value() is const — reads current label without advancing.
+        fn value(self: &TdfChildIteratorShim) -> UniquePtr<TdfLabel>;
+
+        // ── DocumentHandle ────────────────────────────────────────────────────────
+        // Shim holding Handle(TDocStd_Document) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_doc_std___document.html
+        type DocumentHandle;
+
+        // document_main: const — returns the root label of the user data section.
+        fn document_main(doc: &DocumentHandle) -> UniquePtr<TdfLabel>;
+
+        // Const queries.
+        fn document_get_available_undos(doc: &DocumentHandle) -> i32;
+        fn document_get_available_redos(doc: &DocumentHandle) -> i32;
+
+        // Non-const command / transaction operations.
+        fn document_new_command(doc: Pin<&mut DocumentHandle>) -> Result<()>;
+        fn document_commit_command(doc: Pin<&mut DocumentHandle>) -> Result<bool>;
+        fn document_abort_command(doc: Pin<&mut DocumentHandle>) -> Result<()>;
+        fn document_undo(doc: Pin<&mut DocumentHandle>) -> Result<bool>;
+        fn document_redo(doc: Pin<&mut DocumentHandle>) -> Result<bool>;
+        fn document_set_undo_limit(doc: Pin<&mut DocumentHandle>, n: i32);
+
+        // ── ApplicationHandle ─────────────────────────────────────────────────────
+        // Shim holding Handle(TDocStd_Application) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_doc_std___application.html
+        type ApplicationHandle;
+
+        fn new_application() -> UniquePtr<ApplicationHandle>;
+        // Non-const: registers the new document with the application.
+        fn application_new_document(
+            app: Pin<&mut ApplicationHandle>,
+            format: &str,
+        ) -> Result<UniquePtr<DocumentHandle>>;
+
+        // ── MakeOffsetShapeBuilder ────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_offset_a_p_i___make_offset_shape.html
+        type MakeOffsetShapeBuilder;
+
+        fn new_make_offset_shape_builder() -> UniquePtr<MakeOffsetShapeBuilder>;
+        fn perform(
+            self: Pin<&mut MakeOffsetShapeBuilder>,
+            shape: &TopodsShape,
+            offset: f64,
+        ) -> Result<()>;
+        fn is_done(self: &MakeOffsetShapeBuilder) -> bool;
+        fn shape(self: Pin<&mut MakeOffsetShapeBuilder>) -> UniquePtr<TopodsShape>;
+
+        // ── MakeThickSolidBuilder ─────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_offset_a_p_i___make_thick_solid.html
+        type MakeThickSolidBuilder;
+
+        fn new_make_thick_solid_builder() -> UniquePtr<MakeThickSolidBuilder>;
+        fn add_closing_face(self: Pin<&mut MakeThickSolidBuilder>, face: &TopdsFace);
+        fn build(
+            self: Pin<&mut MakeThickSolidBuilder>,
+            shape: &TopodsShape,
+            offset: f64,
+            tol: f64,
+        ) -> Result<()>;
+        fn is_done(self: &MakeThickSolidBuilder) -> bool;
+        fn shape(self: Pin<&mut MakeThickSolidBuilder>) -> UniquePtr<TopodsShape>;
+        // ── MakeChamferBuilder ────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_fillet_a_p_i___make_chamfer.html
+        type MakeChamferBuilder;
+
+        fn new_make_chamfer_builder(shape: &TopodsShape) -> Result<UniquePtr<MakeChamferBuilder>>;
+        fn add_edge(self: Pin<&mut MakeChamferBuilder>, dis: f64, edge: &TopodsEdge) -> Result<()>;
+        fn add_edge_asymmetric(
+            self: Pin<&mut MakeChamferBuilder>,
+            dis1: f64,
+            dis2: f64,
+            edge: &TopodsEdge,
+            face: &TopdsFace,
+        ) -> Result<()>;
+        fn add_edge_dist_angle(
+            self: Pin<&mut MakeChamferBuilder>,
+            dis: f64,
+            angle: f64,
+            edge: &TopodsEdge,
+            face: &TopdsFace,
+        ) -> Result<()>;
+        fn build(self: Pin<&mut MakeChamferBuilder>) -> Result<()>;
+        fn is_done(self: &MakeChamferBuilder) -> bool;
+        fn shape(self: Pin<&mut MakeChamferBuilder>) -> UniquePtr<TopodsShape>;
+        // ── MakeFilletBuilder ─────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_fillet_a_p_i___make_fillet.html
+        type MakeFilletBuilder;
+
+        fn new_make_fillet_builder(shape: &TopodsShape) -> Result<UniquePtr<MakeFilletBuilder>>;
+        fn add_edge(
+            self: Pin<&mut MakeFilletBuilder>,
+            radius: f64,
+            edge: &TopodsEdge,
+        ) -> Result<()>;
+        fn build(self: Pin<&mut MakeFilletBuilder>) -> Result<()>;
+        fn is_done(self: &MakeFilletBuilder) -> bool;
+        fn shape(self: Pin<&mut MakeFilletBuilder>) -> UniquePtr<TopodsShape>;
+        // ── Boolean operations ────────────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___fuse.html
+        fn fuse_shapes(s1: &TopodsShape, s2: &TopodsShape) -> Result<UniquePtr<TopodsShape>>;
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___cut.html
+        fn cut_shapes(s1: &TopodsShape, s2: &TopodsShape) -> Result<UniquePtr<TopodsShape>>;
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___common.html
+        fn common_shapes(s1: &TopodsShape, s2: &TopodsShape) -> Result<UniquePtr<TopodsShape>>;
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___transform.html
+        fn transform_shape(
+            shape: &TopodsShape,
+            r11: f64,
+            r12: f64,
+            r13: f64,
+            t1: f64,
+            r21: f64,
+            r22: f64,
+            r23: f64,
+            t2: f64,
+            r31: f64,
+            r32: f64,
+            r33: f64,
+            t3: f64,
+        ) -> Result<UniquePtr<TopodsShape>>;
 
         // ── TopoDS_Vertex ─────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___vertex.html
@@ -92,6 +313,16 @@ pub mod ffi {
         type MakeFaceBuilder;
 
         fn new_make_face_from_wire(w: &TopodsWire, only_plane: bool) -> UniquePtr<MakeFaceBuilder>;
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_face.html
+        fn new_make_face_from_plane_and_wire(
+            px: f64,
+            py: f64,
+            pz: f64,
+            nx: f64,
+            ny: f64,
+            nz: f64,
+            w: &TopodsWire,
+        ) -> Result<UniquePtr<MakeFaceBuilder>>;
         fn is_done(self: &MakeFaceBuilder) -> bool;
         fn error(self: &MakeFaceBuilder) -> i32;
         fn face(self: Pin<&mut MakeFaceBuilder>) -> UniquePtr<TopdsFace>;
@@ -124,6 +355,9 @@ pub mod ffi {
         #[cxx_name = "TopoDS_Shape"]
         type TopodsShape;
 
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___shape.html
+        fn topods_shape_type(shape: &TopodsShape) -> i32;
+        fn topods_compound_child_count(shape: &TopodsShape) -> i32;
         // Clone (ref-count bump only — no geometry copy).
         fn clone_shape(s: &TopodsShape) -> UniquePtr<TopodsShape>;
 

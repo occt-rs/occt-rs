@@ -26,6 +26,8 @@
 #include <BRepPrimAPI_MakePrism.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Solid.hxx>
+#include <TopoDS_Shape.hxx>
+#include <TopoDS_Iterator.hxx>
 #include <gp_Vec.hxx>
 
 #include "face.hxx"
@@ -41,6 +43,13 @@ struct MakePrismBuilder {
         return std::make_unique<TopoDS_Solid>(TopoDS::Solid(inner.Shape()));
     }
 };
+
+// Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___shape.html
+// TopAbs_ShapeEnum is a C++ enum; cast to int so cxx can cross it.
+// Sourced from OCCT 7.9 documentation. No derivation from any other binding crate.
+inline int topods_shape_type(const TopoDS_Shape& shape) {
+    return static_cast<int>(shape.ShapeType());
+}
 
 // Factory.  Wraps construction in try/catch because MakePrism throws
 // rather than deferring failure to IsDone().
@@ -59,4 +68,11 @@ inline std::unique_ptr<MakePrismBuilder> new_make_prism_from_face(
 // TopoDS_Solid copy shares the underlying TShape handle (ref-counted).
 inline std::unique_ptr<TopoDS_Solid> clone_solid(const TopoDS_Solid& s) {
     return std::make_unique<TopoDS_Solid>(s);
+}
+// Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___iterator.html
+// Counts direct children of a TopoDS_Shape (meaningful on Compound).
+inline int topods_compound_child_count(const TopoDS_Shape& shape) {
+    int n = 0;
+    for (TopoDS_Iterator it(shape); it.More(); it.Next()) { ++n; }
+    return n;
 }
