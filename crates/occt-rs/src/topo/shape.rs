@@ -156,7 +156,7 @@ impl OcShape {
                 .as_ref()
                 .expect("OcShape invariant: inner is non-null"),
         )
-        .map_err(|e| OcctError::from(e))?;
+        .map_err(OcctError::from)?;
         Ok(OcShape::from_ffi(result))
     }
     /// Applies `trsf` to a copy of this shape, returning a new independent `OcShape`.

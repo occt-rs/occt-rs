@@ -77,7 +77,7 @@ impl OcPnt {
     /// Materialises a `gp_Pnt` for passing to an OCCT API.
     /// This is the only point at which an `OcPnt` crosses the FFI boundary.
     #[inline]
-    pub(crate) fn to_ffi(&self) -> cxx::UniquePtr<ffi::GpPnt> {
+    pub(crate) fn _to_ffi(&self) -> cxx::UniquePtr<ffi::GpPnt> {
         ffi::new_gp_pnt_xyz(self.x, self.y, self.z)
     }
 }
@@ -237,7 +237,7 @@ impl OcVec {
 
     /// Materialises a `gp_Vec` for passing to an OCCT API.
     #[inline]
-    pub(crate) fn to_ffi(&self) -> cxx::UniquePtr<ffi::GpVec> {
+    pub(crate) fn _to_ffi(&self) -> cxx::UniquePtr<ffi::GpVec> {
         ffi::new_gp_vec_xyz(self.x, self.y, self.z)
     }
 }
@@ -515,7 +515,7 @@ impl OcDir {
     /// return `Err`.  The `expect` here guards against invariant violations;
     /// a panic indicates a bug in `OcDir`'s construction logic.
     #[inline]
-    pub(crate) fn to_ffi(&self) -> cxx::UniquePtr<ffi::GpDir> {
+    pub(crate) fn _to_ffi(&self) -> cxx::UniquePtr<ffi::GpDir> {
         ffi::new_gp_dir_xyz(self.x, self.y, self.z)
             .expect("pre-normalised OcDir failed to materialise — invariant violated")
     }
@@ -652,7 +652,7 @@ impl OcAx1 {
     /// Materialises a `gp_Ax1` for passing to an OCCT API.
     /// This is the only point at which an `OcAx1` crosses the FFI boundary.
     #[inline]
-    pub(crate) fn to_ffi(&self) -> cxx::UniquePtr<ffi::GpAx1> {
+    pub(crate) fn _to_ffi(&self) -> cxx::UniquePtr<ffi::GpAx1> {
         ffi::new_gp_ax1(
             self.location.x,
             self.location.y,
@@ -861,7 +861,7 @@ impl OcAx2 {
     /// Materialises a `gp_Ax2` for passing to an OCCT API.
     /// This is the only point at which an `OcAx2` crosses the FFI boundary.
     #[inline]
-    pub(crate) fn to_ffi(&self) -> cxx::UniquePtr<ffi::GpAx2> {
+    pub(crate) fn _to_ffi(&self) -> cxx::UniquePtr<ffi::GpAx2> {
         ffi::new_gp_ax2(
             self.location.x,
             self.location.y,
@@ -1049,7 +1049,7 @@ impl OcTrsf {
         self.inner.is_negative()
     }
 
-    pub(crate) fn as_ffi(&self) -> &ffi::GpTrsf {
+    pub(crate) fn _as_ffi(&self) -> &ffi::GpTrsf {
         &self.inner
     }
 }
@@ -1074,7 +1074,7 @@ impl std::ops::Mul for &OcTrsf {
 #[cfg(test)]
 mod trsf_tests {
     use super::*;
-    use std::f64::consts::{FRAC_PI_2, PI};
+    use std::f64::consts::FRAC_PI_2;
 
     #[test]
     fn identity_matrix_is_unit() {
@@ -1204,7 +1204,7 @@ mod trsf_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::f64::consts::{FRAC_PI_2, PI};
+    use std::f64::consts::FRAC_PI_2;
 
     // ── OcPnt ────────────────────────────────────────────────────────────
 
@@ -1346,7 +1346,7 @@ mod tests {
     #[cfg(test)]
     mod ax_tests {
         use super::*;
-        use std::f64::consts::{FRAC_PI_2, PI};
+        use std::f64::consts::FRAC_PI_2;
 
         // ── OcAx1 ────────────────────────────────────────────────────────────
 

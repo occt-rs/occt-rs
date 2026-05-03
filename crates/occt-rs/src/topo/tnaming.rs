@@ -9,8 +9,6 @@ use std::marker::PhantomData;
 use cxx::UniquePtr;
 use occt_sys::ffi;
 
-use crate::OcWire;
-
 use super::{label::OcLabel, shape::OcShape};
 
 // ---------------------------------------------------------------------------
@@ -200,8 +198,8 @@ impl TnamingNamedShape {
 }
 #[test]
 fn tnaming_undo_reverses_modify() {
-    use crate::gp::{OcDir, OcPnt, OcVec};
-    use crate::topo::{OcApplication, OcEdge, OcFace, OcShape};
+    use crate::gp::OcPnt;
+    use crate::topo::{OcApplication, OcEdge, OcFace};
 
     let mut app = OcApplication::new();
     let mut doc = app.new_document("BinXCAF").unwrap();
@@ -213,17 +211,17 @@ fn tnaming_undo_reverses_modify() {
         OcEdge::from_pnts(OcPnt::new(1.0, 1.0, 0.0), OcPnt::new(0.0, 1.0, 0.0)).unwrap(),
         OcEdge::from_pnts(OcPnt::new(0.0, 1.0, 0.0), OcPnt::new(0.0, 0.0, 0.0)).unwrap(),
     ];
+    let wire_a = crate::topo::OcWire::from_edges(&edges).unwrap();
+    let face_a = OcFace::from_wire(&wire_a, true).unwrap();
+    let shape_a = face_a.as_shape();
+
     let edges = vec![
         OcEdge::from_pnts(OcPnt::new(0.5, 0.0, 0.0), OcPnt::new(1.5, 0.0, 0.0)).unwrap(),
         OcEdge::from_pnts(OcPnt::new(1.5, 0.0, 0.0), OcPnt::new(1.5, 1.0, 0.0)).unwrap(),
         OcEdge::from_pnts(OcPnt::new(1.5, 1.0, 0.0), OcPnt::new(0.5, 1.0, 0.0)).unwrap(),
         OcEdge::from_pnts(OcPnt::new(0.5, 1.0, 0.0), OcPnt::new(0.5, 0.0, 0.0)).unwrap(),
     ];
-    let wire_a = OcWire::from_edges(&edges).unwrap();
-    let face_a = OcFace::from_wire(&wire_a, true).unwrap();
-    let shape_a = face_a.as_shape();
-
-    let wire_b = OcWire::from_edges(&edges).unwrap();
+    let wire_b = crate::topo::OcWire::from_edges(&edges).unwrap();
     let face_b = OcFace::from_wire(&wire_b, true).unwrap();
     let shape_b = face_b.as_shape();
 

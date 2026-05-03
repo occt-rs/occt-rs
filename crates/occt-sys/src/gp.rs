@@ -11,6 +11,7 @@
 //!
 //! No derivation from any other binding crate.
 
+#[allow(clippy::too_many_arguments)]
 #[cxx::bridge]
 pub mod ffi {
     unsafe extern "C++" {

@@ -43,7 +43,7 @@ impl OcSolid {
         }
     }
 
-    pub(crate) fn as_ffi(&self) -> &ffi::TopdsSolid {
+    pub(crate) fn _as_ffi(&self) -> &ffi::TopdsSolid {
         &self.inner
     }
 }

@@ -100,7 +100,7 @@ impl OcLabel {
     /// Returns an iterator over the direct children of this label.
     ///
     /// Pass `all_levels = true` to iterate all descendants recursively.
-    pub fn children(&self, all_levels: bool) -> OcChildIterator {
+    pub fn children(&self, all_levels: bool) -> OcChildIterator<'_> {
         OcChildIterator {
             inner: ffi::new_tdf_child_iterator(&self.inner, all_levels),
             _phantom: PhantomData,
