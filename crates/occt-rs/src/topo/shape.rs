@@ -57,7 +57,7 @@ pub struct ShapeKey(pub usize);
 /// be sent across thread boundaries.
 pub struct OcShape {
     pub(crate) inner: cxx::UniquePtr<ffi::TopodsShape>,
-    _not_send: PhantomData<*mut ()>,
+    pub(crate) _not_send: PhantomData<*mut ()>,
 }
 
 impl std::fmt::Debug for OcShape {

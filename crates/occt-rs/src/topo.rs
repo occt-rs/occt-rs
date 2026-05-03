@@ -8,6 +8,7 @@ pub mod shape;
 pub mod shape_type;
 pub mod sketch_polyline_builder;
 pub mod solid;
+pub mod tnaming;
 pub mod vertex;
 pub mod wire;
 pub mod wire_builder;

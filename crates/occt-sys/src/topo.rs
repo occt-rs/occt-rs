@@ -20,6 +20,35 @@
 pub mod ffi {
     unsafe extern "C++" {
         include!("occt_sys/topo.hxx");
+        // ---------------------------------------------------------------------------
+        // TNaming — topological naming attribute (DOC-1)
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_naming___builder.html
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_naming___named_shape.html
+        // ---------------------------------------------------------------------------
+
+        type TnamingNamedShapeHandle;
+        fn is_null(self: &TnamingNamedShapeHandle) -> bool;
+
+        // Builder — must be used inside an open Command
+        type TnamingBuilderShim;
+        fn new_tnaming_builder(label: &TdfLabel) -> UniquePtr<TnamingBuilderShim>;
+        fn generated_fresh(self: Pin<&mut TnamingBuilderShim>, s: &TopodsShape);
+        fn generated_from(
+            self: Pin<&mut TnamingBuilderShim>,
+            old_s: &TopodsShape,
+            new_s: &TopodsShape,
+        );
+        fn modify(self: Pin<&mut TnamingBuilderShim>, old_s: &TopodsShape, new_s: &TopodsShape);
+        fn delete_shape(self: Pin<&mut TnamingBuilderShim>, old_s: &TopodsShape);
+        fn select(self: Pin<&mut TnamingBuilderShim>, s: &TopodsShape, in_s: &TopodsShape);
+        fn named_shape(self: &TnamingBuilderShim) -> UniquePtr<TnamingNamedShapeHandle>;
+
+        // NamedShape read-side
+        fn find_tnaming_named_shape(lw: &TdfLabel, out: Pin<&mut TnamingNamedShapeHandle>) -> bool;
+        fn tnaming_named_shape_get(h: &TnamingNamedShapeHandle) -> UniquePtr<TopodsShape>;
+        fn tnaming_named_shape_evolution(h: &TnamingNamedShapeHandle) -> i32;
+        fn tnaming_tool_original_shape(h: &TnamingNamedShapeHandle) -> UniquePtr<TopodsShape>;
+        fn new_tnaming_named_shape_handle() -> UniquePtr<TnamingNamedShapeHandle>;
         // ── TDataStdNameHandle ────────────────────────────────────────────────────
         // Shim holding Handle(TDataStd_Name) by value.
         //
