@@ -23,7 +23,7 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::topo::{OcFace, OcShape};
+use crate::topo::{BuiltWithHistory, HistoryProvider, OcFace, OcShape};
 
 // ── OffsetShapeBuilder ────────────────────────────────────────────────────────
 
@@ -58,11 +58,41 @@ impl OffsetShapeBuilder {
             })
         }
     }
+    pub fn build_with_history(mut self) -> Result<BuiltWithHistory<Self>, OcctError> {
+        let shape = self.try_build()?;
+        Ok(BuiltWithHistory::new(self, shape))
+    }
+
+    fn try_build(&mut self) -> Result<OcShape, OcctError> {
+        todo!("move existing build/perform body here")
+    }
 }
 
 impl Default for OffsetShapeBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl HistoryProvider for OffsetShapeBuilder {
+    fn modified_shapes(&mut self, input: &OcShape) -> Vec<OcShape> {
+        let s = input.as_ffi();
+        let count = self.inner.pin_mut().modified_count(s);
+        (0..count)
+            .map(|i| OcShape::from_ffi(self.inner.pin_mut().modified_at(s, i)))
+            .collect()
+    }
+
+    fn generated_shapes(&mut self, input: &OcShape) -> Vec<OcShape> {
+        let s = input.as_ffi();
+        let count = self.inner.pin_mut().generated_count(s);
+        (0..count)
+            .map(|i| OcShape::from_ffi(self.inner.pin_mut().generated_at(s, i)))
+            .collect()
+    }
+
+    fn is_shape_deleted(&mut self, input: &OcShape) -> bool {
+        self.inner.pin_mut().is_deleted(input.as_ffi())
     }
 }
 
@@ -103,6 +133,22 @@ impl ThickSolidBuilder {
         offset: f64,
         tolerance: f64,
     ) -> Result<OcShape, OcctError> {
+        self.try_build(shape, offset, tolerance)
+    }
+    pub fn build_with_history(mut self,
+        shape: &OcShape,
+        offset: f64,
+        tolerance: f64,
+        ) -> Result<BuiltWithHistory<Self>, OcctError> {
+        let shape = self.try_build(shape, offset, tolerance)?;
+        Ok(BuiltWithHistory::new(self, shape))
+    }
+
+    fn try_build(&mut self,
+        shape: &OcShape,
+        offset: f64,
+        tolerance: f64,
+        ) -> Result<OcShape, OcctError> {
         self.inner
             .pin_mut()
             .build(shape.as_ffi(), offset, tolerance)
@@ -121,5 +167,27 @@ impl ThickSolidBuilder {
 impl Default for ThickSolidBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl HistoryProvider for ThickSolidBuilder {
+    fn modified_shapes(&mut self, input: &OcShape) -> Vec<OcShape> {
+        let s = input.as_ffi();
+        let count = self.inner.pin_mut().modified_count(s);
+        (0..count)
+            .map(|i| OcShape::from_ffi(self.inner.pin_mut().modified_at(s, i)))
+            .collect()
+    }
+
+    fn generated_shapes(&mut self, input: &OcShape) -> Vec<OcShape> {
+        let s = input.as_ffi();
+        let count = self.inner.pin_mut().generated_count(s);
+        (0..count)
+            .map(|i| OcShape::from_ffi(self.inner.pin_mut().generated_at(s, i)))
+            .collect()
+    }
+
+    fn is_shape_deleted(&mut self, input: &OcShape) -> bool {
+        self.inner.pin_mut().is_deleted(input.as_ffi())
     }
 }

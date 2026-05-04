@@ -61,7 +61,13 @@ fn main() {
 
     let include_paths = discover_occt();
 
-    cxx_build::bridges(["src/gp.rs", "src/topo.rs"])
+    let mut bridge = cxx_build::bridges(["src/gp.rs", "src/topo.rs"]);
+    // satisfyies the warning 'warning _FORTIFY_SOURCE requires compiling with optimization (-O)'
+    if let Ok("debug") = std::env::var("PROFILE").as_ref().map(|s| s.as_str()) {
+        bridge
+        .flag_if_supported("-O1");
+    }
+    bridge
         .flag_if_supported("-std=c++17")
         .includes(&include_paths)
         .include("include")

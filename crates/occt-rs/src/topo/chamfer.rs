@@ -20,7 +20,7 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::topo::{OcEdge, OcFace, OcShape};
+use crate::topo::{BuiltWithHistory, HistoryProvider, OcEdge, OcFace, OcShape};
 
 /// Builder for chamfer operations on a solid.
 pub struct ChamferBuilder {
@@ -85,6 +85,14 @@ impl ChamferBuilder {
     ///
     /// Consumes `self`.
     pub fn build(mut self) -> Result<OcShape, OcctError> {
+        self.try_build()
+    }
+    pub fn build_with_history(mut self) -> Result<BuiltWithHistory<Self>, OcctError> {
+        let shape = self.try_build()?;
+        Ok(BuiltWithHistory::new(self, shape))
+    }
+
+    fn try_build(&mut self) -> Result<OcShape, OcctError> {
         self.inner.pin_mut().build().map_err(OcctError::from)?;
         if self.inner.is_done() {
             Ok(OcShape::from_ffi(self.inner.pin_mut().shape()))
@@ -94,5 +102,26 @@ impl ChamferBuilder {
                 message: "BRepFilletAPI_MakeChamfer: IsDone() false after Build()".to_owned(),
             })
         }
+    }
+}
+impl HistoryProvider for ChamferBuilder {
+    fn modified_shapes(&mut self, input: &OcShape) -> Vec<OcShape> {
+        let s = input.as_ffi();
+        let count = self.inner.pin_mut().modified_count(s);
+        (0..count)
+            .map(|i| OcShape::from_ffi(self.inner.pin_mut().modified_at(s, i)))
+            .collect()
+    }
+
+    fn generated_shapes(&mut self, input: &OcShape) -> Vec<OcShape> {
+        let s = input.as_ffi();
+        let count = self.inner.pin_mut().generated_count(s);
+        (0..count)
+            .map(|i| OcShape::from_ffi(self.inner.pin_mut().generated_at(s, i)))
+            .collect()
+    }
+
+    fn is_shape_deleted(&mut self, input: &OcShape) -> bool {
+        self.inner.pin_mut().is_deleted(input.as_ffi())
     }
 }

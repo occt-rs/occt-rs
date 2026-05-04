@@ -12,6 +12,7 @@ pub mod tnaming;
 pub mod vertex;
 pub mod wire;
 pub mod wire_builder;
+pub mod history;
 
 // ocaf
 pub mod application;
@@ -37,3 +38,4 @@ pub use application::OcApplication;
 pub use attributes::{OcInteger, OcName, OcReal};
 pub use document::{Command as OcCommand, OcDocument};
 pub use label::{OcChildIterator, OcLabel};
+pub use history::{BuiltWithHistory, HistoryProvider};

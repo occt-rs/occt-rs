@@ -69,6 +69,29 @@ struct MakeChamferBuilder {
     std::unique_ptr<TopoDS_Shape> shape() {
         return std::make_unique<TopoDS_Shape>(inner.Shape());
     }
+    Standard_Integer modified_count(const TopoDS_Shape& s) {
+        return static_cast<Standard_Integer>(inner.Modified(s).Size());
+    }
+    std::unique_ptr<TopoDS_Shape> modified_at(const TopoDS_Shape& s,
+                                               Standard_Integer i) {
+        const TopTools_ListOfShape& lst = inner.Modified(s);
+        auto it = lst.begin();
+        std::advance(it, static_cast<std::ptrdiff_t>(i));
+        return std::make_unique<TopoDS_Shape>(*it);
+    }
+    Standard_Integer generated_count(const TopoDS_Shape& s) {
+        return static_cast<Standard_Integer>(inner.Generated(s).Size());
+    }
+    std::unique_ptr<TopoDS_Shape> generated_at(const TopoDS_Shape& s,
+                                                Standard_Integer i) {
+        const TopTools_ListOfShape& lst = inner.Generated(s);
+        auto it = lst.begin();
+        std::advance(it, static_cast<std::ptrdiff_t>(i));
+        return std::make_unique<TopoDS_Shape>(*it);
+    }
+    bool is_deleted(const TopoDS_Shape& s) {
+        return inner.IsDeleted(s) == Standard_True;
+    }
 };
 
 inline std::unique_ptr<MakeChamferBuilder> new_make_chamfer_builder(

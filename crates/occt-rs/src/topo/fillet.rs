@@ -28,7 +28,7 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::topo::{OcEdge, OcShape};
+use crate::topo::{BuiltWithHistory, HistoryProvider, OcEdge, OcShape};
 
 /// Builder for constant-radius fillets on a solid.
 ///
@@ -74,6 +74,23 @@ impl FilletBuilder {
     /// Consumes `self`. Returns `Err` if OCCT raises during `Build()` or if
     /// `IsDone()` is false after construction.
     pub fn build(mut self) -> Result<OcShape, OcctError> {
+        self.try_build()
+    }
+    /// Perform the fillet and return the result, keeping the builder alive
+    /// for shape history queries via [`BuiltWithHistory`].
+    ///
+    /// Use [`OcShape::fillet`] or `build()` when history is not needed.
+    pub fn build_with_history(mut self) -> Result<BuiltWithHistory<Self>, OcctError> {
+        let shape = self.try_build()?;
+        Ok(BuiltWithHistory::new(self, shape))
+    }
+
+    /// Shared build body used by both `build()` and `build_with_history()`.
+    ///
+    /// # Integration note
+    /// Move the body of the existing `build()` method here verbatim.
+    /// Replace `build()` body with `self.try_build()`.
+    fn try_build(&mut self) -> Result<OcShape, OcctError> {
         self.inner.pin_mut().build().map_err(OcctError::from)?;
         if self.inner.is_done() {
             Ok(OcShape::from_ffi(self.inner.pin_mut().shape()))
@@ -82,6 +99,108 @@ impl FilletBuilder {
                 kind: OcctErrorKind::ConstructionError,
                 message: "BRepFilletAPI_MakeFillet: IsDone() false after Build()".to_owned(),
             })
+        }
+    }
+}
+impl HistoryProvider for FilletBuilder {
+    fn modified_shapes(&mut self, input: &OcShape) -> Vec<OcShape> {
+        let s = input.as_ffi();
+        let count = self.inner.pin_mut().modified_count(s);
+        (0..count)
+            .map(|i| OcShape::from_ffi(self.inner.pin_mut().modified_at(s, i)))
+            .collect()
+    }
+
+    fn generated_shapes(&mut self, input: &OcShape) -> Vec<OcShape> {
+        let s = input.as_ffi();
+        let count = self.inner.pin_mut().generated_count(s);
+        (0..count)
+            .map(|i| OcShape::from_ffi(self.inner.pin_mut().generated_at(s, i)))
+            .collect()
+    }
+
+    fn is_shape_deleted(&mut self, input: &OcShape) -> bool {
+        self.inner.pin_mut().is_deleted(input.as_ffi())
+    }
+}
+#[cfg(test)]
+mod history_tests {
+    use super::*;
+    use crate::{OcPnt, OcVec, OcFace};
+
+    /// Fillet a box, confirm that original faces appear as modified in output,
+    /// and that filleted edges report generated faces.
+    #[test]
+    fn fillet_history_modified_and_generated() {
+        // Build a 1×1×1 box
+        let face = OcFace::from_wire_on_plane(
+            OcPnt::origin(),
+            crate::OcDir::new(0.0, 0.0, 1.0).unwrap(),
+            &{
+                use crate::KeyedWireBuilder;
+                let mut b: KeyedWireBuilder<u32> = KeyedWireBuilder::new();
+                b.add_edge(0, OcPnt::new(0.0, 0.0, 0.0), 1, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+                b.add_edge(1, OcPnt::new(1.0, 0.0, 0.0), 2, OcPnt::new(1.0, 1.0, 0.0)).unwrap();
+                b.add_edge(2, OcPnt::new(1.0, 1.0, 0.0), 3, OcPnt::new(0.0, 1.0, 0.0)).unwrap();
+                b.add_edge(3, OcPnt::new(0.0, 1.0, 0.0), 0, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
+                b.build().unwrap()
+            },
+        ).unwrap();
+        let solid = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
+        let shape = solid.as_shape();
+
+        // Collect unique faces and edges before the operation
+        let pre_faces: Vec<_> = {
+            let all = shape.faces();
+            let mut seen = std::collections::HashSet::new();
+            all.into_iter().filter(|f| seen.insert(f.shape_key())).collect()
+        };
+        let pre_edges: Vec<_> = {
+            let all = shape.edges();
+            let mut seen = std::collections::HashSet::new();
+            all.into_iter().filter(|e| seen.insert(e.shape_key())).collect()
+        };
+
+        // Fillet all edges with radius 0.05
+        let mut builder = FilletBuilder::new(&shape).unwrap();
+        for edge in &pre_edges {
+            let _ = builder.add_edge(0.05, edge); // ignore individual errors
+        }
+        let mut built = builder.build_with_history().unwrap();
+
+        // Every original face should appear as modified (its bounds changed)
+        // or be reported unchanged — either is valid. At minimum, `modified`
+        // must not panic and must return shapes belonging to the output.
+        let mut any_modified = false;
+        for face in &pre_faces {
+            let mods = built.modified(&face.as_shape());
+            if !mods.is_empty() {
+                any_modified = true;
+                // All returned shapes must be valid (non-null)
+                for m in &mods {
+                    assert_eq!(m.shape_type(), crate::topo::ShapeType::Face);
+                }
+            }
+        }
+        assert!(any_modified, "expected at least some original faces to be reported as modified after filleting");
+
+        // Filleted edges generate faces (the fillet surface faces)
+        let mut any_generated = false;
+        for edge in &pre_edges {
+            let gens = built.generated(&edge.as_shape());
+            if !gens.is_empty() {
+                any_generated = true;
+            }
+        }
+        assert!(any_generated, "expected some edges to generate fillet surface faces");
+
+        // No original face should be reported as deleted
+        // (fillet modifies faces; it does not delete them)
+        for face in &pre_faces {
+            assert!(
+                !built.is_deleted(&face.as_shape()),
+                "fillet should not delete any original face"
+            );
         }
     }
 }
