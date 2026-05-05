@@ -47,29 +47,18 @@ impl TnamingEvolution {
     }
 }
 
-// ---------------------------------------------------------------------------
-// TnamingBuilder
-//
-// Write interface for topological naming. Records shape evolution on a
-// TDF_Label inside an open Command. Must be dropped before commit() is
-// called — enforced by the caller holding &mut Command (future; currently
-// the caller must ensure ordering manually).
-// ---------------------------------------------------------------------------
-
-pub struct TnamingBuilder {
+pub struct TnamingBuilder<'cmd> {
     inner: UniquePtr<ffi::TnamingBuilderShim>,
     _not_send: PhantomData<*mut ()>,
+    _cmd: PhantomData<&'cmd ()>,
 }
 
-impl TnamingBuilder {
-    /// Constructs a builder that will record provenance on `label`.
-    ///
-    /// `label` must belong to an open [`Command`]. OCCT will panic if
-    /// no transaction is open on the underlying document.
-    pub fn new(label: &OcLabel) -> Self {
+impl<'cmd> TnamingBuilder<'cmd> {
+    pub(crate) fn new(inner: UniquePtr<ffi::TnamingBuilderShim>) -> Self {
         Self {
-            inner: ffi::new_tnaming_builder(label.inner.as_ref().unwrap()),
+            inner,
             _not_send: PhantomData,
+            _cmd: PhantomData,
         }
     }
 
@@ -200,6 +189,7 @@ impl TnamingNamedShape {
 fn tnaming_undo_reverses_modify() {
     use crate::gp::OcPnt;
     use crate::topo::{OcApplication, OcEdge, OcFace};
+    use occt_sys::ffi::new_tnaming_builder;
 
     let mut app = OcApplication::new();
     let mut doc = app.new_document("BinXCAF").unwrap();
@@ -231,7 +221,7 @@ fn tnaming_undo_reverses_modify() {
     // Command 1: record shape_a as primitive
     let named_shape = {
         let cmd = doc.begin_command().unwrap();
-        let mut b = TnamingBuilder::new(&label);
+        let mut b = TnamingBuilder::new(new_tnaming_builder(&label.inner));
         b.generated_fresh(&shape_a);
         let ns = b.named_shape();
         cmd.commit().unwrap();
@@ -241,7 +231,7 @@ fn tnaming_undo_reverses_modify() {
     // Command 2: modify to shape_b
     {
         let cmd = doc.begin_command().unwrap();
-        let mut b = TnamingBuilder::new(&label);
+        let mut b = TnamingBuilder::new(new_tnaming_builder(&label.inner));
         b.modify(&shape_a, &shape_b);
         cmd.commit().unwrap();
     }
@@ -255,4 +245,86 @@ fn tnaming_undo_reverses_modify() {
     // This is the verification the milestone requires before proceeding.
     let _ = named_shape.get();
     // Assert shape identity here
+}
+// ---------------------------------------------------------------------------
+// TnamingSelector
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_naming___selector.html
+// ---------------------------------------------------------------------------
+
+/// Records how a sub-shape was selected so it can be re-found after model
+/// changes.
+///
+/// Construct via [`OcDocument::selector`].
+///
+/// # Command requirement on `select`
+///
+/// [`select`] writes a `TNaming_Naming` attribute and must be called while a
+/// [`Command`] is open.  This is enforced at compile time: `select` takes a
+/// `&Command<'_>` proof token.  The token is unused at runtime; its presence
+/// in the call site is the guarantee.
+///
+/// # Precondition on `solve`
+///
+/// [`solve`] requires that every history-generating operation since the
+/// original [`select`] was recorded with [`TnamingBuilder`].  The bindings
+/// layer cannot verify this; incomplete recording produces incorrect results
+/// or returns `false` without further diagnosis.
+///
+/// [`select`]: TnamingSelector::select
+/// [`solve`]: TnamingSelector::solve
+/// [`Command`]: crate::topo::document::Command
+pub struct TnamingSelector {
+    pub(crate) inner: UniquePtr<ffi::TnamingSelectorShim>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl TnamingSelector {
+    pub(crate) fn new(inner: UniquePtr<ffi::TnamingSelectorShim>) -> Self {
+        Self {
+            inner,
+            _not_send: PhantomData,
+        }
+    }
+
+    /// Records that `shape` (a sub-shape of `context`) should be re-findable
+    /// after model changes.  Returns `false` if the selection cannot be named
+    /// unambiguously.
+    ///
+    /// The `_cmd` parameter is a compile-time proof that a [`Command`] is
+    /// open; it is not used at runtime.
+    ///
+    /// [`Command`]: crate::topo::document::Command
+    pub fn select(
+        &mut self,
+        _cmd: &crate::topo::document::Command<'_>,
+        shape: &OcShape,
+        context: &OcShape,
+    ) -> bool {
+        ffi::tnaming_selector_select(
+            self.inner.pin_mut(),
+            shape.inner.as_ref().unwrap(),
+            context.inner.as_ref().unwrap(),
+        )
+    }
+
+    /// Re-evaluates the stored selection description against the current model.
+    /// Returns `false` if the selection can no longer be resolved.
+    ///
+    /// See [struct-level docs](TnamingSelector) for the precondition on
+    /// complete provenance recording.
+    pub fn solve(&mut self) -> bool {
+        ffi::tnaming_selector_solve(self.inner.pin_mut())
+    }
+
+    /// Returns the [`TnamingNamedShape`] written by [`select`], if any.
+    ///
+    /// [`select`]: TnamingSelector::select
+    pub fn named_shape(&self) -> Option<TnamingNamedShape> {
+        let mut out = ffi::new_tnaming_named_shape_handle();
+        let found = ffi::tnaming_selector_named_shape(self.inner.as_ref().unwrap(), out.pin_mut());
+        found.then(|| TnamingNamedShape {
+            inner: out,
+            _not_send: PhantomData,
+        })
+    }
 }

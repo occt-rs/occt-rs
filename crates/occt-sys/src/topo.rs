@@ -16,6 +16,7 @@
 //!
 //! No derivation from any other binding crate.
 
+#[allow(clippy::too_many_arguments)]
 #[cxx::bridge]
 pub mod ffi {
     unsafe extern "C++" {
@@ -49,6 +50,22 @@ pub mod ffi {
         fn tnaming_named_shape_evolution(h: &TnamingNamedShapeHandle) -> i32;
         fn tnaming_tool_original_shape(h: &TnamingNamedShapeHandle) -> UniquePtr<TopodsShape>;
         fn new_tnaming_named_shape_handle() -> UniquePtr<TnamingNamedShapeHandle>;
+
+        type TnamingSelectorShim;
+
+        fn new_tnaming_selector(label: &TdfLabel) -> UniquePtr<TnamingSelectorShim>;
+        // sel is Pin<&mut> because Select/Solve are non-const
+        fn tnaming_selector_select(
+            sel: Pin<&mut TnamingSelectorShim>,
+            shape: &TopodsShape,
+            context: &TopodsShape,
+        ) -> bool;
+        fn tnaming_selector_solve(sel: Pin<&mut TnamingSelectorShim>) -> bool;
+        // NamedShape is const — plain &
+        fn tnaming_selector_named_shape(
+            sel: &TnamingSelectorShim,
+            out: Pin<&mut TnamingNamedShapeHandle>,
+        ) -> bool;
         // ── TDataStdNameHandle ────────────────────────────────────────────────────
         // Shim holding Handle(TDataStd_Name) by value.
         //
@@ -168,11 +185,17 @@ pub mod ffi {
         fn is_done(self: &MakeOffsetShapeBuilder) -> bool;
         fn shape(self: Pin<&mut MakeOffsetShapeBuilder>) -> UniquePtr<TopodsShape>;
         fn modified_count(self: Pin<&mut MakeOffsetShapeBuilder>, s: &TopodsShape) -> i32;
-        fn modified_at(self: Pin<&mut MakeOffsetShapeBuilder>, s: &TopodsShape, i: i32)
-            -> UniquePtr<TopodsShape>;
+        fn modified_at(
+            self: Pin<&mut MakeOffsetShapeBuilder>,
+            s: &TopodsShape,
+            i: i32,
+        ) -> UniquePtr<TopodsShape>;
         fn generated_count(self: Pin<&mut MakeOffsetShapeBuilder>, s: &TopodsShape) -> i32;
-        fn generated_at(self: Pin<&mut MakeOffsetShapeBuilder>, s: &TopodsShape, i: i32)
-            -> UniquePtr<TopodsShape>;
+        fn generated_at(
+            self: Pin<&mut MakeOffsetShapeBuilder>,
+            s: &TopodsShape,
+            i: i32,
+        ) -> UniquePtr<TopodsShape>;
         fn is_deleted(self: Pin<&mut MakeOffsetShapeBuilder>, s: &TopodsShape) -> bool;
 
         // ── MakeThickSolidBuilder ─────────────────────────────────────────────
@@ -190,11 +213,17 @@ pub mod ffi {
         fn is_done(self: &MakeThickSolidBuilder) -> bool;
         fn shape(self: Pin<&mut MakeThickSolidBuilder>) -> UniquePtr<TopodsShape>;
         fn modified_count(self: Pin<&mut MakeThickSolidBuilder>, s: &TopodsShape) -> i32;
-        fn modified_at(self: Pin<&mut MakeThickSolidBuilder>, s: &TopodsShape, i: i32)
-            -> UniquePtr<TopodsShape>;
+        fn modified_at(
+            self: Pin<&mut MakeThickSolidBuilder>,
+            s: &TopodsShape,
+            i: i32,
+        ) -> UniquePtr<TopodsShape>;
         fn generated_count(self: Pin<&mut MakeThickSolidBuilder>, s: &TopodsShape) -> i32;
-        fn generated_at(self: Pin<&mut MakeThickSolidBuilder>, s: &TopodsShape, i: i32)
-            -> UniquePtr<TopodsShape>;
+        fn generated_at(
+            self: Pin<&mut MakeThickSolidBuilder>,
+            s: &TopodsShape,
+            i: i32,
+        ) -> UniquePtr<TopodsShape>;
         fn is_deleted(self: Pin<&mut MakeThickSolidBuilder>, s: &TopodsShape) -> bool;
         // ── MakeChamferBuilder ────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_fillet_a_p_i___make_chamfer.html
@@ -220,11 +249,17 @@ pub mod ffi {
         fn is_done(self: &MakeChamferBuilder) -> bool;
         fn shape(self: Pin<&mut MakeChamferBuilder>) -> UniquePtr<TopodsShape>;
         fn modified_count(self: Pin<&mut MakeChamferBuilder>, s: &TopodsShape) -> i32;
-        fn modified_at(self: Pin<&mut MakeChamferBuilder>, s: &TopodsShape, i: i32)
-            -> UniquePtr<TopodsShape>;
+        fn modified_at(
+            self: Pin<&mut MakeChamferBuilder>,
+            s: &TopodsShape,
+            i: i32,
+        ) -> UniquePtr<TopodsShape>;
         fn generated_count(self: Pin<&mut MakeChamferBuilder>, s: &TopodsShape) -> i32;
-        fn generated_at(self: Pin<&mut MakeChamferBuilder>, s: &TopodsShape, i: i32)
-            -> UniquePtr<TopodsShape>;
+        fn generated_at(
+            self: Pin<&mut MakeChamferBuilder>,
+            s: &TopodsShape,
+            i: i32,
+        ) -> UniquePtr<TopodsShape>;
         fn is_deleted(self: Pin<&mut MakeChamferBuilder>, s: &TopodsShape) -> bool;
         // ── MakeFilletBuilder ─────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_fillet_a_p_i___make_fillet.html
@@ -240,11 +275,17 @@ pub mod ffi {
         fn is_done(self: &MakeFilletBuilder) -> bool;
         fn shape(self: Pin<&mut MakeFilletBuilder>) -> UniquePtr<TopodsShape>;
         fn modified_count(self: Pin<&mut MakeFilletBuilder>, s: &TopodsShape) -> i32;
-        fn modified_at(self: Pin<&mut MakeFilletBuilder>, s: &TopodsShape, i: i32)
-            -> UniquePtr<TopodsShape>;
+        fn modified_at(
+            self: Pin<&mut MakeFilletBuilder>,
+            s: &TopodsShape,
+            i: i32,
+        ) -> UniquePtr<TopodsShape>;
         fn generated_count(self: Pin<&mut MakeFilletBuilder>, s: &TopodsShape) -> i32;
-        fn generated_at(self: Pin<&mut MakeFilletBuilder>, s: &TopodsShape, i: i32)
-            -> UniquePtr<TopodsShape>;
+        fn generated_at(
+            self: Pin<&mut MakeFilletBuilder>,
+            s: &TopodsShape,
+            i: i32,
+        ) -> UniquePtr<TopodsShape>;
         fn is_deleted(self: Pin<&mut MakeFilletBuilder>, s: &TopodsShape) -> bool;
         // ── Boolean operations ────────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___fuse.html

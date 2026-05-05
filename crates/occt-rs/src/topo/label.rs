@@ -26,6 +26,7 @@ use occt_sys::ffi;
 /// [`find_child`]: OcLabel::find_child
 /// [`is_null()`]: OcLabel::is_null
 pub struct OcLabel {
+    // Fixme: audit how to construct a TnamingBuilder. Currently: `TnamingBuilder::new(new_tnaming_builder(&label.inner))`
     pub(crate) inner: cxx::UniquePtr<ffi::TdfLabel>,
     /// Ties this label to the document lifetime — labels cannot outlive
     /// the TDF_Data tree owned by the document.

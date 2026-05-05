@@ -126,7 +126,7 @@ impl HistoryProvider for FilletBuilder {
 #[cfg(test)]
 mod history_tests {
     use super::*;
-    use crate::{OcPnt, OcVec, OcFace};
+    use crate::{OcFace, OcPnt, OcVec};
 
     /// Fillet a box, confirm that original faces appear as modified in output,
     /// and that filleted edges report generated faces.
@@ -139,13 +139,18 @@ mod history_tests {
             &{
                 use crate::KeyedWireBuilder;
                 let mut b: KeyedWireBuilder<u32> = KeyedWireBuilder::new();
-                b.add_edge(0, OcPnt::new(0.0, 0.0, 0.0), 1, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
-                b.add_edge(1, OcPnt::new(1.0, 0.0, 0.0), 2, OcPnt::new(1.0, 1.0, 0.0)).unwrap();
-                b.add_edge(2, OcPnt::new(1.0, 1.0, 0.0), 3, OcPnt::new(0.0, 1.0, 0.0)).unwrap();
-                b.add_edge(3, OcPnt::new(0.0, 1.0, 0.0), 0, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
+                b.add_edge(0, OcPnt::new(0.0, 0.0, 0.0), 1, OcPnt::new(1.0, 0.0, 0.0))
+                    .unwrap();
+                b.add_edge(1, OcPnt::new(1.0, 0.0, 0.0), 2, OcPnt::new(1.0, 1.0, 0.0))
+                    .unwrap();
+                b.add_edge(2, OcPnt::new(1.0, 1.0, 0.0), 3, OcPnt::new(0.0, 1.0, 0.0))
+                    .unwrap();
+                b.add_edge(3, OcPnt::new(0.0, 1.0, 0.0), 0, OcPnt::new(0.0, 0.0, 0.0))
+                    .unwrap();
                 b.build().unwrap()
             },
-        ).unwrap();
+        )
+        .unwrap();
         let solid = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
         let shape = solid.as_shape();
 
@@ -153,12 +158,16 @@ mod history_tests {
         let pre_faces: Vec<_> = {
             let all = shape.faces();
             let mut seen = std::collections::HashSet::new();
-            all.into_iter().filter(|f| seen.insert(f.shape_key())).collect()
+            all.into_iter()
+                .filter(|f| seen.insert(f.shape_key()))
+                .collect()
         };
         let pre_edges: Vec<_> = {
             let all = shape.edges();
             let mut seen = std::collections::HashSet::new();
-            all.into_iter().filter(|e| seen.insert(e.shape_key())).collect()
+            all.into_iter()
+                .filter(|e| seen.insert(e.shape_key()))
+                .collect()
         };
 
         // Fillet all edges with radius 0.05
@@ -182,7 +191,10 @@ mod history_tests {
                 }
             }
         }
-        assert!(any_modified, "expected at least some original faces to be reported as modified after filleting");
+        assert!(
+            any_modified,
+            "expected at least some original faces to be reported as modified after filleting"
+        );
 
         // Filleted edges generate faces (the fillet surface faces)
         let mut any_generated = false;
@@ -192,7 +204,10 @@ mod history_tests {
                 any_generated = true;
             }
         }
-        assert!(any_generated, "expected some edges to generate fillet surface faces");
+        assert!(
+            any_generated,
+            "expected some edges to generate fillet surface faces"
+        );
 
         // No original face should be reported as deleted
         // (fillet modifies faces; it does not delete them)

@@ -135,20 +135,22 @@ impl ThickSolidBuilder {
     ) -> Result<OcShape, OcctError> {
         self.try_build(shape, offset, tolerance)
     }
-    pub fn build_with_history(mut self,
+    pub fn build_with_history(
+        mut self,
         shape: &OcShape,
         offset: f64,
         tolerance: f64,
-        ) -> Result<BuiltWithHistory<Self>, OcctError> {
+    ) -> Result<BuiltWithHistory<Self>, OcctError> {
         let shape = self.try_build(shape, offset, tolerance)?;
         Ok(BuiltWithHistory::new(self, shape))
     }
 
-    fn try_build(&mut self,
+    fn try_build(
+        &mut self,
         shape: &OcShape,
         offset: f64,
         tolerance: f64,
-        ) -> Result<OcShape, OcctError> {
+    ) -> Result<OcShape, OcctError> {
         self.inner
             .pin_mut()
             .build(shape.as_ffi(), offset, tolerance)

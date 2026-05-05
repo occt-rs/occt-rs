@@ -17,6 +17,7 @@ use occt_sys::ffi;
 
 use crate::error::OcctError;
 use crate::topo::label::OcLabel;
+use crate::topo::tnaming::{TnamingBuilder, TnamingSelector};
 
 /// An in-memory OCAF document.
 ///
@@ -148,6 +149,18 @@ impl<'doc> Command<'doc> {
         ffi::document_abort_command(self.inner.as_mut()).map_err(OcctError::from)?;
         self.done = true;
         Ok(())
+    }
+    pub fn name_builder<'cmd>(&'cmd self, label: &OcLabel) -> TnamingBuilder<'cmd> {
+        TnamingBuilder::new(ffi::new_tnaming_builder(label.inner.as_ref().unwrap()))
+    }
+    /// Creates a [`TnamingSelector`] bound to `label`.
+    ///
+    /// Call [`TnamingSelector::select`] within an open [`Command`] to record
+    /// how a sub-shape should be re-found.  Call [`TnamingSelector::solve`]
+    /// after subsequent history-generating operations to re-evaluate the
+    /// selection.
+    pub fn selector(&self, label: &OcLabel) -> TnamingSelector {
+        TnamingSelector::new(ffi::new_tnaming_selector(label.inner.as_ref().unwrap()))
     }
 }
 
