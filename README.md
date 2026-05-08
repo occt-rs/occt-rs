@@ -35,3 +35,17 @@ All contributors must:
 2. Sign off every commit: `git commit -s`
 
 Both are enforced as required status checks. See `DEVELOPMENT.md` for the IP hygiene policy that governs sourcing decisions in this codebase.
+
+
+## A not on use of AI
+
+Generally speaking, I consider AI, and its temptation to be overused, as problematic: It incurs cognitive debt, detaches the engineer from the code they are supposed to be resposnsible for, as well as a myriad of non-technical (politics and values) of issues.
+
+With that said, binding crates to sys libraries written in CPP is perhaps one of the use cases where the utility of LLMs is particularly suited. Relatively heavy on the "boilerplate", formulaic, and not much need for engineering creativity (though it does come up at the safe-wrapper level).
+
+I never let AI touch my code base directly. That will probably always be a hard-requirement for both myself, and those contributing to code-bases I'm responsible for. A good rule of thumb: Before AI there was stack-overflow. Bad engineers copy-pasted from there without thought. Good engineers would go there to research how similar problems to their own have come up, how they were addressed, and would learn from that. Maybe they would even use the code from SO in their own project. Don't use AI to solve the problem for you; use it to help you be a better engineer.
+
+If you wish to contribute to this code base, make sure you are explicit about the degree to which you use AI. 
+
+
+You will see a lot of AI signs in this code base, em-dashes, fancy commenting, etc., and it's not something I'm proud of. I won't hide my shame, though. I've accepted its heavy use in this project for reasons stated above.
