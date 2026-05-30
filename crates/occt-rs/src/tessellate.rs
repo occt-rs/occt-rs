@@ -93,6 +93,14 @@ pub struct TessFace {
     /// These keys correspond to entries in [`TessellationResult::edges`] and
     /// can be used by callers to map face ↔ edge adjacency without re-traversal.
     pub bounding_edge_keys: Vec<ShapeKey>,
+    pub placement: Option<Affine3>,
+    pub reversed: bool,
+}
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(C)]
+pub struct Affine3 {
+    /// rows[i] = [m_i1, m_i2, m_i3, t_i]
+    pub rows: [[f64; 4]; 3],
 }
 
 /// A tessellated edge polyline.
@@ -181,6 +189,7 @@ pub fn compute(
         let face = ffi::shape_as_face(shape_ref);
 
         let tri = ffi::face_triangulation(&face);
+        let reversed = ffi::face_is_reversed(&face);
         if !tri.is_null() {
             let nb_v = tri.nb_nodes();
             let nb_t = tri.nb_triangles();
@@ -211,10 +220,39 @@ pub fn compute(
                 bound_exp.pin_mut().next();
             }
 
+            let placement = if tri.placement_is_identity() {
+                None
+            } else {
+                Some(Affine3 {
+                    rows: [
+                        [
+                            tri.placement_value(0),
+                            tri.placement_value(1),
+                            tri.placement_value(2),
+                            tri.placement_value(3),
+                        ],
+                        [
+                            tri.placement_value(4),
+                            tri.placement_value(5),
+                            tri.placement_value(6),
+                            tri.placement_value(7),
+                        ],
+                        [
+                            tri.placement_value(8),
+                            tri.placement_value(9),
+                            tri.placement_value(10),
+                            tri.placement_value(11),
+                        ],
+                    ],
+                })
+            };
+
             faces.push(TessFace {
                 key,
                 mesh: TriMesh { vertices, indices },
                 bounding_edge_keys,
+                placement,
+                reversed,
             });
         }
 
