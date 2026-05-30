@@ -12,10 +12,16 @@
 // can cross the cxx FFI boundary.  Node and triangle indices are 1-based (OCCT
 // convention); convert to 0-based on the Rust side.
 //
-// TODO: TopLoc_Location is not applied to node coordinates in this release.
-// For shapes built with BRepBuilderAPI_* APIs (no STEP/IGES assembly placement),
-// the location is always identity and node coordinates are already in global
-// space.  Location support is deferred to the assembly-import PR.
+// Node coordinates are stored in the face's LOCAL frame. The face's
+// TopLoc_Location (BRep_Tool::Triangulation out-parameter) places them in
+// world space and is surfaced via placement_is_identity()/placement_value();
+// it is NOT applied to the node_* accessors, which stay local.
+//
+// Co-located faces (prism caps reuse one moved TShape) share a single local
+// triangulation and differ only by this location — dropping it collapses them.
+//
+// placement_value() is a lossy 3x4 projection for presentation. The structured
+// TopLoc_Location (for STEP/IGES assembly export) is not preserved here.
 //
 // Reference:
 //   BRep_Mesh_IncrementalMesh — https://dev.opencascade.org/doc/refman/html/class_b_rep_mesh___incremental_mesh.html
@@ -96,9 +102,22 @@ inline std::unique_ptr<IncrementalMeshBuilder> new_incremental_mesh(
 
 struct PolyTriangulationHandle {
     Handle(Poly_Triangulation) inner;
+    bool                       loc_is_identity;
+    double                     loc_values[12];  // row-major 3x4; same order as transform.hxx
 
-    explicit PolyTriangulationHandle(Handle(Poly_Triangulation) h)
-        : inner(std::move(h)) {}
+    PolyTriangulationHandle(Handle(Poly_Triangulation) h, const TopLoc_Location& loc)
+        : inner(std::move(h)),
+          loc_is_identity(loc.IsIdentity())
+    {
+        const gp_Trsf& t = loc.Transformation();
+        // rows 1-3, cols 1-4 — identical layout to the SetValues args in transform.hxx
+        loc_values[0]  = t.Value(1,1); loc_values[1]  = t.Value(1,2);
+        loc_values[2]  = t.Value(1,3); loc_values[3]  = t.Value(1,4);
+        loc_values[4]  = t.Value(2,1); loc_values[5]  = t.Value(2,2);
+        loc_values[6]  = t.Value(2,3); loc_values[7]  = t.Value(2,4);
+        loc_values[8]  = t.Value(3,1); loc_values[9]  = t.Value(3,2);
+        loc_values[10] = t.Value(3,3); loc_values[11] = t.Value(3,4);
+    }
 
     bool is_null()      const { return inner.IsNull(); }
     int  nb_nodes()     const { return inner->NbNodes(); }
@@ -127,16 +146,16 @@ struct PolyTriangulationHandle {
         inner->Triangle(i).Get(n1, n2, n3);
         return n3;
     }
+    bool   placement_is_identity() const { return loc_is_identity; }
+    double placement_value(int i) const  { return loc_values[i]; }
 };
 
 // Returns the triangulation for the given face.  The returned handle is null
 // if BRep_Mesh_IncrementalMesh has not been called on the containing shape.
-//
-// TopLoc_Location is retrieved but not applied (see file-level TODO).
 inline std::unique_ptr<PolyTriangulationHandle> face_triangulation(
     const TopoDS_Face& f)
 {
     TopLoc_Location loc;
-    return std::make_unique<PolyTriangulationHandle>(
-        BRep_Tool::Triangulation(f, loc));
+    Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(f, loc);
+    return std::make_unique<PolyTriangulationHandle>(std::move(tri), loc);
 }

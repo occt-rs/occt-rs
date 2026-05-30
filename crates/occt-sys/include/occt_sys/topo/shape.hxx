@@ -88,6 +88,9 @@ inline std::size_t shape_key(const TopoDS_Shape& s) {
     }
     return h;
 }
+inline bool face_is_reversed(const TopoDS_Face& f) {
+    return f.Orientation() == TopAbs_REVERSED;
+}
 
 // Returns the raw TShape pointer as a size_t.
 // Useful for geometry-level deduplication (e.g. detecting that two placed

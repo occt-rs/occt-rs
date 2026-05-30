@@ -376,6 +376,7 @@ pub mod ffi {
 
         fn clone_face(f: &TopdsFace) -> UniquePtr<TopdsFace>;
         fn face_outer_wire(f: &TopdsFace) -> UniquePtr<TopodsWire>;
+        fn face_is_reversed(f: &TopdsFace) -> bool;
 
         // ── MakeFaceBuilder ───────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_face.html
@@ -504,6 +505,8 @@ pub mod ffi {
         fn triangle_n1(self: &PolyTriangulationHandle, i: i32) -> i32;
         fn triangle_n2(self: &PolyTriangulationHandle, i: i32) -> i32;
         fn triangle_n3(self: &PolyTriangulationHandle, i: i32) -> i32;
+        fn placement_is_identity(self: &PolyTriangulationHandle) -> bool;
+        fn placement_value(self: &PolyTriangulationHandle, i: i32) -> f64;
         // ── Poly_Polygon3D ────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_poly___polygon3_d.html
         type PolyPolygon3D;
