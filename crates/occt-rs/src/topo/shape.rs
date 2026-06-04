@@ -402,7 +402,7 @@ mod tests {
             .vertices
             .iter()
             .map(|v| v.point[0])
-            .fold(f32::NEG_INFINITY, f32::max);
+            .fold(f64::NEG_INFINITY, f64::max);
         assert!(
             max_x > 1.0,
             "fused shape should extend past x=1.0; max_x was {max_x}"
@@ -459,13 +459,13 @@ mod tests {
             .vertices
             .iter()
             .map(|v| v.point[0])
-            .fold(f32::NEG_INFINITY, f32::max);
+            .fold(f64::NEG_INFINITY, f64::max);
         // B−A should not extend below x=0.5.
         let min_x_ba = tess_ba
             .vertices
             .iter()
             .map(|v| v.point[0])
-            .fold(f32::INFINITY, f32::min);
+            .fold(f64::INFINITY, f64::min);
         assert!(
             max_x_ab <= 0.5 + 1e-4,
             "A-B should not extend past x=0.5, got {max_x_ab}"
@@ -499,12 +499,12 @@ mod tests {
             .vertices
             .iter()
             .map(|v| v.point[0])
-            .fold(f32::INFINITY, f32::min);
+            .fold(f64::INFINITY, f64::min);
         let max_x = tess
             .vertices
             .iter()
             .map(|v| v.point[0])
-            .fold(f32::NEG_INFINITY, f32::max);
+            .fold(f64::NEG_INFINITY, f64::max);
         assert!(
             min_x >= 0.5 - 1e-4,
             "common min_x should be ~0.5, got {min_x}"
@@ -536,7 +536,7 @@ mod tests {
             .vertices
             .iter()
             .map(|v| v.point[0])
-            .fold(f32::INFINITY, f32::min);
+            .fold(f64::INFINITY, f64::min);
         assert!(min_x >= 5.0 - 1e-4, "min_x should be ~5.0, got {min_x}");
     }
 
@@ -552,7 +552,7 @@ mod tests {
             .vertices
             .iter()
             .map(|v| v.point[0])
-            .fold(f32::NEG_INFINITY, f32::max);
+            .fold(f64::NEG_INFINITY, f64::max);
         assert!(
             max_x <= 1.0 + 1e-4,
             "source should be unmodified, max_x={max_x}"
@@ -570,7 +570,7 @@ mod tests {
             .vertices
             .iter()
             .map(|v| v.point[0])
-            .fold(f32::NEG_INFINITY, f32::max);
+            .fold(f64::NEG_INFINITY, f64::max);
         assert!(
             max_x >= 2.0 - 1e-4,
             "scaled max_x should be ~2.0, got {max_x}"
@@ -671,7 +671,7 @@ mod tests {
             .vertices
             .iter()
             .map(|v| v.point[0])
-            .fold(f32::NEG_INFINITY, f32::max);
+            .fold(f64::NEG_INFINITY, f64::max);
         assert!(
             max_x > 1.0 + 0.05,
             "expanded shape should exceed x=1.0, got {max_x}"
@@ -692,13 +692,13 @@ mod tests {
                     .vertices
                     .iter()
                     .map(|v| v.point[2])
-                    .fold(f32::NEG_INFINITY, f32::max);
+                    .fold(f64::NEG_INFINITY, f64::max);
                 let zb = crate::tessellate::compute(&b.as_shape(), 0.1, 0.5)
                     .unwrap()
                     .vertices
                     .iter()
                     .map(|v| v.point[2])
-                    .fold(f32::NEG_INFINITY, f32::max);
+                    .fold(f64::NEG_INFINITY, f64::max);
                 za.partial_cmp(&zb).unwrap()
             })
             .unwrap();
@@ -718,13 +718,13 @@ mod tests {
                     .vertices
                     .iter()
                     .map(|v| v.point[2])
-                    .fold(f32::NEG_INFINITY, f32::max);
+                    .fold(f64::NEG_INFINITY, f64::max);
                 let zb = crate::tessellate::compute(&b.as_shape(), 0.1, 0.5)
                     .unwrap()
                     .vertices
                     .iter()
                     .map(|v| v.point[2])
-                    .fold(f32::NEG_INFINITY, f32::max);
+                    .fold(f64::NEG_INFINITY, f64::max);
                 za.partial_cmp(&zb).unwrap()
             })
             .unwrap();
