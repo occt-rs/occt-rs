@@ -20,11 +20,6 @@
 //! }
 //! ```
 //!
-//! # Coordinate precision
-//!
-//! OCCT stores all geometry as `f64`.  Tessellation output uses `f32` for triangle
-//! meshes (GPU buffer natural precision).  Edge polylines are returned as `f64`
-//! to preserve the precision of the underlying polygon data.
 //!
 //! # TopLoc_Location
 //!
@@ -69,10 +64,7 @@ const TOP_ABS_VERTEX: i32 = 7;
 #[derive(Debug, Clone)]
 pub struct TriMesh {
     /// Interleaved vertex positions: `[x₀, y₀, z₀, x₁, y₁, z₁, …]`.
-    ///
-    /// Length is always a multiple of 3.  `f32` matches typical GPU buffer
-    /// layout; OCCT's internal precision is `f64`.
-    pub vertices: Vec<f32>,
+    pub vertices: Vec<f64>,
 
     /// Triangle vertex indices, 0-based, in groups of three: `[a₀, b₀, c₀, …]`.
     ///
@@ -118,8 +110,7 @@ pub struct TessEdge {
 pub struct TessVertex {
     /// Session-scoped identity of the originating `TopoDS_Vertex`.
     pub key: ShapeKey,
-    /// Vertex position in model space.  `f32`; see module-level precision note.
-    pub point: [f32; 3],
+    pub point: [f64; 3],
 }
 
 /// Output of [`compute`].
@@ -196,10 +187,9 @@ pub fn compute(
 
             let mut vertices = Vec::with_capacity(3 * nb_v as usize);
             for i in 1..=nb_v {
-                // f64 → f32 narrowing: deliberate, see module-level precision note.
-                vertices.push(tri.node_x(i) as f32);
-                vertices.push(tri.node_y(i) as f32);
-                vertices.push(tri.node_z(i) as f32);
+                vertices.push(tri.node_x(i));
+                vertices.push(tri.node_y(i));
+                vertices.push(tri.node_z(i));
             }
 
             let mut indices = Vec::with_capacity(3 * nb_t as usize);
@@ -287,9 +277,9 @@ pub fn compute(
         vertices.push(TessVertex {
             key,
             point: [
-                ffi::vertex_pnt_x(&vertex) as f32,
-                ffi::vertex_pnt_y(&vertex) as f32,
-                ffi::vertex_pnt_z(&vertex) as f32,
+                ffi::vertex_pnt_x(&vertex),
+                ffi::vertex_pnt_y(&vertex),
+                ffi::vertex_pnt_z(&vertex),
             ],
         });
         vtx_exp.pin_mut().next();
