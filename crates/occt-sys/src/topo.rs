@@ -507,6 +507,13 @@ pub mod ffi {
         fn triangle_n3(self: &PolyTriangulationHandle, i: i32) -> i32;
         fn placement_is_identity(self: &PolyTriangulationHandle) -> bool;
         fn placement_value(self: &PolyTriangulationHandle, i: i32) -> f64;
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_poly___triangulation.html
+        fn has_normals(self: &PolyTriangulationHandle) -> bool;
+        fn normal_x(self: &PolyTriangulationHandle, i: i32) -> f64;
+        fn normal_y(self: &PolyTriangulationHandle, i: i32) -> f64;
+        fn normal_z(self: &PolyTriangulationHandle, i: i32) -> f64;
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_lib___tool_triangulated_shape.html
+        fn compute_face_normals(f: &TopdsFace) -> bool;
         // ── Poly_Polygon3D ────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_poly___polygon3_d.html
         type PolyPolygon3D;

@@ -38,6 +38,7 @@
 
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRep_Tool.hxx>
+#include <BRepLib_ToolTriangulatedShape.hxx>
 #include <Poly_Triangulation.hxx>
 #include <TopLoc_Location.hxx>
 #include <TopoDS_Face.hxx>
@@ -127,6 +128,12 @@ struct PolyTriangulationHandle {
     double node_x(int i) const { return inner->Node(i).X(); }
     double node_y(int i) const { return inner->Node(i).Y(); }
     double node_z(int i) const { return inner->Node(i).Z(); }
+    // Reference: https://dev.opencascade.org/doc/refman/html/class_poly___triangulation.html
+    // Valid only when has_normals() is true; caller must guard.
+    bool   has_normals()   const { return inner->HasNormals(); }
+    double normal_x(int i) const { return inner->Normal(i).X(); }
+    double normal_y(int i) const { return inner->Normal(i).Y(); }
+    double normal_z(int i) const { return inner->Normal(i).Z(); }
 
     // Triangle vertex indices at 1-based index i (1-based OCCT convention).
     // Poly_Triangle::Get returns all three at once; three separate methods
@@ -158,4 +165,20 @@ inline std::unique_ptr<PolyTriangulationHandle> face_triangulation(
     TopLoc_Location loc;
     Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(f, loc);
     return std::make_unique<PolyTriangulationHandle>(std::move(tri), loc);
+}
+// Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_lib___tool_triangulated_shape.html
+// Populates per-node surface normals on the face's triangulation in place,
+// evaluating the surface at the UV nodes BRepMesh stored. Best-effort: returns
+// false (no abort) on a face with no triangulation or if computation throws.
+// Idempotent — ComputeNormals does nothing if normals already present.
+inline bool compute_face_normals(const TopoDS_Face& f) {
+    try {
+        TopLoc_Location loc;
+        Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(f, loc);
+        if (tri.IsNull()) return false;
+        BRepLib_ToolTriangulatedShape::ComputeNormals(f, tri);
+        return tri->HasNormals();
+    } catch (...) {
+        return false;
+    }
 }
