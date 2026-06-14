@@ -82,6 +82,8 @@ pub mod ffi {
         fn tdatastd_name_get(h: &TDataStdNameHandle) -> String;
         // Find: returns nullptr (None on Rust side) when attribute is absent.
         fn tdatastd_name_find(label: &TdfLabel) -> UniquePtr<TDataStdNameHandle>;
+        // ForgetAttribute(GUID) const — true if present and removed.
+        fn tdatastd_name_forget(label: &TdfLabel) -> bool;
 
         // ── TDataStdIntegerHandle ─────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___integer.html
@@ -93,6 +95,7 @@ pub mod ffi {
         ) -> Result<UniquePtr<TDataStdIntegerHandle>>;
         fn tdatastd_integer_get(h: &TDataStdIntegerHandle) -> i32;
         fn tdatastd_integer_find(label: &TdfLabel) -> UniquePtr<TDataStdIntegerHandle>;
+        fn tdatastd_integer_forget(label: &TdfLabel) -> bool;
 
         // ── TDataStdRealHandle ────────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___real.html
@@ -102,6 +105,7 @@ pub mod ffi {
             -> Result<UniquePtr<TDataStdRealHandle>>;
         fn tdatastd_real_get(h: &TDataStdRealHandle) -> f64;
         fn tdatastd_real_find(label: &TdfLabel) -> UniquePtr<TDataStdRealHandle>;
+        fn tdatastd_real_forget(label: &TdfLabel) -> bool;
         // ── TdfLabel ──────────────────────────────────────────────────────────────
         // Shim holding TDF_Label by value.  TDF_Label is a non-owning reference
         // into a TDF_Data tree; the Rust wrapper carries a lifetime parameter
@@ -117,6 +121,7 @@ pub mod ffi {
         fn tdf_label_is_root(l: &TdfLabel) -> bool;
         fn tdf_label_tag(l: &TdfLabel) -> i32;
         fn tdf_label_father(l: &TdfLabel) -> UniquePtr<TdfLabel>;
+        fn tdf_label_root(l: &TdfLabel) -> UniquePtr<TdfLabel>;
         // FindChild is const on TDF_Label even when create=true; the label
         // value itself is unchanged — only the external tree is mutated.
         fn tdf_label_find_child(l: &TdfLabel, tag: i32, create: bool) -> UniquePtr<TdfLabel>;
@@ -124,6 +129,10 @@ pub mod ffi {
         fn tdf_label_nb_attributes(l: &TdfLabel) -> i32;
         // Entry string, e.g. "0:1:2:3".
         fn tdf_label_entry(l: &TdfLabel) -> String;
+        // ForgetAllAttributes — const on TDF_Label, compatible with
+        // Transaction & Delta. Rust side requires &Command<'_> (see
+        // OcLabel::forget_all_attributes).
+        fn tdf_label_forget_all_attributes(l: &TdfLabel, clear_children: bool);
 
         // ── TdfChildIteratorShim ──────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_t_d_f___child_iterator.html

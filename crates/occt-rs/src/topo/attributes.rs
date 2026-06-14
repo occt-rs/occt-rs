@@ -1,10 +1,11 @@
 //! Standard scalar TDF attributes: Name, Integer, Real.
 //!
-//! Each type wraps a `Handle(TDataStd_*)` shim.  The three operations per type are:
+//! Each type wraps a `Handle(TDataStd_*)` shim.  The operations per type are:
 //!
-//! - **`set`** — attaches or updates the attribute on a label (must be inside a command).
+//! - **`set`** — attaches or updates the attribute on a label (inside a command).
 //! - **`get`** — reads the current value from an already-retrieved attribute handle.
 //! - **`find`** — probes whether the attribute is present on a label.
+//! - **`forget`** — removes the attribute from a label (inside a command).
 //!
 //! GUIDs are kept on the C++ side; the Rust API never names them.
 
@@ -13,6 +14,7 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::OcctError;
+use crate::topo::document::Command;
 use crate::topo::label::OcLabel;
 
 // ── OcName ────────────────────────────────────────────────────────────────────
@@ -30,9 +32,7 @@ impl OcName {
     /// Attaches or updates a `TDataStd_Name` attribute on `label`.
     ///
     /// Must be called inside an open [`Command`] scope.
-    ///
-    /// [`Command`]: crate::topo::OcCommand
-    pub fn set(label: &OcLabel, value: &str) -> Result<Self, OcctError> {
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: &str) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_name_set(&label.inner, value).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -60,6 +60,14 @@ impl OcName {
             })
         }
     }
+
+    /// Removes the `TDataStd_Name` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_name_forget(&label.inner)
+    }
 }
 
 impl std::fmt::Debug for OcName {
@@ -82,9 +90,7 @@ impl OcInteger {
     /// Attaches or updates a `TDataStd_Integer` attribute on `label`.
     ///
     /// Must be called inside an open [`Command`] scope.
-    ///
-    /// [`Command`]: crate::topo::OcCommand
-    pub fn set(label: &OcLabel, value: i32) -> Result<Self, OcctError> {
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: i32) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_integer_set(&label.inner, value).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -111,6 +117,14 @@ impl OcInteger {
             })
         }
     }
+
+    /// Removes the `TDataStd_Integer` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_integer_forget(&label.inner)
+    }
 }
 
 impl std::fmt::Debug for OcInteger {
@@ -133,9 +147,7 @@ impl OcReal {
     /// Attaches or updates a `TDataStd_Real` attribute on `label`.
     ///
     /// Must be called inside an open [`Command`] scope.
-    ///
-    /// [`Command`]: crate::topo::OcCommand
-    pub fn set(label: &OcLabel, value: f64) -> Result<Self, OcctError> {
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: f64) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_real_set(&label.inner, value).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -161,6 +173,14 @@ impl OcReal {
                 _not_send: PhantomData,
             })
         }
+    }
+
+    /// Removes the `TDataStd_Real` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_real_forget(&label.inner)
     }
 }
 
@@ -191,10 +211,12 @@ mod tests {
     #[test]
     fn name_round_trip() {
         let (_app, mut doc) = new_doc();
-        let label = doc.main().find_child(1, true).unwrap();
+        let label;
         {
+            let main = doc.main();
             let cmd = doc.begin_command().unwrap();
-            OcName::set(&label, "hello").unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcName::set(&cmd, &label, "hello").unwrap();
             cmd.commit().unwrap();
         }
         let attr = OcName::find(&label).expect("name attribute should be present");
@@ -203,23 +225,28 @@ mod tests {
 
     #[test]
     fn name_find_absent_returns_none() {
-        let (_app, doc) = new_doc();
-        let label = doc.main().find_child(1, true).unwrap();
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
         assert!(OcName::find(&label).is_none());
     }
 
     #[test]
     fn name_update_overwrites() {
         let (_app, mut doc) = new_doc();
-        let label = doc.main().find_child(1, true).unwrap();
+        let label;
         {
+            let main = doc.main();
             let cmd = doc.begin_command().unwrap();
-            OcName::set(&label, "first").unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcName::set(&cmd, &label, "first").unwrap();
             cmd.commit().unwrap();
         }
         {
             let cmd = doc.begin_command().unwrap();
-            OcName::set(&label, "second").unwrap();
+            OcName::set(&cmd, &label, "second").unwrap();
             cmd.commit().unwrap();
         }
         assert_eq!(OcName::find(&label).unwrap().get(), "second");
@@ -228,15 +255,17 @@ mod tests {
     #[test]
     fn name_undo_restores() {
         let (_app, mut doc) = new_doc();
-        let label = doc.main().find_child(1, true).unwrap();
+        let label;
         {
+            let main = doc.main();
             let cmd = doc.begin_command().unwrap();
-            OcName::set(&label, "before").unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcName::set(&cmd, &label, "before").unwrap();
             cmd.commit().unwrap();
         }
         {
             let cmd = doc.begin_command().unwrap();
-            OcName::set(&label, "after").unwrap();
+            OcName::set(&cmd, &label, "after").unwrap();
             cmd.commit().unwrap();
         }
         doc.undo().unwrap();
@@ -248,10 +277,12 @@ mod tests {
     #[test]
     fn integer_round_trip() {
         let (_app, mut doc) = new_doc();
-        let label = doc.main().find_child(1, true).unwrap();
+        let label;
         {
+            let main = doc.main();
             let cmd = doc.begin_command().unwrap();
-            OcInteger::set(&label, 42).unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcInteger::set(&cmd, &label, 42).unwrap();
             cmd.commit().unwrap();
         }
         assert_eq!(OcInteger::find(&label).unwrap().get(), 42);
@@ -259,27 +290,61 @@ mod tests {
 
     #[test]
     fn integer_find_absent_returns_none() {
-        let (_app, doc) = new_doc();
-        let label = doc.main().find_child(1, true).unwrap();
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
         assert!(OcInteger::find(&label).is_none());
     }
 
     #[test]
     fn integer_undo_restores() {
         let (_app, mut doc) = new_doc();
-        let label = doc.main().find_child(1, true).unwrap();
+        let label;
         {
+            let main = doc.main();
             let cmd = doc.begin_command().unwrap();
-            OcInteger::set(&label, 1).unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcInteger::set(&cmd, &label, 1).unwrap();
             cmd.commit().unwrap();
         }
         {
             let cmd = doc.begin_command().unwrap();
-            OcInteger::set(&label, 2).unwrap();
+            OcInteger::set(&cmd, &label, 2).unwrap();
             cmd.commit().unwrap();
         }
         doc.undo().unwrap();
         assert_eq!(OcInteger::find(&label).unwrap().get(), 1);
+    }
+
+    #[test]
+    fn integer_forget_removes_attribute() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcInteger::set(&cmd, &label, 42).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcInteger::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcInteger::find(&label).is_none());
+    }
+
+    #[test]
+    fn integer_forget_absent_returns_false() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        assert!(!OcInteger::forget(&cmd, &label));
+        cmd.commit().unwrap();
     }
 
     // ── OcReal ───────────────────────────────────────────────────────────────
@@ -287,10 +352,12 @@ mod tests {
     #[test]
     fn real_round_trip() {
         let (_app, mut doc) = new_doc();
-        let label = doc.main().find_child(1, true).unwrap();
+        let label;
         {
+            let main = doc.main();
             let cmd = doc.begin_command().unwrap();
-            OcReal::set(&label, 3.14).unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcReal::set(&cmd, &label, 3.14).unwrap();
             cmd.commit().unwrap();
         }
         let v = OcReal::find(&label).unwrap().get();
@@ -299,8 +366,11 @@ mod tests {
 
     #[test]
     fn real_find_absent_returns_none() {
-        let (_app, doc) = new_doc();
-        let label = doc.main().find_child(1, true).unwrap();
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
         assert!(OcReal::find(&label).is_none());
     }
 
@@ -309,12 +379,14 @@ mod tests {
     #[test]
     fn multiple_attributes_on_same_label() {
         let (_app, mut doc) = new_doc();
-        let label = doc.main().find_child(1, true).unwrap();
+        let label;
         {
+            let main = doc.main();
             let cmd = doc.begin_command().unwrap();
-            OcName::set(&label, "part_a").unwrap();
-            OcInteger::set(&label, 7).unwrap();
-            OcReal::set(&label, 1.5).unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcName::set(&cmd, &label, "part_a").unwrap();
+            OcInteger::set(&cmd, &label, 7).unwrap();
+            OcReal::set(&cmd, &label, 1.5).unwrap();
             cmd.commit().unwrap();
         }
         assert_eq!(OcName::find(&label).unwrap().get(), "part_a");
