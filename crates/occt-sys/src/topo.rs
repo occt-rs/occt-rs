@@ -210,6 +210,64 @@ pub mod ffi {
             value: &TdfLabel,
         ) -> Result<()>;
 
+        // ── TDataStdRealArrayHandle ───────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_RealArray) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___real_array.html
+        type TDataStdRealArrayHandle;
+
+        // Set: static on TDataStd_RealArray; finds or creates a real array attribute
+        // on label with 0-based bounds [0, len-1]. isDelta omitted (OCCT default
+        // Standard_False applies). Must be called inside an open command scope.
+        fn tdatastd_realarray_set(
+            label: &TdfLabel,
+            len: i32,
+        ) -> Result<UniquePtr<TDataStdRealArrayHandle>>;
+        // Find: returns nullptr (None on Rust side) when attribute is absent.
+        fn tdatastd_realarray_find(label: &TdfLabel) -> UniquePtr<TDataStdRealArrayHandle>;
+        // ForgetAttribute(GUID) const — true if present and removed.
+        fn tdatastd_realarray_forget(label: &TdfLabel) -> bool;
+        // Length: const — number of elements (== len passed to set).
+        fn tdatastd_realarray_length(h: &TDataStdRealArrayHandle) -> i32;
+        // Value: 0-based. Raises OutOfRange (-> Err) if index is outside [0, length-1].
+        fn tdatastd_realarray_value(h: &TDataStdRealArrayHandle, index: i32) -> Result<f64>;
+        // SetValue: 0-based. Raises OutOfRange (-> Err) if index is outside [0, length-1].
+        // Must be called inside an open command scope.
+        fn tdatastd_realarray_set_value(
+            h: &TDataStdRealArrayHandle,
+            index: i32,
+            value: f64,
+        ) -> Result<()>;
+
+        // ── TDataStdIntegerArrayHandle ────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_IntegerArray) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___integer_array.html
+        type TDataStdIntegerArrayHandle;
+
+        // Set: static on TDataStd_IntegerArray; finds or creates an integer array
+        // attribute on label with 0-based bounds [0, len-1]. isDelta omitted (OCCT
+        // default Standard_False applies). Must be called inside an open command scope.
+        fn tdatastd_integerarray_set(
+            label: &TdfLabel,
+            len: i32,
+        ) -> Result<UniquePtr<TDataStdIntegerArrayHandle>>;
+        // Find: returns nullptr (None on Rust side) when attribute is absent.
+        fn tdatastd_integerarray_find(label: &TdfLabel) -> UniquePtr<TDataStdIntegerArrayHandle>;
+        // ForgetAttribute(GUID) const — true if present and removed.
+        fn tdatastd_integerarray_forget(label: &TdfLabel) -> bool;
+        // Length: const — number of elements (== len passed to set).
+        fn tdatastd_integerarray_length(h: &TDataStdIntegerArrayHandle) -> i32;
+        // Value: 0-based. Raises OutOfRange (-> Err) if index is outside [0, length-1].
+        fn tdatastd_integerarray_value(h: &TDataStdIntegerArrayHandle, index: i32) -> Result<i32>;
+        // SetValue: 0-based. Raises OutOfRange (-> Err) if index is outside [0, length-1].
+        // Must be called inside an open command scope.
+        fn tdatastd_integerarray_set_value(
+            h: &TDataStdIntegerArrayHandle,
+            index: i32,
+            value: i32,
+        ) -> Result<()>;
+
         // ── TdfLabel ──────────────────────────────────────────────────────────────
         // Shim holding TDF_Label by value.  TDF_Label is a non-owning reference
         // into a TDF_Data tree; the Rust wrapper carries a lifetime parameter

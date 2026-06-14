@@ -1,5 +1,6 @@
 //! Standard TDF attributes: scalars (Name, Integer, Real, Comment,
-//! AsciiString) and list/array attributes (ReferenceList, ReferenceArray).
+//! AsciiString) and list/array attributes (ReferenceList, ReferenceArray,
+//! RealArray, IntegerArray).
 //!
 //! Each type wraps a `Handle(TDataStd_*)` shim.  The operations per type are:
 //!
@@ -528,6 +529,226 @@ impl OcReferenceArray {
 impl std::fmt::Debug for OcReferenceArray {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OcReferenceArray")
+            .field("len", &self.len())
+            .finish()
+    }
+}
+
+// ── OcRealArray ──────────────────────────────────────────────────────────────
+
+/// A `TDataStd_RealArray` attribute handle — a fixed-length array of `f64`
+/// values attached to a label.
+///
+/// Same convention as [`OcReferenceArray`]: indices are 0-based, `len` must
+/// be >= 1 (`TColStd_Array1` requires `Lower <= Upper`; `len == 0` raises
+/// `Standard_RangeError` from `Init`, propagated as `Err`). Elements are
+/// zero-initialized until explicitly set via
+/// [`set_value`](OcRealArray::set_value).
+///
+/// OCCT's `Set` takes an `isDelta` parameter controlling undo-delta
+/// computation for element modifications; occt-rs omits it, taking OCCT's
+/// compiled-in default (`Standard_False`).
+pub struct OcRealArray {
+    inner: cxx::UniquePtr<ffi::TDataStdRealArrayHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcRealArray {
+    /// Finds, or creates, a `TDataStd_RealArray` attribute on `label` with
+    /// `len` elements (0-based indices `0..len`).
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `len < 1`.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: i32) -> Result<Self, OcctError> {
+        let inner = ffi::tdatastd_realarray_set(&label.inner, len).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataStd_RealArray` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    /// No command scope required for read-only access.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdatastd_realarray_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataStd_RealArray` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_realarray_forget(&label.inner)
+    }
+
+    /// Number of elements in this array (the `len` passed to [`set`](Self::set)).
+    pub fn len(&self) -> i32 {
+        ffi::tdatastd_realarray_length(&self.inner)
+    }
+
+    /// Returns `true` if this array has zero elements.
+    ///
+    /// Always `false` in practice — `len >= 1` is enforced at construction.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns the value at `index` (0-based).
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `index` is outside `[0, len()-1]`.
+    pub fn value(&self, index: i32) -> Result<f64, OcctError> {
+        ffi::tdatastd_realarray_value(&self.inner, index).map_err(OcctError::from)
+    }
+
+    /// Sets the value at `index` (0-based).
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `index` is outside `[0, len()-1]`.
+    pub fn set_value(&self, _cmd: &Command<'_>, index: i32, value: f64) -> Result<(), OcctError> {
+        ffi::tdatastd_realarray_set_value(&self.inner, index, value).map_err(OcctError::from)
+    }
+
+    /// Collects all elements into a `Vec`, in index order.
+    pub fn to_vec(&self) -> Vec<f64> {
+        (0..self.len())
+            .map(|i| {
+                self.value(i)
+                    .expect("index in [0, len()) is in bounds by construction")
+            })
+            .collect()
+    }
+}
+
+impl std::fmt::Debug for OcRealArray {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcRealArray")
+            .field("len", &self.len())
+            .finish()
+    }
+}
+
+// ── OcIntegerArray ───────────────────────────────────────────────────────────
+
+/// A `TDataStd_IntegerArray` attribute handle — a fixed-length array of `i32`
+/// values attached to a label.
+///
+/// Same convention as [`OcReferenceArray`]/[`OcRealArray`]: indices are
+/// 0-based, `len` must be >= 1. Elements are zero-initialized until
+/// explicitly set via [`set_value`](OcIntegerArray::set_value).
+///
+/// OCCT's `Set` takes an `isDelta` parameter controlling undo-delta
+/// computation for element modifications; occt-rs omits it, taking OCCT's
+/// compiled-in default (`Standard_False`).
+pub struct OcIntegerArray {
+    inner: cxx::UniquePtr<ffi::TDataStdIntegerArrayHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcIntegerArray {
+    /// Finds, or creates, a `TDataStd_IntegerArray` attribute on `label` with
+    /// `len` elements (0-based indices `0..len`).
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `len < 1`.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: i32) -> Result<Self, OcctError> {
+        let inner = ffi::tdatastd_integerarray_set(&label.inner, len).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataStd_IntegerArray` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    /// No command scope required for read-only access.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdatastd_integerarray_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataStd_IntegerArray` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_integerarray_forget(&label.inner)
+    }
+
+    /// Number of elements in this array (the `len` passed to [`set`](Self::set)).
+    pub fn len(&self) -> i32 {
+        ffi::tdatastd_integerarray_length(&self.inner)
+    }
+
+    /// Returns `true` if this array has zero elements.
+    ///
+    /// Always `false` in practice — `len >= 1` is enforced at construction.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns the value at `index` (0-based).
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `index` is outside `[0, len()-1]`.
+    pub fn value(&self, index: i32) -> Result<i32, OcctError> {
+        ffi::tdatastd_integerarray_value(&self.inner, index).map_err(OcctError::from)
+    }
+
+    /// Sets the value at `index` (0-based).
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `index` is outside `[0, len()-1]`.
+    pub fn set_value(&self, _cmd: &Command<'_>, index: i32, value: i32) -> Result<(), OcctError> {
+        ffi::tdatastd_integerarray_set_value(&self.inner, index, value).map_err(OcctError::from)
+    }
+
+    /// Collects all elements into a `Vec`, in index order.
+    pub fn to_vec(&self) -> Vec<i32> {
+        (0..self.len())
+            .map(|i| {
+                self.value(i)
+                    .expect("index in [0, len()) is in bounds by construction")
+            })
+            .collect()
+    }
+}
+
+impl std::fmt::Debug for OcIntegerArray {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcIntegerArray")
             .field("len", &self.len())
             .finish()
     }
@@ -1126,6 +1347,225 @@ mod tests {
         // raises Standard_RangeError from Init. Use OcReferenceList for
         // possibly-empty collections.
         assert!(OcReferenceArray::set(&cmd, &label, 0).is_err());
+        cmd.abort().unwrap();
+    }
+    // ── OcRealArray ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn realarray_set_creates_with_length() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            let arr = OcRealArray::set(&cmd, &label, 3).unwrap();
+            assert_eq!(arr.len(), 3);
+            cmd.commit().unwrap();
+        }
+        let found = OcRealArray::find(&label).expect("real array should be present");
+        assert_eq!(found.len(), 3);
+    }
+
+    #[test]
+    fn realarray_find_absent_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(OcRealArray::find(&label).is_none());
+    }
+
+    #[test]
+    fn realarray_forget_removes_attribute() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcRealArray::set(&cmd, &label, 2).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcRealArray::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcRealArray::find(&label).is_none());
+    }
+
+    #[test]
+    fn realarray_set_value_and_value_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcRealArray::set(&cmd, &label, 2).unwrap();
+            arr.set_value(&cmd, 0, 1.5).unwrap();
+            arr.set_value(&cmd, 1, -2.25).unwrap();
+            cmd.commit().unwrap();
+        }
+        let got = arr.to_vec();
+        assert!((got[0] - 1.5).abs() < 1e-12);
+        assert!((got[1] - (-2.25)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn realarray_value_out_of_range_errors() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcRealArray::set(&cmd, &label, 2).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert!(arr.value(2).is_err());
+        assert!(arr.value(-1).is_err());
+    }
+
+    #[test]
+    fn realarray_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcRealArray::set(&cmd, &label, 1).unwrap();
+            arr.set_value(&cmd, 0, 1.0).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            arr.set_value(&cmd, 0, 2.0).unwrap();
+            cmd.commit().unwrap();
+        }
+        doc.undo().unwrap();
+        assert!((arr.value(0).unwrap() - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn realarray_zero_length_is_err() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        assert!(OcRealArray::set(&cmd, &label, 0).is_err());
+        cmd.abort().unwrap();
+    }
+
+    // ── OcIntegerArray ───────────────────────────────────────────────────────
+
+    #[test]
+    fn integerarray_set_creates_with_length() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            let arr = OcIntegerArray::set(&cmd, &label, 3).unwrap();
+            assert_eq!(arr.len(), 3);
+            cmd.commit().unwrap();
+        }
+        let found = OcIntegerArray::find(&label).expect("integer array should be present");
+        assert_eq!(found.len(), 3);
+    }
+
+    #[test]
+    fn integerarray_find_absent_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(OcIntegerArray::find(&label).is_none());
+    }
+
+    #[test]
+    fn integerarray_forget_removes_attribute() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcIntegerArray::set(&cmd, &label, 2).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcIntegerArray::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcIntegerArray::find(&label).is_none());
+    }
+
+    #[test]
+    fn integerarray_set_value_and_value_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcIntegerArray::set(&cmd, &label, 2).unwrap();
+            arr.set_value(&cmd, 0, 7).unwrap();
+            arr.set_value(&cmd, 1, -3).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert_eq!(arr.to_vec(), vec![7, -3]);
+    }
+
+    #[test]
+    fn integerarray_value_out_of_range_errors() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcIntegerArray::set(&cmd, &label, 2).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert!(arr.value(2).is_err());
+        assert!(arr.value(-1).is_err());
+    }
+
+    #[test]
+    fn integerarray_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcIntegerArray::set(&cmd, &label, 1).unwrap();
+            arr.set_value(&cmd, 0, 1).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            arr.set_value(&cmd, 0, 2).unwrap();
+            cmd.commit().unwrap();
+        }
+        doc.undo().unwrap();
+        assert_eq!(arr.value(0).unwrap(), 1);
+    }
+
+    #[test]
+    fn integerarray_zero_length_is_err() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        assert!(OcIntegerArray::set(&cmd, &label, 0).is_err());
         cmd.abort().unwrap();
     }
 }

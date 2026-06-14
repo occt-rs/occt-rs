@@ -33,6 +33,8 @@
 #include <TDataStd_Real.hxx>
 #include <TDataStd_ReferenceList.hxx>
 #include <TDataStd_ReferenceArray.hxx>
+#include <TDataStd_RealArray.hxx>
+#include <TDataStd_IntegerArray.hxx>
 #include <TDF_Label.hxx>
 #include <TDF_LabelList.hxx>
 
@@ -332,6 +334,142 @@ inline void tdatastd_referencearray_set_value(
 {
     try {
         h.inner->SetValue(index, value.inner);
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// ── TDataStd_RealArray ────────────────────────────────────────────────────────
+
+struct TDataStdRealArrayHandle {
+    Handle(TDataStd_RealArray) inner;
+};
+
+// TDataStd_RealArray::Set(L, lower, upper) — static.
+// Finds, or creates, a real array attribute on L with 0-based bounds
+// [0, len-1]. isDelta omitted: OCCT's compiled-in default (Standard_False,
+// DefaultDeltaOnModification) applies. Elements are zero-initialized until
+// set_value is called. Must be called inside an open command scope.
+inline std::unique_ptr<TDataStdRealArrayHandle> tdatastd_realarray_set(
+    const TdfLabel& label, Standard_Integer len)
+{
+    try {
+        auto result = std::make_unique<TDataStdRealArrayHandle>();
+        result->inner = TDataStd_RealArray::Set(label.inner, 0, len - 1);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// Find TDataStd_RealArray on a label. Returns nullptr if not present.
+inline std::unique_ptr<TDataStdRealArrayHandle> tdatastd_realarray_find(const TdfLabel& label) {
+    Handle(TDataStd_RealArray) attr;
+    if (label.inner.FindAttribute(TDataStd_RealArray::GetID(), attr)) {
+        auto result = std::make_unique<TDataStdRealArrayHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+
+// TDF_Label::ForgetAttribute(GUID) const — removes the RealArray attribute
+// if present. Returns false if it was not present. No exception path.
+inline bool tdatastd_realarray_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_RealArray::GetID()) == Standard_True;
+}
+
+// TDataStd_RealArray::Length() const — number of elements (== len passed to set).
+inline Standard_Integer tdatastd_realarray_length(const TDataStdRealArrayHandle& h) {
+    return h.inner->Length();
+}
+
+// TDataStd_RealArray::Value(index) const — 0-based (Set always called with
+// lower=0). Raises OutOfRange if index is outside [0, Length()-1].
+inline Standard_Real tdatastd_realarray_value(
+    const TDataStdRealArrayHandle& h, Standard_Integer index)
+{
+    try {
+        return h.inner->Value(index);
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// TDataStd_RealArray::SetValue(index, value) — 0-based. Raises OutOfRange if
+// index is outside [0, Length()-1]. Non-const on the attribute, but callable
+// through a const handle reference (see Handle::operator-> note in
+// bound_api_reference.md). Must be called inside an open command scope.
+inline void tdatastd_realarray_set_value(
+    const TDataStdRealArrayHandle& h, Standard_Integer index, Standard_Real value)
+{
+    try {
+        h.inner->SetValue(index, value);
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// ── TDataStd_IntegerArray ─────────────────────────────────────────────────────
+
+struct TDataStdIntegerArrayHandle {
+    Handle(TDataStd_IntegerArray) inner;
+};
+
+// TDataStd_IntegerArray::Set(L, lower, upper) — static.
+// Finds, or creates, an integer array attribute on L with 0-based bounds
+// [0, len-1]. isDelta omitted: OCCT's compiled-in default (Standard_False,
+// DefaultDeltaOnModification) applies. Elements are zero-initialized until
+// set_value is called. Must be called inside an open command scope.
+inline std::unique_ptr<TDataStdIntegerArrayHandle> tdatastd_integerarray_set(
+    const TdfLabel& label, Standard_Integer len)
+{
+    try {
+        auto result = std::make_unique<TDataStdIntegerArrayHandle>();
+        result->inner = TDataStd_IntegerArray::Set(label.inner, 0, len - 1);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// Find TDataStd_IntegerArray on a label. Returns nullptr if not present.
+inline std::unique_ptr<TDataStdIntegerArrayHandle> tdatastd_integerarray_find(const TdfLabel& label) {
+    Handle(TDataStd_IntegerArray) attr;
+    if (label.inner.FindAttribute(TDataStd_IntegerArray::GetID(), attr)) {
+        auto result = std::make_unique<TDataStdIntegerArrayHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+
+// TDF_Label::ForgetAttribute(GUID) const — removes the IntegerArray attribute
+// if present. Returns false if it was not present. No exception path.
+inline bool tdatastd_integerarray_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_IntegerArray::GetID()) == Standard_True;
+}
+
+// TDataStd_IntegerArray::Length() const — number of elements (== len passed to set).
+inline Standard_Integer tdatastd_integerarray_length(const TDataStdIntegerArrayHandle& h) {
+    return h.inner->Length();
+}
+
+// TDataStd_IntegerArray::Value(index) const — 0-based (Set always called with
+// lower=0). Raises OutOfRange if index is outside [0, Length()-1].
+inline Standard_Integer tdatastd_integerarray_value(
+    const TDataStdIntegerArrayHandle& h, Standard_Integer index)
+{
+    try {
+        return h.inner->Value(index);
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// TDataStd_IntegerArray::SetValue(index, value) — 0-based. Raises OutOfRange
+// if index is outside [0, Length()-1]. Non-const on the attribute, but
+// callable through a const handle reference (see Handle::operator-> note in
+// bound_api_reference.md). Must be called inside an open command scope.
+inline void tdatastd_integerarray_set_value(
+    const TDataStdIntegerArrayHandle& h, Standard_Integer index, Standard_Integer value)
+{
+    try {
+        h.inner->SetValue(index, value);
     } catch (const std::runtime_error&) { throw; }
     catch (...) { rethrow_occt_as_runtime_error(); }
 }
