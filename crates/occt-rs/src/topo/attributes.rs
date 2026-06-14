@@ -191,6 +191,131 @@ impl std::fmt::Debug for OcReal {
             .finish()
     }
 }
+// ── OcComment ─────────────────────────────────────────────────────────────────
+
+/// A `TDataStd_Comment` attribute handle — a UTF-8 string attached to a label.
+///
+/// Construct via [`OcComment::set`] inside an open command scope.
+/// Retrieve from an existing label via [`OcComment::find`].
+pub struct OcComment {
+    inner: cxx::UniquePtr<ffi::TDataStdCommentHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcComment {
+    /// Attaches or updates a `TDataStd_Comment` attribute on `label`.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: &str) -> Result<Self, OcctError> {
+        let inner = ffi::tdatastd_comment_set(&label.inner, value).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Reads the string value of this attribute.
+    pub fn get(&self) -> String {
+        ffi::tdatastd_comment_get(&self.inner)
+    }
+
+    /// Probes for a `TDataStd_Comment` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    /// No command scope required for read-only access.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdatastd_comment_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataStd_Comment` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_comment_forget(&label.inner)
+    }
+}
+
+impl std::fmt::Debug for OcComment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcComment")
+            .field("value", &self.get())
+            .finish()
+    }
+}
+
+// ── OcAsciiString ─────────────────────────────────────────────────────────────
+
+/// A `TDataStd_AsciiString` attribute handle — an ASCII string attached to a label.
+///
+/// Despite the name, `TCollection_AsciiString` is an unvalidated 8-bit byte
+/// buffer — any valid-UTF-8 `&str` round-trips unchanged through
+/// [`set`](OcAsciiString::set)/[`get`](OcAsciiString::get) regardless of content.
+///
+/// Construct via [`OcAsciiString::set`] inside an open command scope.
+/// Retrieve from an existing label via [`OcAsciiString::find`].
+pub struct OcAsciiString {
+    inner: cxx::UniquePtr<ffi::TDataStdAsciiStringHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcAsciiString {
+    /// Attaches or updates a `TDataStd_AsciiString` attribute on `label`.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: &str) -> Result<Self, OcctError> {
+        let inner = ffi::tdatastd_asciistring_set(&label.inner, value).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Reads the ASCII string value of this attribute.
+    pub fn get(&self) -> String {
+        ffi::tdatastd_asciistring_get(&self.inner)
+    }
+
+    /// Probes for a `TDataStd_AsciiString` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    /// No command scope required for read-only access.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdatastd_asciistring_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataStd_AsciiString` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_asciistring_forget(&label.inner)
+    }
+}
+
+impl std::fmt::Debug for OcAsciiString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcAsciiString")
+            .field("value", &self.get())
+            .finish()
+    }
+}
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -270,6 +395,34 @@ mod tests {
         }
         doc.undo().unwrap();
         assert_eq!(OcName::find(&label).unwrap().get(), "before");
+    }
+    #[test]
+    fn name_unicode_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcName::set(&cmd, &label, "café").unwrap();
+            cmd.commit().unwrap();
+        }
+        assert_eq!(OcName::find(&label).unwrap().get(), "café");
+    }
+    #[test]
+    fn name_unicode_round_trip_non_bmp() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            // U+1F600 (4-byte UTF-8) — outside the BMP, exercises any
+            // surrogate-pair handling in ExtendedString's UTF-8 decode.
+            OcName::set(&cmd, &label, "😀").unwrap();
+            cmd.commit().unwrap();
+        }
+        assert_eq!(OcName::find(&label).unwrap().get(), "😀");
     }
 
     // ── OcInteger ────────────────────────────────────────────────────────────
@@ -372,6 +525,151 @@ mod tests {
         let label = main.get_or_create_child(&cmd, 1);
         cmd.commit().unwrap();
         assert!(OcReal::find(&label).is_none());
+    }
+    // ── OcComment ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn comment_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcComment::set(&cmd, &label, "a comment").unwrap();
+            cmd.commit().unwrap();
+        }
+        assert_eq!(OcComment::find(&label).unwrap().get(), "a comment");
+    }
+
+    #[test]
+    fn comment_find_absent_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(OcComment::find(&label).is_none());
+    }
+
+    #[test]
+    fn comment_update_overwrites() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcComment::set(&cmd, &label, "first").unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            OcComment::set(&cmd, &label, "second").unwrap();
+            cmd.commit().unwrap();
+        }
+        assert_eq!(OcComment::find(&label).unwrap().get(), "second");
+    }
+
+    #[test]
+    fn comment_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcComment::set(&cmd, &label, "before").unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            OcComment::set(&cmd, &label, "after").unwrap();
+            cmd.commit().unwrap();
+        }
+        doc.undo().unwrap();
+        assert_eq!(OcComment::find(&label).unwrap().get(), "before");
+    }
+
+    // ── OcAsciiString ────────────────────────────────────────────────────────
+
+    #[test]
+    fn asciistring_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcAsciiString::set(&cmd, &label, "PART-001").unwrap();
+            cmd.commit().unwrap();
+        }
+        assert_eq!(OcAsciiString::find(&label).unwrap().get(), "PART-001");
+    }
+
+    #[test]
+    fn asciistring_find_absent_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(OcAsciiString::find(&label).is_none());
+    }
+
+    #[test]
+    fn asciistring_update_overwrites() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcAsciiString::set(&cmd, &label, "first").unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            OcAsciiString::set(&cmd, &label, "second").unwrap();
+            cmd.commit().unwrap();
+        }
+        assert_eq!(OcAsciiString::find(&label).unwrap().get(), "second");
+    }
+
+    #[test]
+    fn asciistring_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcAsciiString::set(&cmd, &label, "before").unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            OcAsciiString::set(&cmd, &label, "after").unwrap();
+            cmd.commit().unwrap();
+        }
+        doc.undo().unwrap();
+        assert_eq!(OcAsciiString::find(&label).unwrap().get(), "before");
+    }
+
+    #[test]
+    fn asciistring_round_trip_preserves_non_ascii_bytes() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcAsciiString::set(&cmd, &label, "café").unwrap();
+            cmd.commit().unwrap();
+        }
+        // TCollection_AsciiString is an unvalidated byte buffer — bytes
+        // round-trip unchanged regardless of content.
+        assert_eq!(OcAsciiString::find(&label).unwrap().get(), "café");
     }
 
     // ── Mixed ────────────────────────────────────────────────────────────────

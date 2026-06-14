@@ -28,6 +28,8 @@
 #include <TCollection_ExtendedString.hxx>
 #include <TDataStd_Integer.hxx>
 #include <TDataStd_Name.hxx>
+#include <TDataStd_AsciiString.hxx>
+#include <TDataStd_Comment.hxx>
 #include <TDataStd_Real.hxx>
 #include <TDF_Label.hxx>
 
@@ -49,7 +51,12 @@ inline std::unique_ptr<TDataStdNameHandle> tdatastd_name_set(
 {
     try {
         std::string s(value.data(), value.size());
-        TCollection_ExtendedString ext(s.c_str());
+        // isMultiByte=true: decode input bytes as UTF-8, not Latin-1.
+        // Without this, each byte >= 0x80 becomes its own UCS-2 code
+        // unit, which ToUTF8CString then re-encodes as a *separate*
+        // 2-byte sequence — corrupting non-ASCII input (e.g.
+        // "café" -> "cafÃ©").
+        TCollection_ExtendedString ext(s.c_str(), Standard_True);
         auto result = std::make_unique<TDataStdNameHandle>();
         result->inner = TDataStd_Name::Set(label.inner, ext);
         return result;
@@ -89,6 +96,103 @@ inline std::unique_ptr<TDataStdNameHandle> tdatastd_name_find(const TdfLabel& la
 // present. Returns false if it was not present. No exception path.
 inline bool tdatastd_name_forget(const TdfLabel& label) {
     return label.inner.ForgetAttribute(TDataStd_Name::GetID()) == Standard_True;
+}
+// ── TDataStd_Comment ──────────────────────────────────────────────────────────
+
+struct TDataStdCommentHandle {
+    Handle(TDataStd_Comment) inner;
+};
+
+// TDataStd_Comment::Set(L, string) — static.
+// Attaches or updates the Comment attribute on L.
+// Must be called inside an open command scope.
+inline std::unique_ptr<TDataStdCommentHandle> tdatastd_comment_set(
+    const TdfLabel& label, rust::Str value)
+{
+    try {
+        std::string s(value.data(), value.size());
+        // isMultiByte=true: see tdatastd_name_set.
+        TCollection_ExtendedString ext(s.c_str(), Standard_True);
+        auto result = std::make_unique<TDataStdCommentHandle>();
+        result->inner = TDataStd_Comment::Set(label.inner, ext);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// TDataStd_Comment::Get() const — reads the string value (inherited from
+// TDataStd_GenericExtString, same conversion as TDataStd_Name::Get()).
+// Returns a UTF-8 encoded rust::String.
+inline rust::String tdatastd_comment_get(const TDataStdCommentHandle& h) {
+    const TCollection_ExtendedString& ext = h.inner->Get();
+    Standard_Integer len = ext.LengthOfCString();
+    std::string buf(static_cast<size_t>(len) + 1, '\0');
+    char* ptr = buf.data();
+    ext.ToUTF8CString(ptr);
+    return rust::String(buf.c_str());
+}
+
+// Find TDataStd_Comment on a label.  Returns nullptr if not present.
+inline std::unique_ptr<TDataStdCommentHandle> tdatastd_comment_find(const TdfLabel& label) {
+    Handle(TDataStd_Comment) attr;
+    if (label.inner.FindAttribute(TDataStd_Comment::GetID(), attr)) {
+        auto result = std::make_unique<TDataStdCommentHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+
+// TDF_Label::ForgetAttribute(GUID) const — removes the Comment attribute if
+// present. Returns false if it was not present. No exception path.
+inline bool tdatastd_comment_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_Comment::GetID()) == Standard_True;
+}
+
+// ── TDataStd_AsciiString ──────────────────────────────────────────────────────
+
+struct TDataStdAsciiStringHandle {
+    Handle(TDataStd_AsciiString) inner;
+};
+
+// TDataStd_AsciiString::Set(L, string) — static.
+// TCollection_AsciiString is an 8-bit char buffer with no ASCII validation;
+// constructing directly from the input bytes is a faithful byte copy, so any
+// valid-UTF-8 &str round-trips unchanged through Set/Get.
+// Must be called inside an open command scope.
+inline std::unique_ptr<TDataStdAsciiStringHandle> tdatastd_asciistring_set(
+    const TdfLabel& label, rust::Str value)
+{
+    try {
+        std::string s(value.data(), value.size());
+        TCollection_AsciiString ascii(s.c_str());
+        auto result = std::make_unique<TDataStdAsciiStringHandle>();
+        result->inner = TDataStd_AsciiString::Set(label.inner, ascii);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// TDataStd_AsciiString::Get() const — returns the stored bytes verbatim.
+inline rust::String tdatastd_asciistring_get(const TDataStdAsciiStringHandle& h) {
+    return rust::String(h.inner->Get().ToCString());
+}
+
+// Find TDataStd_AsciiString on a label.  Returns nullptr if not present.
+inline std::unique_ptr<TDataStdAsciiStringHandle> tdatastd_asciistring_find(const TdfLabel& label) {
+    Handle(TDataStd_AsciiString) attr;
+    if (label.inner.FindAttribute(TDataStd_AsciiString::GetID(), attr)) {
+        auto result = std::make_unique<TDataStdAsciiStringHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+
+// TDF_Label::ForgetAttribute(GUID) const — removes the AsciiString attribute if
+// present. Returns false if it was not present. No exception path.
+inline bool tdatastd_asciistring_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_AsciiString::GetID()) == Standard_True;
 }
 // ── TDataStd_Integer ──────────────────────────────────────────────────────────
 
