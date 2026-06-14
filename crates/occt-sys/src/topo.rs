@@ -144,6 +144,37 @@ pub mod ffi {
         fn tdatastd_asciistring_find(label: &TdfLabel) -> UniquePtr<TDataStdAsciiStringHandle>;
         // ForgetAttribute(GUID) const — true if present and removed.
         fn tdatastd_asciistring_forget(label: &TdfLabel) -> bool;
+
+        // ── TDataStdReferenceListHandle ──────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_ReferenceList) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___reference_list.html
+        type TDataStdReferenceListHandle;
+
+        // Set: static on TDataStd_ReferenceList; finds or creates an empty
+        // list-of-references attribute on label. Must be called inside an open
+        // command scope.
+        fn tdatastd_referencelist_set(
+            label: &TdfLabel,
+        ) -> Result<UniquePtr<TDataStdReferenceListHandle>>;
+        // Find: returns nullptr (None on Rust side) when attribute is absent.
+        fn tdatastd_referencelist_find(label: &TdfLabel) -> UniquePtr<TDataStdReferenceListHandle>;
+        // ForgetAttribute(GUID) const — true if present and removed.
+        fn tdatastd_referencelist_forget(label: &TdfLabel) -> bool;
+        // Extent: const — number of label references.
+        fn tdatastd_referencelist_extent(h: &TDataStdReferenceListHandle) -> i32;
+        // IsEmpty: const.
+        fn tdatastd_referencelist_is_empty(h: &TDataStdReferenceListHandle) -> bool;
+        // At: 0-based walk-and-advance indexed access. Caller must ensure
+        // 0 <= index < extent.
+        fn tdatastd_referencelist_at(
+            h: &TDataStdReferenceListHandle,
+            index: i32,
+        ) -> UniquePtr<TdfLabel>;
+        // Append: non-const on the attribute, but callable through a const handle
+        // reference (see shim comment). Must be called inside an open command scope.
+        fn tdatastd_referencelist_append(h: &TDataStdReferenceListHandle, value: &TdfLabel);
+
         // ── TdfLabel ──────────────────────────────────────────────────────────────
         // Shim holding TDF_Label by value.  TDF_Label is a non-owning reference
         // into a TDF_Data tree; the Rust wrapper carries a lifetime parameter

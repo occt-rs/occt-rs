@@ -1,4 +1,5 @@
-//! Standard scalar TDF attributes: Name, Integer, Real.
+//! Standard TDF attributes: scalars (Name, Integer, Real, Comment,
+//! AsciiString) and list attributes (ReferenceList).
 //!
 //! Each type wraps a `Handle(TDataStd_*)` shim.  The operations per type are:
 //!
@@ -313,6 +314,104 @@ impl std::fmt::Debug for OcAsciiString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OcAsciiString")
             .field("value", &self.get())
+            .finish()
+    }
+}
+
+// ── OcReferenceList ───────────────────────────────────────────────────────────
+
+/// A `TDataStd_ReferenceList` attribute handle — an ordered list of label
+/// references attached to a label.
+///
+/// Unlike the scalar attributes, [`set`](OcReferenceList::set) finds-or-creates
+/// an *empty* list — there's no single value to set. Use
+/// [`append`](OcReferenceList::append) to populate it.
+///
+/// Indices are 0-based and resolved by walking the underlying OCCT list on
+/// each [`at`](OcReferenceList::at)/[`to_vec`](OcReferenceList::to_vec) call —
+/// fine for the small argument/result lists this attribute is typically used
+/// for, but O(n) per access.
+pub struct OcReferenceList {
+    inner: cxx::UniquePtr<ffi::TDataStdReferenceListHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcReferenceList {
+    /// Finds, or creates, an empty `TDataStd_ReferenceList` attribute on `label`.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+        let inner = ffi::tdatastd_referencelist_set(&label.inner).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataStd_ReferenceList` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    /// No command scope required for read-only access.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdatastd_referencelist_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataStd_ReferenceList` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_referencelist_forget(&label.inner)
+    }
+
+    /// Number of label references in this list.
+    pub fn extent(&self) -> i32 {
+        ffi::tdatastd_referencelist_extent(&self.inner)
+    }
+
+    /// Returns `true` if this list contains no references.
+    pub fn is_empty(&self) -> bool {
+        ffi::tdatastd_referencelist_is_empty(&self.inner)
+    }
+
+    /// Returns the label at `index` (0-based).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index` is out of bounds (`>= extent()`).
+    pub fn at(&self, index: i32) -> OcLabel {
+        assert!(index >= 0 && index < self.extent(), "index out of bounds");
+        OcLabel::from_ffi(ffi::tdatastd_referencelist_at(&self.inner, index))
+    }
+
+    /// Appends `value` to the end of this list.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn append(&self, _cmd: &Command<'_>, value: &OcLabel) {
+        ffi::tdatastd_referencelist_append(&self.inner, &value.inner);
+    }
+
+    /// Collects all label references into a `Vec`, in order.
+    pub fn to_vec(&self) -> Vec<OcLabel> {
+        let n = self.extent();
+        (0..n)
+            .map(|i| OcLabel::from_ffi(ffi::tdatastd_referencelist_at(&self.inner, i)))
+            .collect()
+    }
+}
+
+impl std::fmt::Debug for OcReferenceList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcReferenceList")
+            .field("extent", &self.extent())
             .finish()
     }
 }
@@ -690,5 +789,105 @@ mod tests {
         assert_eq!(OcName::find(&label).unwrap().get(), "part_a");
         assert_eq!(OcInteger::find(&label).unwrap().get(), 7);
         assert!((OcReal::find(&label).unwrap().get() - 1.5).abs() < 1e-12);
+    }
+    // ── OcReferenceList ──────────────────────────────────────────────────────
+
+    #[test]
+    fn referencelist_set_creates_empty_and_is_findable() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            let list = OcReferenceList::set(&cmd, &label).unwrap();
+            assert!(list.is_empty());
+            assert_eq!(list.extent(), 0);
+            cmd.commit().unwrap();
+        }
+        let found = OcReferenceList::find(&label).expect("reference list should be present");
+        assert!(found.is_empty());
+    }
+
+    #[test]
+    fn referencelist_find_absent_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(OcReferenceList::find(&label).is_none());
+    }
+
+    #[test]
+    fn referencelist_forget_removes_attribute() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcReferenceList::set(&cmd, &label).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcReferenceList::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcReferenceList::find(&label).is_none());
+    }
+
+    #[test]
+    fn referencelist_append_preserves_order() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        let tags;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let list_label = main.get_or_create_child(&cmd, 1);
+            let a = main.get_or_create_child(&cmd, 2);
+            let b = main.get_or_create_child(&cmd, 3);
+            let c = main.get_or_create_child(&cmd, 4);
+            tags = vec![a.tag(), b.tag(), c.tag()];
+            list = OcReferenceList::set(&cmd, &list_label).unwrap();
+            list.append(&cmd, &a);
+            list.append(&cmd, &b);
+            list.append(&cmd, &c);
+            cmd.commit().unwrap();
+        }
+        assert_eq!(list.extent(), 3);
+        let got: Vec<i32> = list.to_vec().iter().map(|l| l.tag()).collect();
+        assert_eq!(got, tags);
+    }
+
+    #[test]
+    fn referencelist_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        let a_tag;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let list_label = main.get_or_create_child(&cmd, 1);
+            let a = main.get_or_create_child(&cmd, 2);
+            a_tag = a.tag();
+            list = OcReferenceList::set(&cmd, &list_label).unwrap();
+            list.append(&cmd, &a);
+            cmd.commit().unwrap();
+        }
+        {
+            let b = doc
+                .main()
+                .get_or_create_child(&doc.begin_command().unwrap(), 3);
+            let cmd = doc.begin_command().unwrap();
+            list.append(&cmd, &b);
+            cmd.commit().unwrap();
+        }
+        assert_eq!(list.extent(), 2);
+        doc.undo().unwrap();
+        assert_eq!(list.extent(), 1);
+        assert_eq!(list.at(0).tag(), a_tag);
     }
 }

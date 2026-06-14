@@ -31,7 +31,9 @@
 #include <TDataStd_AsciiString.hxx>
 #include <TDataStd_Comment.hxx>
 #include <TDataStd_Real.hxx>
+#include <TDataStd_ReferenceList.hxx>
 #include <TDF_Label.hxx>
+#include <TDF_LabelList.hxx>
 
 #include "label.hxx"
 #include "../exception.hxx"
@@ -194,6 +196,77 @@ inline std::unique_ptr<TDataStdAsciiStringHandle> tdatastd_asciistring_find(cons
 inline bool tdatastd_asciistring_forget(const TdfLabel& label) {
     return label.inner.ForgetAttribute(TDataStd_AsciiString::GetID()) == Standard_True;
 }
+
+// ── TDataStd_ReferenceList ────────────────────────────────────────────────────
+
+struct TDataStdReferenceListHandle {
+    Handle(TDataStd_ReferenceList) inner;
+};
+
+// TDataStd_ReferenceList::Set(L) — static.
+// Finds, or creates, an empty list-of-references attribute on L.
+// Must be called inside an open command scope.
+inline std::unique_ptr<TDataStdReferenceListHandle> tdatastd_referencelist_set(
+    const TdfLabel& label)
+{
+    try {
+        auto result = std::make_unique<TDataStdReferenceListHandle>();
+        result->inner = TDataStd_ReferenceList::Set(label.inner);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// Find TDataStd_ReferenceList on a label. Returns nullptr if not present.
+inline std::unique_ptr<TDataStdReferenceListHandle> tdatastd_referencelist_find(const TdfLabel& label) {
+    Handle(TDataStd_ReferenceList) attr;
+    if (label.inner.FindAttribute(TDataStd_ReferenceList::GetID(), attr)) {
+        auto result = std::make_unique<TDataStdReferenceListHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+
+// TDF_Label::ForgetAttribute(GUID) const — removes the ReferenceList attribute
+// if present. Returns false if it was not present. No exception path.
+inline bool tdatastd_referencelist_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_ReferenceList::GetID()) == Standard_True;
+}
+
+// TDataStd_ReferenceList::Extent() const — number of label references.
+inline Standard_Integer tdatastd_referencelist_extent(const TDataStdReferenceListHandle& h) {
+    return h.inner->Extent();
+}
+
+// TDataStd_ReferenceList::IsEmpty() const.
+inline bool tdatastd_referencelist_is_empty(const TDataStdReferenceListHandle& h) {
+    return h.inner->IsEmpty() == Standard_True;
+}
+
+// TDataStd_ReferenceList::List() const, 0-based walk-and-advance — same
+// pattern as MakeFilletBuilder::modified_at/generated_at for
+// TopTools_ListOfShape, applied to TDF_LabelList. Caller must ensure
+// 0 <= index < Extent().
+inline std::unique_ptr<TdfLabel> tdatastd_referencelist_at(
+    const TDataStdReferenceListHandle& h, Standard_Integer index)
+{
+    const TDF_LabelList& lst = h.inner->List();
+    auto it = lst.begin();
+    std::advance(it, static_cast<std::ptrdiff_t>(index));
+    return std::make_unique<TdfLabel>(TdfLabel{*it});
+}
+
+// TDataStd_ReferenceList::Append(value) — non-const on the attribute, but
+// Handle::operator-> returns a non-const pointer regardless of handle
+// constness, so a const handle reference suffices.
+// Must be called inside an open command scope.
+inline void tdatastd_referencelist_append(
+    const TDataStdReferenceListHandle& h, const TdfLabel& value)
+{
+    h.inner->Append(value.inner);
+}
+
 // ── TDataStd_Integer ──────────────────────────────────────────────────────────
 
 struct TDataStdIntegerHandle {
