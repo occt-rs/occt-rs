@@ -268,6 +268,83 @@ pub mod ffi {
             value: i32,
         ) -> Result<()>;
 
+        // ── TDataStdBooleanArrayHandle ────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_BooleanArray) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___boolean_array.html
+        type TDataStdBooleanArrayHandle;
+
+        // Set: static on TDataStd_BooleanArray; finds or creates a boolean array
+        // attribute on label with 0-based bounds [0, len-1]. No isDelta parameter
+        // (unlike RealArray/IntegerArray/ByteArray/ExtStringArray). Must be called
+        // inside an open command scope.
+        fn tdatastd_booleanarray_set(
+            label: &TdfLabel,
+            len: i32,
+        ) -> Result<UniquePtr<TDataStdBooleanArrayHandle>>;
+        fn tdatastd_booleanarray_find(label: &TdfLabel) -> UniquePtr<TDataStdBooleanArrayHandle>;
+        fn tdatastd_booleanarray_forget(label: &TdfLabel) -> bool;
+        fn tdatastd_booleanarray_length(h: &TDataStdBooleanArrayHandle) -> i32;
+        fn tdatastd_booleanarray_value(h: &TDataStdBooleanArrayHandle, index: i32) -> Result<bool>;
+        fn tdatastd_booleanarray_set_value(
+            h: &TDataStdBooleanArrayHandle,
+            index: i32,
+            value: bool,
+        ) -> Result<()>;
+
+        // ── TDataStdByteArrayHandle ───────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_ByteArray) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___byte_array.html
+        type TDataStdByteArrayHandle;
+
+        // Set: static on TDataStd_ByteArray; finds or creates a byte array attribute
+        // on label with 0-based bounds [0, len-1]. isDelta omitted (OCCT default
+        // Standard_False applies). Must be called inside an open command scope.
+        fn tdatastd_bytearray_set(
+            label: &TdfLabel,
+            len: i32,
+        ) -> Result<UniquePtr<TDataStdByteArrayHandle>>;
+        fn tdatastd_bytearray_find(label: &TdfLabel) -> UniquePtr<TDataStdByteArrayHandle>;
+        fn tdatastd_bytearray_forget(label: &TdfLabel) -> bool;
+        fn tdatastd_bytearray_length(h: &TDataStdByteArrayHandle) -> i32;
+        fn tdatastd_bytearray_value(h: &TDataStdByteArrayHandle, index: i32) -> Result<u8>;
+        fn tdatastd_bytearray_set_value(
+            h: &TDataStdByteArrayHandle,
+            index: i32,
+            value: u8,
+        ) -> Result<()>;
+
+        // ── TDataStdExtStringArrayHandle ──────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_ExtStringArray) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___ext_string_array.html
+        type TDataStdExtStringArrayHandle;
+
+        // Set: static on TDataStd_ExtStringArray; finds or creates an ExtStringArray
+        // attribute on label with 0-based bounds [0, len-1]. isDelta omitted (OCCT
+        // default Standard_False applies). Must be called inside an open command scope.
+        fn tdatastd_extstringarray_set(
+            label: &TdfLabel,
+            len: i32,
+        ) -> Result<UniquePtr<TDataStdExtStringArrayHandle>>;
+        fn tdatastd_extstringarray_find(
+            label: &TdfLabel,
+        ) -> UniquePtr<TDataStdExtStringArrayHandle>;
+        fn tdatastd_extstringarray_forget(label: &TdfLabel) -> bool;
+        fn tdatastd_extstringarray_length(h: &TDataStdExtStringArrayHandle) -> i32;
+        // Value: UTF-8, same conversion as tdatastd_name_get, per element.
+        fn tdatastd_extstringarray_value(
+            h: &TDataStdExtStringArrayHandle,
+            index: i32,
+        ) -> Result<String>;
+        // SetValue: isMultiByte=true UTF-8 decode, same as tdatastd_name_set, per element.
+        fn tdatastd_extstringarray_set_value(
+            h: &TDataStdExtStringArrayHandle,
+            index: i32,
+            value: &str,
+        ) -> Result<()>;
+
         // ── TdfLabel ──────────────────────────────────────────────────────────────
         // Shim holding TDF_Label by value.  TDF_Label is a non-owning reference
         // into a TDF_Data tree; the Rust wrapper carries a lifetime parameter

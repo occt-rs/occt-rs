@@ -1,6 +1,6 @@
 //! Standard TDF attributes: scalars (Name, Integer, Real, Comment,
 //! AsciiString) and list/array attributes (ReferenceList, ReferenceArray,
-//! RealArray, IntegerArray).
+//! RealArray, IntegerArray, BooleanArray, ByteArray, ExtStringArray).
 //!
 //! Each type wraps a `Handle(TDataStd_*)` shim.  The operations per type are:
 //!
@@ -15,7 +15,7 @@ use std::marker::PhantomData;
 
 use occt_sys::ffi;
 
-use crate::error::OcctError;
+use crate::error::{OcctError, OcctErrorKind};
 use crate::topo::document::Command;
 use crate::topo::label::OcLabel;
 
@@ -749,6 +749,363 @@ impl OcIntegerArray {
 impl std::fmt::Debug for OcIntegerArray {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OcIntegerArray")
+            .field("len", &self.len())
+            .finish()
+    }
+}
+
+// ── OcBooleanArray ───────────────────────────────────────────────────────────
+
+/// A `TDataStd_BooleanArray` attribute handle — a fixed-length array of
+/// `bool` values attached to a label.
+///
+/// Same convention as [`OcReferenceArray`]/[`OcRealArray`]/[`OcIntegerArray`]:
+/// indices are 0-based, `len` must be >= 1. Elements are `false` until
+/// explicitly set via [`set_value`](OcBooleanArray::set_value).
+///
+/// Unlike the other array types, `TDataStd_BooleanArray::Set` takes no
+/// `isDelta` parameter — nothing to omit here.
+pub struct OcBooleanArray {
+    inner: cxx::UniquePtr<ffi::TDataStdBooleanArrayHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcBooleanArray {
+    /// Finds, or creates, a `TDataStd_BooleanArray` attribute on `label` with
+    /// `len` elements (0-based indices `0..len`).
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `len < 1`.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: i32) -> Result<Self, OcctError> {
+        let inner = ffi::tdatastd_booleanarray_set(&label.inner, len).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataStd_BooleanArray` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    /// No command scope required for read-only access.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdatastd_booleanarray_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataStd_BooleanArray` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_booleanarray_forget(&label.inner)
+    }
+
+    /// Number of elements in this array (the `len` passed to [`set`](Self::set)).
+    pub fn len(&self) -> i32 {
+        ffi::tdatastd_booleanarray_length(&self.inner)
+    }
+
+    /// Returns `true` if this array has zero elements.
+    ///
+    /// Always `false` in practice — `len >= 1` is enforced at construction.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns the value at `index` (0-based).
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `index` is outside `[0, len()-1]`.
+    ///
+    /// This bound is checked on the Rust side before calling into OCCT:
+    /// `TDataStd_BooleanArray` is internally bit-packed into a byte array
+    /// (`TColStd_HArray1OfByte`), so OCCT's own `OutOfRange` check operates
+    /// on byte bounds, not on `Length()` — an index within the same byte as
+    /// the last valid element (e.g. index 2..7 for a 2-element array) would
+    /// otherwise be silently accepted.
+    pub fn value(&self, index: i32) -> Result<bool, OcctError> {
+        if index < 0 || index >= self.len() {
+            return Err(OcctError {
+                kind: OcctErrorKind::OutOfRange,
+                message: format!(
+                    "TDataStd_BooleanArray::Value: index {index} out of range [0, {})",
+                    self.len()
+                ),
+            });
+        }
+        ffi::tdatastd_booleanarray_value(&self.inner, index).map_err(OcctError::from)
+    }
+
+    /// Sets the value at `index` (0-based).
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `index` is outside `[0, len()-1]`. See [`value`](Self::value)
+    /// for why this is checked on the Rust side rather than relying on OCCT.
+    pub fn set_value(&self, _cmd: &Command<'_>, index: i32, value: bool) -> Result<(), OcctError> {
+        if index < 0 || index >= self.len() {
+            return Err(OcctError {
+                kind: OcctErrorKind::OutOfRange,
+                message: format!(
+                    "TDataStd_BooleanArray::SetValue: index {index} out of range [0, {})",
+                    self.len()
+                ),
+            });
+        }
+        ffi::tdatastd_booleanarray_set_value(&self.inner, index, value).map_err(OcctError::from)
+    }
+
+    /// Collects all elements into a `Vec`, in index order.
+    pub fn to_vec(&self) -> Vec<bool> {
+        (0..self.len())
+            .map(|i| {
+                self.value(i)
+                    .expect("index in [0, len()) is in bounds by construction")
+            })
+            .collect()
+    }
+}
+
+impl std::fmt::Debug for OcBooleanArray {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcBooleanArray")
+            .field("len", &self.len())
+            .finish()
+    }
+}
+
+// ── OcByteArray ──────────────────────────────────────────────────────────────
+
+/// A `TDataStd_ByteArray` attribute handle — a fixed-length array of `u8`
+/// values attached to a label.
+///
+/// Same convention as [`OcReferenceArray`]/[`OcRealArray`]/[`OcIntegerArray`]:
+/// indices are 0-based, `len` must be >= 1. Elements are zero-initialized
+/// until explicitly set via [`set_value`](OcByteArray::set_value).
+///
+/// OCCT's `Set` takes an `isDelta` parameter controlling undo-delta
+/// computation for element modifications; occt-rs omits it, taking OCCT's
+/// compiled-in default (`Standard_False`).
+pub struct OcByteArray {
+    inner: cxx::UniquePtr<ffi::TDataStdByteArrayHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcByteArray {
+    /// Finds, or creates, a `TDataStd_ByteArray` attribute on `label` with
+    /// `len` elements (0-based indices `0..len`).
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `len < 1`.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: i32) -> Result<Self, OcctError> {
+        let inner = ffi::tdatastd_bytearray_set(&label.inner, len).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataStd_ByteArray` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    /// No command scope required for read-only access.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdatastd_bytearray_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataStd_ByteArray` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_bytearray_forget(&label.inner)
+    }
+
+    /// Number of elements in this array (the `len` passed to [`set`](Self::set)).
+    pub fn len(&self) -> i32 {
+        ffi::tdatastd_bytearray_length(&self.inner)
+    }
+
+    /// Returns `true` if this array has zero elements.
+    ///
+    /// Always `false` in practice — `len >= 1` is enforced at construction.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns the value at `index` (0-based).
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `index` is outside `[0, len()-1]`.
+    pub fn value(&self, index: i32) -> Result<u8, OcctError> {
+        ffi::tdatastd_bytearray_value(&self.inner, index).map_err(OcctError::from)
+    }
+
+    /// Sets the value at `index` (0-based).
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `index` is outside `[0, len()-1]`.
+    pub fn set_value(&self, _cmd: &Command<'_>, index: i32, value: u8) -> Result<(), OcctError> {
+        ffi::tdatastd_bytearray_set_value(&self.inner, index, value).map_err(OcctError::from)
+    }
+
+    /// Collects all elements into a `Vec`, in index order.
+    pub fn to_vec(&self) -> Vec<u8> {
+        (0..self.len())
+            .map(|i| {
+                self.value(i)
+                    .expect("index in [0, len()) is in bounds by construction")
+            })
+            .collect()
+    }
+}
+
+impl std::fmt::Debug for OcByteArray {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcByteArray")
+            .field("len", &self.len())
+            .finish()
+    }
+}
+
+// ── OcExtStringArray ─────────────────────────────────────────────────────────
+
+/// A `TDataStd_ExtStringArray` attribute handle — a fixed-length array of
+/// UTF-8 strings attached to a label.
+///
+/// Same convention as [`OcReferenceArray`]/[`OcRealArray`]/[`OcIntegerArray`]:
+/// indices are 0-based, `len` must be >= 1. Elements are empty strings until
+/// explicitly set via [`set_value`](OcExtStringArray::set_value).
+///
+/// Each element undergoes the same UTF-8 <-> `TCollection_ExtendedString`
+/// conversion as [`OcName`]/[`OcComment`] (`isMultiByte = Standard_True`),
+/// applied per index — confirmed correct for both BMP and non-BMP input via
+/// those types' round-trip tests.
+///
+/// OCCT's `Set` takes an `isDelta` parameter controlling undo-delta
+/// computation for element modifications; occt-rs omits it, taking OCCT's
+/// compiled-in default (`Standard_False`).
+pub struct OcExtStringArray {
+    inner: cxx::UniquePtr<ffi::TDataStdExtStringArrayHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcExtStringArray {
+    /// Finds, or creates, a `TDataStd_ExtStringArray` attribute on `label`
+    /// with `len` elements (0-based indices `0..len`).
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `len < 1`.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: i32) -> Result<Self, OcctError> {
+        let inner = ffi::tdatastd_extstringarray_set(&label.inner, len).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataStd_ExtStringArray` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    /// No command scope required for read-only access.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdatastd_extstringarray_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataStd_ExtStringArray` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_extstringarray_forget(&label.inner)
+    }
+
+    /// Number of elements in this array (the `len` passed to [`set`](Self::set)).
+    pub fn len(&self) -> i32 {
+        ffi::tdatastd_extstringarray_length(&self.inner)
+    }
+
+    /// Returns `true` if this array has zero elements.
+    ///
+    /// Always `false` in practice — `len >= 1` is enforced at construction.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns the string at `index` (0-based).
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `index` is outside `[0, len()-1]`.
+    pub fn value(&self, index: i32) -> Result<String, OcctError> {
+        ffi::tdatastd_extstringarray_value(&self.inner, index).map_err(OcctError::from)
+    }
+
+    /// Sets the string at `index` (0-based).
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `index` is outside `[0, len()-1]`.
+    pub fn set_value(&self, _cmd: &Command<'_>, index: i32, value: &str) -> Result<(), OcctError> {
+        ffi::tdatastd_extstringarray_set_value(&self.inner, index, value).map_err(OcctError::from)
+    }
+
+    /// Collects all elements into a `Vec`, in index order.
+    pub fn to_vec(&self) -> Vec<String> {
+        (0..self.len())
+            .map(|i| {
+                self.value(i)
+                    .expect("index in [0, len()) is in bounds by construction")
+            })
+            .collect()
+    }
+}
+
+impl std::fmt::Debug for OcExtStringArray {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcExtStringArray")
             .field("len", &self.len())
             .finish()
     }
@@ -1566,6 +1923,350 @@ mod tests {
         let cmd = doc.begin_command().unwrap();
         let label = main.get_or_create_child(&cmd, 1);
         assert!(OcIntegerArray::set(&cmd, &label, 0).is_err());
+        cmd.abort().unwrap();
+    }
+    // ── OcBooleanArray ───────────────────────────────────────────────────────
+
+    #[test]
+    fn booleanarray_set_creates_with_length() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            let arr = OcBooleanArray::set(&cmd, &label, 3).unwrap();
+            assert_eq!(arr.len(), 3);
+            cmd.commit().unwrap();
+        }
+        let found = OcBooleanArray::find(&label).expect("boolean array should be present");
+        assert_eq!(found.len(), 3);
+    }
+
+    #[test]
+    fn booleanarray_find_absent_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(OcBooleanArray::find(&label).is_none());
+    }
+
+    #[test]
+    fn booleanarray_forget_removes_attribute() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcBooleanArray::set(&cmd, &label, 2).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcBooleanArray::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcBooleanArray::find(&label).is_none());
+    }
+
+    #[test]
+    fn booleanarray_set_value_and_value_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcBooleanArray::set(&cmd, &label, 2).unwrap();
+            arr.set_value(&cmd, 0, true).unwrap();
+            arr.set_value(&cmd, 1, false).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert_eq!(arr.to_vec(), vec![true, false]);
+    }
+
+    #[test]
+    fn booleanarray_value_out_of_range_errors() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcBooleanArray::set(&cmd, &label, 2).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert!(arr.value(2).is_err());
+        assert!(arr.value(-1).is_err());
+    }
+
+    #[test]
+    fn booleanarray_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcBooleanArray::set(&cmd, &label, 1).unwrap();
+            arr.set_value(&cmd, 0, true).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            arr.set_value(&cmd, 0, false).unwrap();
+            cmd.commit().unwrap();
+        }
+        doc.undo().unwrap();
+        assert_eq!(arr.value(0).unwrap(), true);
+    }
+
+    #[test]
+    fn booleanarray_zero_length_is_err() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        assert!(OcBooleanArray::set(&cmd, &label, 0).is_err());
+        cmd.abort().unwrap();
+    }
+
+    // ── OcByteArray ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn bytearray_set_creates_with_length() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            let arr = OcByteArray::set(&cmd, &label, 3).unwrap();
+            assert_eq!(arr.len(), 3);
+            cmd.commit().unwrap();
+        }
+        let found = OcByteArray::find(&label).expect("byte array should be present");
+        assert_eq!(found.len(), 3);
+    }
+
+    #[test]
+    fn bytearray_find_absent_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(OcByteArray::find(&label).is_none());
+    }
+
+    #[test]
+    fn bytearray_forget_removes_attribute() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcByteArray::set(&cmd, &label, 2).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcByteArray::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcByteArray::find(&label).is_none());
+    }
+
+    #[test]
+    fn bytearray_set_value_and_value_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcByteArray::set(&cmd, &label, 2).unwrap();
+            arr.set_value(&cmd, 0, 0).unwrap();
+            arr.set_value(&cmd, 1, 255).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert_eq!(arr.to_vec(), vec![0u8, 255u8]);
+    }
+
+    #[test]
+    fn bytearray_value_out_of_range_errors() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcByteArray::set(&cmd, &label, 2).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert!(arr.value(2).is_err());
+        assert!(arr.value(-1).is_err());
+    }
+
+    #[test]
+    fn bytearray_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcByteArray::set(&cmd, &label, 1).unwrap();
+            arr.set_value(&cmd, 0, 1).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            arr.set_value(&cmd, 0, 2).unwrap();
+            cmd.commit().unwrap();
+        }
+        doc.undo().unwrap();
+        assert_eq!(arr.value(0).unwrap(), 1);
+    }
+
+    #[test]
+    fn bytearray_zero_length_is_err() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        assert!(OcByteArray::set(&cmd, &label, 0).is_err());
+        cmd.abort().unwrap();
+    }
+
+    // ── OcExtStringArray ─────────────────────────────────────────────────────
+
+    #[test]
+    fn extstringarray_set_creates_with_length() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            let arr = OcExtStringArray::set(&cmd, &label, 3).unwrap();
+            assert_eq!(arr.len(), 3);
+            cmd.commit().unwrap();
+        }
+        let found = OcExtStringArray::find(&label).expect("ext string array should be present");
+        assert_eq!(found.len(), 3);
+    }
+
+    #[test]
+    fn extstringarray_find_absent_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(OcExtStringArray::find(&label).is_none());
+    }
+
+    #[test]
+    fn extstringarray_forget_removes_attribute() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcExtStringArray::set(&cmd, &label, 2).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcExtStringArray::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcExtStringArray::find(&label).is_none());
+    }
+
+    #[test]
+    fn extstringarray_set_value_and_value_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcExtStringArray::set(&cmd, &label, 2).unwrap();
+            arr.set_value(&cmd, 0, "first").unwrap();
+            arr.set_value(&cmd, 1, "second").unwrap();
+            cmd.commit().unwrap();
+        }
+        assert_eq!(
+            arr.to_vec(),
+            vec!["first".to_string(), "second".to_string()]
+        );
+    }
+
+    #[test]
+    fn extstringarray_unicode_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcExtStringArray::set(&cmd, &label, 1).unwrap();
+            arr.set_value(&cmd, 0, "café 😀").unwrap();
+            cmd.commit().unwrap();
+        }
+        assert_eq!(arr.value(0).unwrap(), "café 😀");
+    }
+
+    #[test]
+    fn extstringarray_value_out_of_range_errors() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcExtStringArray::set(&cmd, &label, 2).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert!(arr.value(2).is_err());
+        assert!(arr.value(-1).is_err());
+    }
+
+    #[test]
+    fn extstringarray_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcExtStringArray::set(&cmd, &label, 1).unwrap();
+            arr.set_value(&cmd, 0, "before").unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            arr.set_value(&cmd, 0, "after").unwrap();
+            cmd.commit().unwrap();
+        }
+        doc.undo().unwrap();
+        assert_eq!(arr.value(0).unwrap(), "before");
+    }
+
+    #[test]
+    fn extstringarray_zero_length_is_err() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        assert!(OcExtStringArray::set(&cmd, &label, 0).is_err());
         cmd.abort().unwrap();
     }
 }

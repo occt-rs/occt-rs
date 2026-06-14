@@ -35,6 +35,9 @@
 #include <TDataStd_ReferenceArray.hxx>
 #include <TDataStd_RealArray.hxx>
 #include <TDataStd_IntegerArray.hxx>
+#include <TDataStd_BooleanArray.hxx>
+#include <TDataStd_ByteArray.hxx>
+#include <TDataStd_ExtStringArray.hxx>
 #include <TDF_Label.hxx>
 #include <TDF_LabelList.hxx>
 
@@ -470,6 +473,219 @@ inline void tdatastd_integerarray_set_value(
 {
     try {
         h.inner->SetValue(index, value);
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// ── TDataStd_BooleanArray ─────────────────────────────────────────────────────
+
+struct TDataStdBooleanArrayHandle {
+    Handle(TDataStd_BooleanArray) inner;
+};
+
+// TDataStd_BooleanArray::Set(L, lower, upper) — static. No isDelta parameter
+// (unlike RealArray/IntegerArray/ByteArray/ExtStringArray).
+// Finds, or creates, a boolean array attribute on L with 0-based bounds
+// [0, len-1]. Elements are false-initialized until set_value is called.
+// Must be called inside an open command scope.
+inline std::unique_ptr<TDataStdBooleanArrayHandle> tdatastd_booleanarray_set(
+    const TdfLabel& label, Standard_Integer len)
+{
+    try {
+        auto result = std::make_unique<TDataStdBooleanArrayHandle>();
+        result->inner = TDataStd_BooleanArray::Set(label.inner, 0, len - 1);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// Find TDataStd_BooleanArray on a label. Returns nullptr if not present.
+inline std::unique_ptr<TDataStdBooleanArrayHandle> tdatastd_booleanarray_find(const TdfLabel& label) {
+    Handle(TDataStd_BooleanArray) attr;
+    if (label.inner.FindAttribute(TDataStd_BooleanArray::GetID(), attr)) {
+        auto result = std::make_unique<TDataStdBooleanArrayHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+
+// TDF_Label::ForgetAttribute(GUID) const — removes the BooleanArray attribute
+// if present. Returns false if it was not present. No exception path.
+inline bool tdatastd_booleanarray_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_BooleanArray::GetID()) == Standard_True;
+}
+
+// TDataStd_BooleanArray::Length() const — number of elements (== len passed to set).
+inline Standard_Integer tdatastd_booleanarray_length(const TDataStdBooleanArrayHandle& h) {
+    return h.inner->Length();
+}
+
+// TDataStd_BooleanArray::Value(index) const — 0-based. Standard_Boolean is
+// `bool`; crosses cxx directly. Raises OutOfRange if index is outside
+// [0, Length()-1].
+inline bool tdatastd_booleanarray_value(
+    const TDataStdBooleanArrayHandle& h, Standard_Integer index)
+{
+    try {
+        return h.inner->Value(index);
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// TDataStd_BooleanArray::SetValue(index, value) — 0-based. Raises OutOfRange
+// if index is outside [0, Length()-1]. Non-const on the attribute, but
+// callable through a const handle reference (see Handle::operator-> note in
+// bound_api_reference.md). Must be called inside an open command scope.
+inline void tdatastd_booleanarray_set_value(
+    const TDataStdBooleanArrayHandle& h, Standard_Integer index, bool value)
+{
+    try {
+        h.inner->SetValue(index, value);
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// ── TDataStd_ByteArray ────────────────────────────────────────────────────────
+
+struct TDataStdByteArrayHandle {
+    Handle(TDataStd_ByteArray) inner;
+};
+
+// TDataStd_ByteArray::Set(L, lower, upper) — static. isDelta omitted: OCCT's
+// compiled-in default (Standard_False, DefaultDeltaOnModification) applies.
+// Finds, or creates, a byte array attribute on L with 0-based bounds
+// [0, len-1]. Elements are zero-initialized until set_value is called.
+// Must be called inside an open command scope.
+inline std::unique_ptr<TDataStdByteArrayHandle> tdatastd_bytearray_set(
+    const TdfLabel& label, Standard_Integer len)
+{
+    try {
+        auto result = std::make_unique<TDataStdByteArrayHandle>();
+        result->inner = TDataStd_ByteArray::Set(label.inner, 0, len - 1);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// Find TDataStd_ByteArray on a label. Returns nullptr if not present.
+inline std::unique_ptr<TDataStdByteArrayHandle> tdatastd_bytearray_find(const TdfLabel& label) {
+    Handle(TDataStd_ByteArray) attr;
+    if (label.inner.FindAttribute(TDataStd_ByteArray::GetID(), attr)) {
+        auto result = std::make_unique<TDataStdByteArrayHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+
+// TDF_Label::ForgetAttribute(GUID) const — removes the ByteArray attribute
+// if present. Returns false if it was not present. No exception path.
+inline bool tdatastd_bytearray_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_ByteArray::GetID()) == Standard_True;
+}
+
+// TDataStd_ByteArray::Length() const — number of elements (== len passed to set).
+inline Standard_Integer tdatastd_bytearray_length(const TDataStdByteArrayHandle& h) {
+    return h.inner->Length();
+}
+
+// TDataStd_ByteArray::Value(index) const — 0-based. Standard_Byte is
+// `unsigned char`, same width/representation as cxx's u8 (uint8_t).
+// Raises OutOfRange if index is outside [0, Length()-1].
+inline Standard_Byte tdatastd_bytearray_value(
+    const TDataStdByteArrayHandle& h, Standard_Integer index)
+{
+    try {
+        return h.inner->Value(index);
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// TDataStd_ByteArray::SetValue(index, value) — 0-based. Raises OutOfRange if
+// index is outside [0, Length()-1]. Non-const on the attribute, but callable
+// through a const handle reference (see Handle::operator-> note in
+// bound_api_reference.md). Must be called inside an open command scope.
+inline void tdatastd_bytearray_set_value(
+    const TDataStdByteArrayHandle& h, Standard_Integer index, Standard_Byte value)
+{
+    try {
+        h.inner->SetValue(index, value);
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// ── TDataStd_ExtStringArray ───────────────────────────────────────────────────
+
+struct TDataStdExtStringArrayHandle {
+    Handle(TDataStd_ExtStringArray) inner;
+};
+
+// TDataStd_ExtStringArray::Set(L, lower, upper) — static. isDelta omitted:
+// OCCT's compiled-in default (Standard_False, DefaultDeltaOnModification)
+// applies. Finds, or creates, an ExtStringArray attribute on L with 0-based
+// bounds [0, len-1]. Elements are empty-string-initialized until set_value
+// is called. Must be called inside an open command scope.
+inline std::unique_ptr<TDataStdExtStringArrayHandle> tdatastd_extstringarray_set(
+    const TdfLabel& label, Standard_Integer len)
+{
+    try {
+        auto result = std::make_unique<TDataStdExtStringArrayHandle>();
+        result->inner = TDataStd_ExtStringArray::Set(label.inner, 0, len - 1);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// Find TDataStd_ExtStringArray on a label. Returns nullptr if not present.
+inline std::unique_ptr<TDataStdExtStringArrayHandle> tdatastd_extstringarray_find(const TdfLabel& label) {
+    Handle(TDataStd_ExtStringArray) attr;
+    if (label.inner.FindAttribute(TDataStd_ExtStringArray::GetID(), attr)) {
+        auto result = std::make_unique<TDataStdExtStringArrayHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+
+// TDF_Label::ForgetAttribute(GUID) const — removes the ExtStringArray
+// attribute if present. Returns false if it was not present. No exception path.
+inline bool tdatastd_extstringarray_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_ExtStringArray::GetID()) == Standard_True;
+}
+
+// TDataStd_ExtStringArray::Length() const — number of elements (== len passed to set).
+inline Standard_Integer tdatastd_extstringarray_length(const TDataStdExtStringArrayHandle& h) {
+    return h.inner->Length();
+}
+
+// TDataStd_ExtStringArray::Value(index) const — 0-based. Same UTF-8
+// conversion as tdatastd_name_get/tdatastd_comment_get, applied per element.
+// Raises OutOfRange if index is outside [0, Length()-1].
+inline rust::String tdatastd_extstringarray_value(
+    const TDataStdExtStringArrayHandle& h, Standard_Integer index)
+{
+    try {
+        const TCollection_ExtendedString& ext = h.inner->Value(index);
+        Standard_Integer len = ext.LengthOfCString();
+        std::string buf(static_cast<size_t>(len) + 1, '\0');
+        char* ptr = buf.data();
+        ext.ToUTF8CString(ptr);
+        return rust::String(buf.c_str());
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// TDataStd_ExtStringArray::SetValue(index, value) — 0-based. isMultiByte=true:
+// see tdatastd_name_set. Raises OutOfRange if index is outside
+// [0, Length()-1]. Must be called inside an open command scope.
+inline void tdatastd_extstringarray_set_value(
+    const TDataStdExtStringArrayHandle& h, Standard_Integer index, rust::Str value)
+{
+    try {
+        std::string s(value.data(), value.size());
+        TCollection_ExtendedString ext(s.c_str(), Standard_True);
+        h.inner->SetValue(index, ext);
     } catch (const std::runtime_error&) { throw; }
     catch (...) { rethrow_occt_as_runtime_error(); }
 }
