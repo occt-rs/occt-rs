@@ -85,6 +85,24 @@ pub mod ffi {
         // ForgetAttribute(GUID) const — true if present and removed.
         fn tdatastd_name_forget(label: &TdfLabel) -> bool;
 
+        // ── TDataStdCommentHandle ──────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_Comment) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___comment.html
+        type TDataStdCommentHandle;
+
+        // Set: static on TDataStd_Comment; attaches or updates the attribute on label.
+        // Must be called inside an open command scope.
+        fn tdatastd_comment_set(
+            label: &TdfLabel,
+            value: &str,
+        ) -> Result<UniquePtr<TDataStdCommentHandle>>;
+        // Get: const — reads the string value as UTF-8.
+        fn tdatastd_comment_get(h: &TDataStdCommentHandle) -> String;
+        // Find: returns nullptr (None on Rust side) when attribute is absent.
+        fn tdatastd_comment_find(label: &TdfLabel) -> UniquePtr<TDataStdCommentHandle>;
+        // ForgetAttribute(GUID) const — true if present and removed.
+        fn tdatastd_comment_forget(label: &TdfLabel) -> bool;
         // ── TDataStdIntegerHandle ─────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___integer.html
         type TDataStdIntegerHandle;
@@ -106,6 +124,26 @@ pub mod ffi {
         fn tdatastd_real_get(h: &TDataStdRealHandle) -> f64;
         fn tdatastd_real_find(label: &TdfLabel) -> UniquePtr<TDataStdRealHandle>;
         fn tdatastd_real_forget(label: &TdfLabel) -> bool;
+        // ── TDataStdAsciiStringHandle ────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_AsciiString) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___ascii_string.html
+        type TDataStdAsciiStringHandle;
+
+        // Set: static on TDataStd_AsciiString; attaches or updates the attribute on
+        // label. TCollection_AsciiString is an 8-bit char buffer with no ASCII
+        // validation, so any valid-UTF-8 &str round-trips unchanged. Must be called
+        // inside an open command scope.
+        fn tdatastd_asciistring_set(
+            label: &TdfLabel,
+            value: &str,
+        ) -> Result<UniquePtr<TDataStdAsciiStringHandle>>;
+        // Get: const — reads the ASCII string value (pure ASCII, valid UTF-8 unchanged).
+        fn tdatastd_asciistring_get(h: &TDataStdAsciiStringHandle) -> String;
+        // Find: returns nullptr (None on Rust side) when attribute is absent.
+        fn tdatastd_asciistring_find(label: &TdfLabel) -> UniquePtr<TDataStdAsciiStringHandle>;
+        // ForgetAttribute(GUID) const — true if present and removed.
+        fn tdatastd_asciistring_forget(label: &TdfLabel) -> bool;
         // ── TdfLabel ──────────────────────────────────────────────────────────────
         // Shim holding TDF_Label by value.  TDF_Label is a non-owning reference
         // into a TDF_Data tree; the Rust wrapper carries a lifetime parameter
