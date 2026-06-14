@@ -32,6 +32,7 @@
             pkgs.bacon           # background compile/test/check loop
             pkgs.cargo-nextest   # faster test runner; used in CI
             pkgs.cargo-deny      # licence + advisory auditing; enforces IP hygiene policy
+            pkgs.cargo-format 
             pkgs.clang-tools     # clangd for C++ shim editing (cxx bridge)
 
             # OpenCASCADE — dynamically linked, as required by LGPL and DEVELOPMENT.md

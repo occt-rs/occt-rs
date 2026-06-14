@@ -216,16 +216,16 @@ fn tnaming_undo_reverses_modify() {
     let shape_b = face_b.as_shape();
 
     let root = doc.main();
-    let label = root.find_child(1, true).unwrap();
 
-    // Command 1: record shape_a as primitive
-    let named_shape = {
+    // Command 1: create the label and record shape_a as primitive
+    let (label, named_shape) = {
         let cmd = doc.begin_command().unwrap();
+        let label = root.get_or_create_child(&cmd, 1);
         let mut b = TnamingBuilder::new(new_tnaming_builder(&label.inner));
         b.generated_fresh(&shape_a);
         let ns = b.named_shape();
         cmd.commit().unwrap();
-        ns
+        (label, ns)
     };
 
     // Command 2: modify to shape_b

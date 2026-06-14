@@ -16,6 +16,7 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::OcctError;
+use crate::topo::label::LabelPath;
 use crate::topo::label::OcLabel;
 use crate::topo::tnaming::{TnamingBuilder, TnamingSelector};
 
@@ -49,6 +50,16 @@ impl OcDocument {
     /// label's lifetime is tied to `self`.
     pub fn main(&self) -> OcLabel {
         OcLabel::from_ffi(ffi::document_main(&self.inner))
+    }
+    /// Resolves a [`LabelPath`] to a label, starting from the document root.
+    ///
+    /// Returns `None` if any segment of the path does not exist.
+    pub fn label_at(&self, path: &LabelPath) -> Option<OcLabel> {
+        let mut current = self.main().root();
+        for &tag in &path.0 {
+            current = current.find_child(tag)?;
+        }
+        Some(current)
     }
 
     /// Opens a new command scope.

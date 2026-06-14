@@ -85,6 +85,11 @@ inline std::unique_ptr<TDataStdNameHandle> tdatastd_name_find(const TdfLabel& la
     return nullptr;
 }
 
+// TDF_Label::ForgetAttribute(GUID) const — removes the Name attribute if
+// present. Returns false if it was not present. No exception path.
+inline bool tdatastd_name_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_Name::GetID()) == Standard_True;
+}
 // ── TDataStd_Integer ──────────────────────────────────────────────────────────
 
 struct TDataStdIntegerHandle {
@@ -119,6 +124,9 @@ inline std::unique_ptr<TDataStdIntegerHandle> tdatastd_integer_find(
         return result;
     }
     return nullptr;
+}
+inline bool tdatastd_integer_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_Integer::GetID()) == Standard_True;
 }
 
 // ── TDataStd_Real ─────────────────────────────────────────────────────────────
@@ -155,4 +163,7 @@ inline std::unique_ptr<TDataStdRealHandle> tdatastd_real_find(
         return result;
     }
     return nullptr;
+}
+inline bool tdatastd_real_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_Real::GetID()) == Standard_True;
 }

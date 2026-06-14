@@ -9,17 +9,21 @@
 //!
 //! [`OcDocument`]: crate::topo::OcDocument
 
+use std::fmt;
 use std::marker::PhantomData;
+use std::str::FromStr;
 
 use occt_sys::ffi;
+
+use crate::topo::document::Command;
 
 /// A non-owning reference to a node in a document's label tree.
 ///
 /// Wraps `TDF_Label`.  `'doc` is the lifetime of the [`OcDocument`] that
 /// owns the underlying `TDF_Data` tree; labels cannot outlive it.
 ///
-/// A null label (returned by [`find_child`] with `create = false` when the
-/// child is absent) has [`is_null()`] returning `true`.  Calling any
+/// A null label (returned by [`find_child`] when the child is absent) has
+/// [`is_null()`] returning `true`.  Calling any
 /// structural method on a null label is undefined at the OCCT level; always
 /// check [`is_null()`] when `create = false`.
 ///
@@ -43,10 +47,8 @@ impl OcLabel {
 
     /// Returns `true` when this label has no associated node.
     ///
-    /// A null label results from [`find_child`] with `create = false` when
-    /// the requested child does not exist.
-    ///
-    /// [`find_child`]: OcLabel::find_child
+    /// A null label results from [`find_child`](Self::find_child) when the
+    /// requested child does not exist.
     pub fn is_null(&self) -> bool {
         ffi::tdf_label_is_null(&self.inner)
     }
@@ -66,18 +68,26 @@ impl OcLabel {
         OcLabel::from_ffi(ffi::tdf_label_father(&self.inner))
     }
 
-    /// Finds or creates a direct child label with the given `tag`.
+    /// Finds a direct child label with the given `tag`.
     ///
-    /// `create = true` — creates the child if absent; result is never null.
-    /// `create = false` — returns `None` if no child with this tag exists.
-    pub fn find_child(&self, tag: i32, create: bool) -> Option<OcLabel> {
-        let inner = ffi::tdf_label_find_child(&self.inner, tag, create);
+    /// Returns `None` if no child with this tag exists. Never creates.
+    pub fn find_child(&self, tag: i32) -> Option<OcLabel> {
+        let inner = ffi::tdf_label_find_child(&self.inner, tag, false);
         let label = OcLabel::from_ffi(inner);
         if label.is_null() {
             None
         } else {
             Some(label)
         }
+    }
+
+    /// Finds or creates a direct child label with the given `tag`.
+    ///
+    /// Always succeeds. Label creation via `FindChild(tag, true)` is
+    /// captured by OCAF's Backup/Delta mechanism, so this requires an open
+    /// [`Command`].
+    pub fn get_or_create_child(&self, _cmd: &Command<'_>, tag: i32) -> OcLabel {
+        OcLabel::from_ffi(ffi::tdf_label_find_child(&self.inner, tag, true))
     }
 
     /// Returns `true` when at least one attribute is attached to this label.
@@ -107,6 +117,52 @@ impl OcLabel {
             _phantom: PhantomData,
             _not_send: PhantomData,
         }
+    }
+    /// The root label of the data framework (depth 0).
+    ///
+    /// Same shim pattern as [`father`](Self::father); no `Handle(TDF_Data)`
+    /// involved.
+    pub fn root(&self) -> OcLabel {
+        OcLabel::from_ffi(ffi::tdf_label_root(&self.inner))
+    }
+
+    /// Forgets all attributes on this label, and on every descendant if
+    /// `clear_children` is `true`.
+    ///
+    /// Captured by OCAF's Backup/Delta mechanism — requires an open
+    /// [`Command`].
+    pub fn forget_all_attributes(&self, _cmd: &Command<'_>, clear_children: bool) {
+        ffi::tdf_label_forget_all_attributes(&self.inner, clear_children);
+    }
+
+    /// This label's path from the document root, as a sequence of child tags.
+    ///
+    /// Pure Rust: walks [`father`](Self::father)/[`is_root`](Self::is_root)
+    /// up to (but not including) the framework root. [`LabelPath`]'s
+    /// `Display` produces the same colon-joined form as
+    /// [`entry`](Self::entry).
+    pub fn path(&self) -> LabelPath {
+        let mut tags = Vec::new();
+        let mut current = self.clone();
+        while !current.is_root() {
+            tags.push(current.tag());
+            current = current.father();
+        }
+        tags.reverse();
+        LabelPath(tags)
+    }
+    /// Resolves `path` relative to `self`, creating any missing descendant
+    /// labels along the way. Always succeeds.
+    ///
+    /// Requires an open [`Command`]. Obtain `self` (e.g. `doc.main().root()`)
+    /// before opening the command — see the borrow note on
+    /// [`get_or_create_child`](Self::get_or_create_child).
+    pub fn get_or_create_descendant(&self, cmd: &Command<'_>, path: &LabelPath) -> OcLabel {
+        let mut current = self.clone();
+        for &tag in &path.0 {
+            current = current.get_or_create_child(cmd, tag);
+        }
+        current
     }
 }
 
@@ -157,5 +213,58 @@ impl<'doc> Iterator for OcChildIterator<'doc> {
         // next() is non-const — advances the iterator.
         self.inner.pin_mut().next();
         Some(OcLabel::from_ffi(inner))
+    }
+}
+// ── LabelPath ───────────────────────────────────────────────────────────────
+
+/// A label's location as a sequence of child tags from the document root.
+///
+/// `Display` produces the colon-joined form `"1:2:3"`, matching
+/// [`OcLabel::entry`]. `FromStr` parses it back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelPath(pub Vec<i32>);
+
+impl fmt::Display for LabelPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut tags = self.0.iter();
+        if let Some(first) = tags.next() {
+            write!(f, "{first}")?;
+            for tag in tags {
+                write!(f, ":{tag}")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Error returned by [`LabelPath`]'s `FromStr` when a segment is not a valid `i32`.
+#[derive(Debug)]
+pub struct LabelPathParseError {
+    segment: String,
+}
+
+impl fmt::Display for LabelPathParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "label path: invalid tag segment {:?}", self.segment)
+    }
+}
+
+impl std::error::Error for LabelPathParseError {}
+
+impl FromStr for LabelPath {
+    type Err = LabelPathParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            return Ok(LabelPath(Vec::new()));
+        }
+        s.split(':')
+            .map(|seg| {
+                seg.parse::<i32>().map_err(|_| LabelPathParseError {
+                    segment: seg.to_string(),
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(LabelPath)
     }
 }
