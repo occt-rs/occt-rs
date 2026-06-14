@@ -1,5 +1,5 @@
 //! Standard TDF attributes: scalars (Name, Integer, Real, Comment,
-//! AsciiString) and list attributes (ReferenceList).
+//! AsciiString) and list/array attributes (ReferenceList, ReferenceArray).
 //!
 //! Each type wraps a `Handle(TDataStd_*)` shim.  The operations per type are:
 //!
@@ -412,6 +412,123 @@ impl std::fmt::Debug for OcReferenceList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OcReferenceList")
             .field("extent", &self.extent())
+            .finish()
+    }
+}
+
+// ── OcReferenceArray ──────────────────────────────────────────────────────────
+
+/// A `TDataStd_ReferenceArray` attribute handle — a fixed-length array of
+/// label references attached to a label.
+///
+/// Indices are 0-based; internally this always calls
+/// `TDataStd_ReferenceArray::Set` with bounds `[0, len-1]`, normalizing
+/// OCCT's caller-chosen bounds to Rust's slice/Vec convention. Unlike
+/// [`OcReferenceList`], [`value`](OcReferenceArray::value)/
+/// [`set_value`](OcReferenceArray::set_value) are O(1) direct array access.
+///
+/// Elements are null labels until explicitly set via
+/// [`set_value`](OcReferenceArray::set_value).
+///
+/// `len` must be >= 1. OCCT's underlying TColStd_Array1 storage requires
+/// Lower <= Upper, so `Set(label, 0, -1)` (the `len == 0` case) raises
+/// Standard_RangeError from `Init`; [`set`](Self::set) propagates this as
+/// `Err`. For possibly-empty collections, use [`OcReferenceList`] instead.
+pub struct OcReferenceArray {
+    inner: cxx::UniquePtr<ffi::TDataStdReferenceArrayHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcReferenceArray {
+    /// Finds, or creates, a `TDataStd_ReferenceArray` attribute on `label`
+    /// with `len` elements (0-based indices `0..len`).
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: i32) -> Result<Self, OcctError> {
+        let inner = ffi::tdatastd_referencearray_set(&label.inner, len).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataStd_ReferenceArray` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    /// No command scope required for read-only access.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdatastd_referencearray_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataStd_ReferenceArray` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_referencearray_forget(&label.inner)
+    }
+
+    /// Number of elements in this array (the `len` passed to [`set`](Self::set)).
+    pub fn len(&self) -> i32 {
+        ffi::tdatastd_referencearray_length(&self.inner)
+    }
+
+    /// Returns `true` if this array has zero elements.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns the label at `index` (0-based).
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `index` is outside `[0, len()-1]`.
+    pub fn value(&self, index: i32) -> Result<OcLabel, OcctError> {
+        let inner =
+            ffi::tdatastd_referencearray_value(&self.inner, index).map_err(OcctError::from)?;
+        Ok(OcLabel::from_ffi(inner))
+    }
+
+    /// Sets the label at `index` (0-based).
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if `index` is outside `[0, len()-1]`.
+    pub fn set_value(
+        &self,
+        _cmd: &Command<'_>,
+        index: i32,
+        value: &OcLabel,
+    ) -> Result<(), OcctError> {
+        ffi::tdatastd_referencearray_set_value(&self.inner, index, &value.inner)
+            .map_err(OcctError::from)
+    }
+
+    /// Collects all elements into a `Vec`, in index order.
+    pub fn to_vec(&self) -> Vec<OcLabel> {
+        (0..self.len())
+            .map(|i| {
+                self.value(i)
+                    .expect("index in [0, len()) is in bounds by construction")
+            })
+            .collect()
+    }
+}
+
+impl std::fmt::Debug for OcReferenceArray {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcReferenceArray")
+            .field("len", &self.len())
             .finish()
     }
 }
@@ -889,5 +1006,126 @@ mod tests {
         doc.undo().unwrap();
         assert_eq!(list.extent(), 1);
         assert_eq!(list.at(0).tag(), a_tag);
+    }
+    // ── OcReferenceArray ─────────────────────────────────────────────────────
+
+    #[test]
+    fn referencearray_set_creates_with_length() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            let arr = OcReferenceArray::set(&cmd, &label, 3).unwrap();
+            assert_eq!(arr.len(), 3);
+            cmd.commit().unwrap();
+        }
+        let found = OcReferenceArray::find(&label).expect("reference array should be present");
+        assert_eq!(found.len(), 3);
+    }
+
+    #[test]
+    fn referencearray_find_absent_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(OcReferenceArray::find(&label).is_none());
+    }
+
+    #[test]
+    fn referencearray_forget_removes_attribute() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcReferenceArray::set(&cmd, &label, 2).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcReferenceArray::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcReferenceArray::find(&label).is_none());
+    }
+
+    #[test]
+    fn referencearray_set_value_and_value_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        let tags;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let arr_label = main.get_or_create_child(&cmd, 1);
+            let a = main.get_or_create_child(&cmd, 2);
+            let b = main.get_or_create_child(&cmd, 3);
+            tags = vec![a.tag(), b.tag()];
+            arr = OcReferenceArray::set(&cmd, &arr_label, 2).unwrap();
+            arr.set_value(&cmd, 0, &a).unwrap();
+            arr.set_value(&cmd, 1, &b).unwrap();
+            cmd.commit().unwrap();
+        }
+        let got: Vec<i32> = arr.to_vec().iter().map(|l| l.tag()).collect();
+        assert_eq!(got, tags);
+    }
+
+    #[test]
+    fn referencearray_value_out_of_range_errors() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcReferenceArray::set(&cmd, &label, 2).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert!(arr.value(2).is_err());
+        assert!(arr.value(-1).is_err());
+    }
+
+    #[test]
+    fn referencearray_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let arr;
+        let a_tag;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let arr_label = main.get_or_create_child(&cmd, 1);
+            let a = main.get_or_create_child(&cmd, 2);
+            a_tag = a.tag();
+            arr = OcReferenceArray::set(&cmd, &arr_label, 1).unwrap();
+            arr.set_value(&cmd, 0, &a).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let b = main.get_or_create_child(&cmd, 3);
+            arr.set_value(&cmd, 0, &b).unwrap();
+            cmd.commit().unwrap();
+        }
+        doc.undo().unwrap();
+        assert_eq!(arr.value(0).unwrap().tag(), a_tag);
+    }
+
+    #[test]
+    fn referencearray_zero_length_is_err() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        // TColStd_Array1 requires Lower <= Upper; len == 0 -> Set(label, 0, -1)
+        // raises Standard_RangeError from Init. Use OcReferenceList for
+        // possibly-empty collections.
+        assert!(OcReferenceArray::set(&cmd, &label, 0).is_err());
+        cmd.abort().unwrap();
     }
 }

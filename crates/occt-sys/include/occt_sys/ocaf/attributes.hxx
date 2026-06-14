@@ -32,6 +32,7 @@
 #include <TDataStd_Comment.hxx>
 #include <TDataStd_Real.hxx>
 #include <TDataStd_ReferenceList.hxx>
+#include <TDataStd_ReferenceArray.hxx>
 #include <TDF_Label.hxx>
 #include <TDF_LabelList.hxx>
 
@@ -265,6 +266,74 @@ inline void tdatastd_referencelist_append(
     const TDataStdReferenceListHandle& h, const TdfLabel& value)
 {
     h.inner->Append(value.inner);
+}
+
+// ── TDataStd_ReferenceArray ───────────────────────────────────────────────────
+
+struct TDataStdReferenceArrayHandle {
+    Handle(TDataStd_ReferenceArray) inner;
+};
+
+// TDataStd_ReferenceArray::Set(L, lower, upper) — static.
+// Finds, or creates, a reference array attribute on L with 0-based bounds
+// [0, len-1]. Elements are default-initialized (null labels) until
+// set_value is called. Must be called inside an open command scope.
+inline std::unique_ptr<TDataStdReferenceArrayHandle> tdatastd_referencearray_set(
+    const TdfLabel& label, Standard_Integer len)
+{
+    try {
+        auto result = std::make_unique<TDataStdReferenceArrayHandle>();
+        result->inner = TDataStd_ReferenceArray::Set(label.inner, 0, len - 1);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// Find TDataStd_ReferenceArray on a label. Returns nullptr if not present.
+inline std::unique_ptr<TDataStdReferenceArrayHandle> tdatastd_referencearray_find(const TdfLabel& label) {
+    Handle(TDataStd_ReferenceArray) attr;
+    if (label.inner.FindAttribute(TDataStd_ReferenceArray::GetID(), attr)) {
+        auto result = std::make_unique<TDataStdReferenceArrayHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+
+// TDF_Label::ForgetAttribute(GUID) const — removes the ReferenceArray
+// attribute if present. Returns false if it was not present. No exception path.
+inline bool tdatastd_referencearray_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_ReferenceArray::GetID()) == Standard_True;
+}
+
+// TDataStd_ReferenceArray::Length() const — number of elements (== len passed to set).
+inline Standard_Integer tdatastd_referencearray_length(const TDataStdReferenceArrayHandle& h) {
+    return h.inner->Length();
+}
+
+// TDataStd_ReferenceArray::Value(index) const — 0-based (Set always called
+// with lower=0). Raises OutOfRange if index is outside [0, Length()-1].
+inline std::unique_ptr<TdfLabel> tdatastd_referencearray_value(
+    const TDataStdReferenceArrayHandle& h, Standard_Integer index)
+{
+    try {
+        return std::make_unique<TdfLabel>(TdfLabel{h.inner->Value(index)});
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// TDataStd_ReferenceArray::SetValue(index, value) — 0-based. Raises
+// OutOfRange if index is outside [0, Length()-1]. Non-const on the
+// attribute, but callable through a const handle reference (see
+// Handle::operator-> note in bound_api_reference.md).
+// Must be called inside an open command scope.
+inline void tdatastd_referencearray_set_value(
+    const TDataStdReferenceArrayHandle& h, Standard_Integer index, const TdfLabel& value)
+{
+    try {
+        h.inner->SetValue(index, value.inner);
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
 }
 
 // ── TDataStd_Integer ──────────────────────────────────────────────────────────

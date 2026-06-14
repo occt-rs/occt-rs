@@ -175,6 +175,41 @@ pub mod ffi {
         // reference (see shim comment). Must be called inside an open command scope.
         fn tdatastd_referencelist_append(h: &TDataStdReferenceListHandle, value: &TdfLabel);
 
+        // ── TDataStdReferenceArrayHandle ─────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_ReferenceArray) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___reference_array.html
+        type TDataStdReferenceArrayHandle;
+
+        // Set: static on TDataStd_ReferenceArray; finds or creates a reference array
+        // attribute on label with 0-based bounds [0, len-1]. Elements are
+        // default-initialized (null labels) until set_value is called. Must be
+        // called inside an open command scope.
+        fn tdatastd_referencearray_set(
+            label: &TdfLabel,
+            len: i32,
+        ) -> Result<UniquePtr<TDataStdReferenceArrayHandle>>;
+        // Find: returns nullptr (None on Rust side) when attribute is absent.
+        fn tdatastd_referencearray_find(
+            label: &TdfLabel,
+        ) -> UniquePtr<TDataStdReferenceArrayHandle>;
+        // ForgetAttribute(GUID) const — true if present and removed.
+        fn tdatastd_referencearray_forget(label: &TdfLabel) -> bool;
+        // Length: const — number of elements (== len passed to set).
+        fn tdatastd_referencearray_length(h: &TDataStdReferenceArrayHandle) -> i32;
+        // Value: 0-based. Raises OutOfRange (-> Err) if index is outside [0, length-1].
+        fn tdatastd_referencearray_value(
+            h: &TDataStdReferenceArrayHandle,
+            index: i32,
+        ) -> Result<UniquePtr<TdfLabel>>;
+        // SetValue: 0-based. Raises OutOfRange (-> Err) if index is outside [0, length-1].
+        // Must be called inside an open command scope.
+        fn tdatastd_referencearray_set_value(
+            h: &TDataStdReferenceArrayHandle,
+            index: i32,
+            value: &TdfLabel,
+        ) -> Result<()>;
+
         // ── TdfLabel ──────────────────────────────────────────────────────────────
         // Shim holding TDF_Label by value.  TDF_Label is a non-owning reference
         // into a TDF_Data tree; the Rust wrapper carries a lifetime parameter
