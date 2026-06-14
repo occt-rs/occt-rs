@@ -175,6 +175,75 @@ pub mod ffi {
         // reference (see shim comment). Must be called inside an open command scope.
         fn tdatastd_referencelist_append(h: &TDataStdReferenceListHandle, value: &TdfLabel);
 
+        // ── TDataStdIntegerListHandle ─────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_IntegerList) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___integer_list.html
+        type TDataStdIntegerListHandle;
+
+        fn tdatastd_integerlist_set(
+            label: &TdfLabel,
+        ) -> Result<UniquePtr<TDataStdIntegerListHandle>>;
+        fn tdatastd_integerlist_find(label: &TdfLabel) -> UniquePtr<TDataStdIntegerListHandle>;
+        fn tdatastd_integerlist_forget(label: &TdfLabel) -> bool;
+        fn tdatastd_integerlist_extent(h: &TDataStdIntegerListHandle) -> i32;
+        fn tdatastd_integerlist_is_empty(h: &TDataStdIntegerListHandle) -> bool;
+        // At: 0-based walk-and-advance. Caller must ensure 0 <= index < extent.
+        fn tdatastd_integerlist_at(h: &TDataStdIntegerListHandle, index: i32) -> i32;
+        fn tdatastd_integerlist_append(h: &TDataStdIntegerListHandle, value: i32);
+
+        // ── TDataStdRealListHandle ────────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_RealList) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___real_list.html
+        type TDataStdRealListHandle;
+
+        fn tdatastd_reallist_set(label: &TdfLabel) -> Result<UniquePtr<TDataStdRealListHandle>>;
+        fn tdatastd_reallist_find(label: &TdfLabel) -> UniquePtr<TDataStdRealListHandle>;
+        fn tdatastd_reallist_forget(label: &TdfLabel) -> bool;
+        fn tdatastd_reallist_extent(h: &TDataStdRealListHandle) -> i32;
+        fn tdatastd_reallist_is_empty(h: &TDataStdRealListHandle) -> bool;
+        // At: 0-based walk-and-advance. Caller must ensure 0 <= index < extent.
+        fn tdatastd_reallist_at(h: &TDataStdRealListHandle, index: i32) -> f64;
+        fn tdatastd_reallist_append(h: &TDataStdRealListHandle, value: f64);
+
+        // ── TDataStdExtStringListHandle ───────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_ExtStringList) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___ext_string_list.html
+        type TDataStdExtStringListHandle;
+
+        fn tdatastd_extstringlist_set(
+            label: &TdfLabel,
+        ) -> Result<UniquePtr<TDataStdExtStringListHandle>>;
+        fn tdatastd_extstringlist_find(label: &TdfLabel) -> UniquePtr<TDataStdExtStringListHandle>;
+        fn tdatastd_extstringlist_forget(label: &TdfLabel) -> bool;
+        fn tdatastd_extstringlist_extent(h: &TDataStdExtStringListHandle) -> i32;
+        fn tdatastd_extstringlist_is_empty(h: &TDataStdExtStringListHandle) -> bool;
+        // At: 0-based walk-and-advance, UTF-8 per element (same conversion as
+        // tdatastd_name_get). Caller must ensure 0 <= index < extent.
+        fn tdatastd_extstringlist_at(h: &TDataStdExtStringListHandle, index: i32) -> String;
+        // Append: isMultiByte=true UTF-8 decode, same as tdatastd_name_set, per element.
+        fn tdatastd_extstringlist_append(h: &TDataStdExtStringListHandle, value: &str);
+
+        // ── TDataStdBooleanListHandle ─────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_BooleanList) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___boolean_list.html
+        type TDataStdBooleanListHandle;
+
+        fn tdatastd_booleanlist_set(
+            label: &TdfLabel,
+        ) -> Result<UniquePtr<TDataStdBooleanListHandle>>;
+        fn tdatastd_booleanlist_find(label: &TdfLabel) -> UniquePtr<TDataStdBooleanListHandle>;
+        fn tdatastd_booleanlist_forget(label: &TdfLabel) -> bool;
+        fn tdatastd_booleanlist_extent(h: &TDataStdBooleanListHandle) -> i32;
+        fn tdatastd_booleanlist_is_empty(h: &TDataStdBooleanListHandle) -> bool;
+        // At: 0-based walk-and-advance over underlying ListOfByte (1=true/0=false).
+        // Caller must ensure 0 <= index < extent.
+        fn tdatastd_booleanlist_at(h: &TDataStdBooleanListHandle, index: i32) -> bool;
+        fn tdatastd_booleanlist_append(h: &TDataStdBooleanListHandle, value: bool);
+
         // ── TDataStdReferenceArrayHandle ─────────────────────────────────────────────
         // Shim holding Handle(TDataStd_ReferenceArray) by value.
         //

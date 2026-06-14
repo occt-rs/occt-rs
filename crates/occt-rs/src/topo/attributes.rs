@@ -1,6 +1,7 @@
 //! Standard TDF attributes: scalars (Name, Integer, Real, Comment,
 //! AsciiString) and list/array attributes (ReferenceList, ReferenceArray,
-//! RealArray, IntegerArray, BooleanArray, ByteArray, ExtStringArray).
+//! RealArray, IntegerArray, BooleanArray, ByteArray, ExtStringArray,
+//! IntegerList, RealList, ExtStringList, BooleanList).
 //!
 //! Each type wraps a `Handle(TDataStd_*)` shim.  The operations per type are:
 //!
@@ -412,6 +413,377 @@ impl OcReferenceList {
 impl std::fmt::Debug for OcReferenceList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OcReferenceList")
+            .field("extent", &self.extent())
+            .finish()
+    }
+}
+
+// ── OcIntegerList ────────────────────────────────────────────────────────────
+
+/// A `TDataStd_IntegerList` attribute handle — an ordered list of `i32`
+/// values attached to a label.
+///
+/// Same shape as [`OcReferenceList`]: [`set`](Self::set) finds-or-creates an
+/// *empty* list; populate via [`append`](Self::append). Indices are 0-based
+/// and resolved by walking the underlying OCCT list on each
+/// [`at`](Self::at)/[`to_vec`](Self::to_vec) call — O(n) per access, fine
+/// for small lists.
+pub struct OcIntegerList {
+    inner: cxx::UniquePtr<ffi::TDataStdIntegerListHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcIntegerList {
+    /// Finds, or creates, an empty `TDataStd_IntegerList` attribute on `label`.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+        let inner = ffi::tdatastd_integerlist_set(&label.inner).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataStd_IntegerList` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    /// No command scope required for read-only access.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdatastd_integerlist_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataStd_IntegerList` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_integerlist_forget(&label.inner)
+    }
+
+    /// Number of elements in this list.
+    pub fn extent(&self) -> i32 {
+        ffi::tdatastd_integerlist_extent(&self.inner)
+    }
+
+    /// Returns `true` if this list contains no elements.
+    pub fn is_empty(&self) -> bool {
+        ffi::tdatastd_integerlist_is_empty(&self.inner)
+    }
+
+    /// Returns the element at `index` (0-based).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index` is out of bounds (`>= extent()`).
+    pub fn at(&self, index: i32) -> i32 {
+        assert!(index >= 0 && index < self.extent(), "index out of bounds");
+        ffi::tdatastd_integerlist_at(&self.inner, index)
+    }
+
+    /// Appends `value` to the end of this list.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn append(&self, _cmd: &Command<'_>, value: i32) {
+        ffi::tdatastd_integerlist_append(&self.inner, value);
+    }
+
+    /// Collects all elements into a `Vec`, in order.
+    pub fn to_vec(&self) -> Vec<i32> {
+        (0..self.extent()).map(|i| self.at(i)).collect()
+    }
+}
+
+impl std::fmt::Debug for OcIntegerList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcIntegerList")
+            .field("extent", &self.extent())
+            .finish()
+    }
+}
+
+// ── OcRealList ───────────────────────────────────────────────────────────────
+
+/// A `TDataStd_RealList` attribute handle — an ordered list of `f64` values
+/// attached to a label.
+///
+/// Same shape as [`OcIntegerList`]/[`OcReferenceList`]: [`set`](Self::set)
+/// finds-or-creates an *empty* list; populate via [`append`](Self::append).
+/// Indices are 0-based, O(n) per [`at`](Self::at)/[`to_vec`](Self::to_vec) call.
+pub struct OcRealList {
+    inner: cxx::UniquePtr<ffi::TDataStdRealListHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcRealList {
+    /// Finds, or creates, an empty `TDataStd_RealList` attribute on `label`.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+        let inner = ffi::tdatastd_reallist_set(&label.inner).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataStd_RealList` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    /// No command scope required for read-only access.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdatastd_reallist_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataStd_RealList` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_reallist_forget(&label.inner)
+    }
+
+    /// Number of elements in this list.
+    pub fn extent(&self) -> i32 {
+        ffi::tdatastd_reallist_extent(&self.inner)
+    }
+
+    /// Returns `true` if this list contains no elements.
+    pub fn is_empty(&self) -> bool {
+        ffi::tdatastd_reallist_is_empty(&self.inner)
+    }
+
+    /// Returns the element at `index` (0-based).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index` is out of bounds (`>= extent()`).
+    pub fn at(&self, index: i32) -> f64 {
+        assert!(index >= 0 && index < self.extent(), "index out of bounds");
+        ffi::tdatastd_reallist_at(&self.inner, index)
+    }
+
+    /// Appends `value` to the end of this list.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn append(&self, _cmd: &Command<'_>, value: f64) {
+        ffi::tdatastd_reallist_append(&self.inner, value);
+    }
+
+    /// Collects all elements into a `Vec`, in order.
+    pub fn to_vec(&self) -> Vec<f64> {
+        (0..self.extent()).map(|i| self.at(i)).collect()
+    }
+}
+
+impl std::fmt::Debug for OcRealList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcRealList")
+            .field("extent", &self.extent())
+            .finish()
+    }
+}
+
+// ── OcExtStringList ──────────────────────────────────────────────────────────
+
+/// A `TDataStd_ExtStringList` attribute handle — an ordered list of UTF-8
+/// strings attached to a label.
+///
+/// Same shape as [`OcIntegerList`]/[`OcReferenceList`]: [`set`](Self::set)
+/// finds-or-creates an *empty* list; populate via [`append`](Self::append).
+/// Indices are 0-based, O(n) per [`at`](Self::at)/[`to_vec`](Self::to_vec) call.
+///
+/// Each element undergoes the same UTF-8 <-> `TCollection_ExtendedString`
+/// conversion as [`OcName`]/[`OcComment`]/[`OcExtStringArray`]
+/// (`isMultiByte = Standard_True`), applied per element.
+pub struct OcExtStringList {
+    inner: cxx::UniquePtr<ffi::TDataStdExtStringListHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcExtStringList {
+    /// Finds, or creates, an empty `TDataStd_ExtStringList` attribute on `label`.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+        let inner = ffi::tdatastd_extstringlist_set(&label.inner).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataStd_ExtStringList` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    /// No command scope required for read-only access.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdatastd_extstringlist_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataStd_ExtStringList` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_extstringlist_forget(&label.inner)
+    }
+
+    /// Number of elements in this list.
+    pub fn extent(&self) -> i32 {
+        ffi::tdatastd_extstringlist_extent(&self.inner)
+    }
+
+    /// Returns `true` if this list contains no elements.
+    pub fn is_empty(&self) -> bool {
+        ffi::tdatastd_extstringlist_is_empty(&self.inner)
+    }
+
+    /// Returns the element at `index` (0-based).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index` is out of bounds (`>= extent()`).
+    pub fn at(&self, index: i32) -> String {
+        assert!(index >= 0 && index < self.extent(), "index out of bounds");
+        ffi::tdatastd_extstringlist_at(&self.inner, index)
+    }
+
+    /// Appends `value` to the end of this list.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn append(&self, _cmd: &Command<'_>, value: &str) {
+        ffi::tdatastd_extstringlist_append(&self.inner, value);
+    }
+
+    /// Collects all elements into a `Vec`, in order.
+    pub fn to_vec(&self) -> Vec<String> {
+        (0..self.extent()).map(|i| self.at(i)).collect()
+    }
+}
+
+impl std::fmt::Debug for OcExtStringList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcExtStringList")
+            .field("extent", &self.extent())
+            .finish()
+    }
+}
+
+// ── OcBooleanList ────────────────────────────────────────────────────────────
+
+/// A `TDataStd_BooleanList` attribute handle — an ordered list of `bool`
+/// values attached to a label.
+///
+/// Same shape as [`OcIntegerList`]/[`OcReferenceList`]: [`set`](Self::set)
+/// finds-or-creates an *empty* list; populate via [`append`](Self::append).
+/// Indices are 0-based, O(n) per [`at`](Self::at)/[`to_vec`](Self::to_vec) call.
+///
+/// Underlying storage is `TDataStd_ListOfByte` (1=true/0=false per OCCT's
+/// documented convention) — converted to/from `bool` transparently. Unlike
+/// [`OcBooleanArray`], this is a representation detail only, not a
+/// bounds-safety concern: `NCollection_List<Standard_Byte>` has no packing.
+pub struct OcBooleanList {
+    inner: cxx::UniquePtr<ffi::TDataStdBooleanListHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcBooleanList {
+    /// Finds, or creates, an empty `TDataStd_BooleanList` attribute on `label`.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+        let inner = ffi::tdatastd_booleanlist_set(&label.inner).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataStd_BooleanList` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    /// No command scope required for read-only access.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdatastd_booleanlist_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataStd_BooleanList` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_booleanlist_forget(&label.inner)
+    }
+
+    /// Number of elements in this list.
+    pub fn extent(&self) -> i32 {
+        ffi::tdatastd_booleanlist_extent(&self.inner)
+    }
+
+    /// Returns `true` if this list contains no elements.
+    pub fn is_empty(&self) -> bool {
+        ffi::tdatastd_booleanlist_is_empty(&self.inner)
+    }
+
+    /// Returns the element at `index` (0-based).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index` is out of bounds (`>= extent()`).
+    pub fn at(&self, index: i32) -> bool {
+        assert!(index >= 0 && index < self.extent(), "index out of bounds");
+        ffi::tdatastd_booleanlist_at(&self.inner, index)
+    }
+
+    /// Appends `value` to the end of this list.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn append(&self, _cmd: &Command<'_>, value: bool) {
+        ffi::tdatastd_booleanlist_append(&self.inner, value);
+    }
+
+    /// Collects all elements into a `Vec`, in order.
+    pub fn to_vec(&self) -> Vec<bool> {
+        (0..self.extent()).map(|i| self.at(i)).collect()
+    }
+}
+
+impl std::fmt::Debug for OcBooleanList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcBooleanList")
             .field("extent", &self.extent())
             .finish()
     }
@@ -2268,5 +2640,370 @@ mod tests {
         let label = main.get_or_create_child(&cmd, 1);
         assert!(OcExtStringArray::set(&cmd, &label, 0).is_err());
         cmd.abort().unwrap();
+    }
+    // ── OcIntegerList ────────────────────────────────────────────────────────
+
+    #[test]
+    fn integerlist_set_creates_empty_and_is_findable() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            let list = OcIntegerList::set(&cmd, &label).unwrap();
+            assert!(list.is_empty());
+            assert_eq!(list.extent(), 0);
+            cmd.commit().unwrap();
+        }
+        let found = OcIntegerList::find(&label).expect("integer list should be present");
+        assert!(found.is_empty());
+    }
+
+    #[test]
+    fn integerlist_find_absent_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(OcIntegerList::find(&label).is_none());
+    }
+
+    #[test]
+    fn integerlist_forget_removes_attribute() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcIntegerList::set(&cmd, &label).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcIntegerList::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcIntegerList::find(&label).is_none());
+    }
+
+    #[test]
+    fn integerlist_append_preserves_order() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            list = OcIntegerList::set(&cmd, &label).unwrap();
+            list.append(&cmd, 1);
+            list.append(&cmd, 2);
+            list.append(&cmd, 3);
+            cmd.commit().unwrap();
+        }
+        assert_eq!(list.to_vec(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn integerlist_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            list = OcIntegerList::set(&cmd, &label).unwrap();
+            list.append(&cmd, 1);
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            list.append(&cmd, 2);
+            cmd.commit().unwrap();
+        }
+        assert_eq!(list.extent(), 2);
+        doc.undo().unwrap();
+        assert_eq!(list.to_vec(), vec![1]);
+    }
+
+    // ── OcRealList ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn reallist_set_creates_empty_and_is_findable() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            let list = OcRealList::set(&cmd, &label).unwrap();
+            assert!(list.is_empty());
+            assert_eq!(list.extent(), 0);
+            cmd.commit().unwrap();
+        }
+        let found = OcRealList::find(&label).expect("real list should be present");
+        assert!(found.is_empty());
+    }
+
+    #[test]
+    fn reallist_find_absent_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(OcRealList::find(&label).is_none());
+    }
+
+    #[test]
+    fn reallist_forget_removes_attribute() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcRealList::set(&cmd, &label).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcRealList::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcRealList::find(&label).is_none());
+    }
+
+    #[test]
+    fn reallist_append_preserves_order() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            list = OcRealList::set(&cmd, &label).unwrap();
+            list.append(&cmd, 1.5);
+            list.append(&cmd, -2.25);
+            cmd.commit().unwrap();
+        }
+        let got = list.to_vec();
+        assert!((got[0] - 1.5).abs() < 1e-12);
+        assert!((got[1] - (-2.25)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn reallist_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            list = OcRealList::set(&cmd, &label).unwrap();
+            list.append(&cmd, 1.0);
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            list.append(&cmd, 2.0);
+            cmd.commit().unwrap();
+        }
+        assert_eq!(list.extent(), 2);
+        doc.undo().unwrap();
+        assert_eq!(list.extent(), 1);
+    }
+
+    // ── OcExtStringList ──────────────────────────────────────────────────────
+
+    #[test]
+    fn extstringlist_set_creates_empty_and_is_findable() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            let list = OcExtStringList::set(&cmd, &label).unwrap();
+            assert!(list.is_empty());
+            assert_eq!(list.extent(), 0);
+            cmd.commit().unwrap();
+        }
+        let found = OcExtStringList::find(&label).expect("ext string list should be present");
+        assert!(found.is_empty());
+    }
+
+    #[test]
+    fn extstringlist_find_absent_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(OcExtStringList::find(&label).is_none());
+    }
+
+    #[test]
+    fn extstringlist_forget_removes_attribute() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcExtStringList::set(&cmd, &label).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcExtStringList::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcExtStringList::find(&label).is_none());
+    }
+
+    #[test]
+    fn extstringlist_append_preserves_order() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            list = OcExtStringList::set(&cmd, &label).unwrap();
+            list.append(&cmd, "first");
+            list.append(&cmd, "second");
+            cmd.commit().unwrap();
+        }
+        assert_eq!(
+            list.to_vec(),
+            vec!["first".to_string(), "second".to_string()]
+        );
+    }
+
+    #[test]
+    fn extstringlist_unicode_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            list = OcExtStringList::set(&cmd, &label).unwrap();
+            list.append(&cmd, "café 😀");
+            cmd.commit().unwrap();
+        }
+        assert_eq!(list.at(0), "café 😀");
+    }
+
+    #[test]
+    fn extstringlist_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            list = OcExtStringList::set(&cmd, &label).unwrap();
+            list.append(&cmd, "before");
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            list.append(&cmd, "after");
+            cmd.commit().unwrap();
+        }
+        assert_eq!(list.extent(), 2);
+        doc.undo().unwrap();
+        assert_eq!(list.to_vec(), vec!["before".to_string()]);
+    }
+
+    // ── OcBooleanList ────────────────────────────────────────────────────────
+
+    #[test]
+    fn booleanlist_set_creates_empty_and_is_findable() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            let list = OcBooleanList::set(&cmd, &label).unwrap();
+            assert!(list.is_empty());
+            assert_eq!(list.extent(), 0);
+            cmd.commit().unwrap();
+        }
+        let found = OcBooleanList::find(&label).expect("boolean list should be present");
+        assert!(found.is_empty());
+    }
+
+    #[test]
+    fn booleanlist_find_absent_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(OcBooleanList::find(&label).is_none());
+    }
+
+    #[test]
+    fn booleanlist_forget_removes_attribute() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcBooleanList::set(&cmd, &label).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcBooleanList::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcBooleanList::find(&label).is_none());
+    }
+
+    #[test]
+    fn booleanlist_append_preserves_order() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            list = OcBooleanList::set(&cmd, &label).unwrap();
+            list.append(&cmd, true);
+            list.append(&cmd, false);
+            list.append(&cmd, true);
+            cmd.commit().unwrap();
+        }
+        assert_eq!(list.to_vec(), vec![true, false, true]);
+    }
+
+    #[test]
+    fn booleanlist_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            list = OcBooleanList::set(&cmd, &label).unwrap();
+            list.append(&cmd, true);
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            list.append(&cmd, false);
+            cmd.commit().unwrap();
+        }
+        assert_eq!(list.extent(), 2);
+        doc.undo().unwrap();
+        assert_eq!(list.to_vec(), vec![true]);
     }
 }

@@ -38,6 +38,14 @@
 #include <TDataStd_BooleanArray.hxx>
 #include <TDataStd_ByteArray.hxx>
 #include <TDataStd_ExtStringArray.hxx>
+#include <TDataStd_IntegerList.hxx>
+#include <TDataStd_RealList.hxx>
+#include <TDataStd_ExtStringList.hxx>
+#include <TDataStd_BooleanList.hxx>
+#include <TColStd_ListOfInteger.hxx>
+#include <TColStd_ListOfReal.hxx>
+#include <TDataStd_ListOfExtendedString.hxx>
+#include <TDataStd_ListOfByte.hxx>
 #include <TDF_Label.hxx>
 #include <TDF_LabelList.hxx>
 
@@ -688,6 +696,274 @@ inline void tdatastd_extstringarray_set_value(
         h.inner->SetValue(index, ext);
     } catch (const std::runtime_error&) { throw; }
     catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// ── TDataStd_IntegerList ──────────────────────────────────────────────────────
+
+struct TDataStdIntegerListHandle {
+    Handle(TDataStd_IntegerList) inner;
+};
+
+// TDataStd_IntegerList::Set(L) — static.
+// Finds, or creates, an empty list-of-integers attribute on L.
+// Must be called inside an open command scope.
+inline std::unique_ptr<TDataStdIntegerListHandle> tdatastd_integerlist_set(const TdfLabel& label)
+{
+    try {
+        auto result = std::make_unique<TDataStdIntegerListHandle>();
+        result->inner = TDataStd_IntegerList::Set(label.inner);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// Find TDataStd_IntegerList on a label. Returns nullptr if not present.
+inline std::unique_ptr<TDataStdIntegerListHandle> tdatastd_integerlist_find(const TdfLabel& label) {
+    Handle(TDataStd_IntegerList) attr;
+    if (label.inner.FindAttribute(TDataStd_IntegerList::GetID(), attr)) {
+        auto result = std::make_unique<TDataStdIntegerListHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+
+// TDF_Label::ForgetAttribute(GUID) const — removes the IntegerList attribute
+// if present. Returns false if it was not present. No exception path.
+inline bool tdatastd_integerlist_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_IntegerList::GetID()) == Standard_True;
+}
+
+// TDataStd_IntegerList::Extent() const — number of elements.
+inline Standard_Integer tdatastd_integerlist_extent(const TDataStdIntegerListHandle& h) {
+    return h.inner->Extent();
+}
+
+// TDataStd_IntegerList::IsEmpty() const.
+inline bool tdatastd_integerlist_is_empty(const TDataStdIntegerListHandle& h) {
+    return h.inner->IsEmpty() == Standard_True;
+}
+
+// TDataStd_IntegerList::List() const, 0-based walk-and-advance — same pattern
+// as TDataStd_ReferenceList::List(). Caller must ensure 0 <= index < Extent().
+inline Standard_Integer tdatastd_integerlist_at(
+    const TDataStdIntegerListHandle& h, Standard_Integer index)
+{
+    const TColStd_ListOfInteger& lst = h.inner->List();
+    auto it = lst.begin();
+    std::advance(it, static_cast<std::ptrdiff_t>(index));
+    return *it;
+}
+
+// TDataStd_IntegerList::Append(value) — non-const on the attribute, but
+// callable through a const handle reference (see Handle::operator-> note in
+// bound_api_reference.md). Must be called inside an open command scope.
+inline void tdatastd_integerlist_append(const TDataStdIntegerListHandle& h, Standard_Integer value) {
+    h.inner->Append(value);
+}
+
+// ── TDataStd_RealList ─────────────────────────────────────────────────────────
+
+struct TDataStdRealListHandle {
+    Handle(TDataStd_RealList) inner;
+};
+
+// TDataStd_RealList::Set(L) — static.
+// Finds, or creates, an empty list-of-reals attribute on L.
+// Must be called inside an open command scope.
+inline std::unique_ptr<TDataStdRealListHandle> tdatastd_reallist_set(const TdfLabel& label)
+{
+    try {
+        auto result = std::make_unique<TDataStdRealListHandle>();
+        result->inner = TDataStd_RealList::Set(label.inner);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// Find TDataStd_RealList on a label. Returns nullptr if not present.
+inline std::unique_ptr<TDataStdRealListHandle> tdatastd_reallist_find(const TdfLabel& label) {
+    Handle(TDataStd_RealList) attr;
+    if (label.inner.FindAttribute(TDataStd_RealList::GetID(), attr)) {
+        auto result = std::make_unique<TDataStdRealListHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+
+// TDF_Label::ForgetAttribute(GUID) const — removes the RealList attribute
+// if present. Returns false if it was not present. No exception path.
+inline bool tdatastd_reallist_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_RealList::GetID()) == Standard_True;
+}
+
+// TDataStd_RealList::Extent() const — number of elements.
+inline Standard_Integer tdatastd_reallist_extent(const TDataStdRealListHandle& h) {
+    return h.inner->Extent();
+}
+
+// TDataStd_RealList::IsEmpty() const.
+inline bool tdatastd_reallist_is_empty(const TDataStdRealListHandle& h) {
+    return h.inner->IsEmpty() == Standard_True;
+}
+
+// TDataStd_RealList::List() const, 0-based walk-and-advance. Caller must
+// ensure 0 <= index < Extent().
+inline Standard_Real tdatastd_reallist_at(
+    const TDataStdRealListHandle& h, Standard_Integer index)
+{
+    const TColStd_ListOfReal& lst = h.inner->List();
+    auto it = lst.begin();
+    std::advance(it, static_cast<std::ptrdiff_t>(index));
+    return *it;
+}
+
+// TDataStd_RealList::Append(value) — non-const on the attribute, but callable
+// through a const handle reference (see Handle::operator-> note in
+// bound_api_reference.md). Must be called inside an open command scope.
+inline void tdatastd_reallist_append(const TDataStdRealListHandle& h, Standard_Real value) {
+    h.inner->Append(value);
+}
+
+// ── TDataStd_ExtStringList ────────────────────────────────────────────────────
+
+struct TDataStdExtStringListHandle {
+    Handle(TDataStd_ExtStringList) inner;
+};
+
+// TDataStd_ExtStringList::Set(L) — static.
+// Finds, or creates, an empty list-of-strings attribute on L.
+// Must be called inside an open command scope.
+inline std::unique_ptr<TDataStdExtStringListHandle> tdatastd_extstringlist_set(const TdfLabel& label)
+{
+    try {
+        auto result = std::make_unique<TDataStdExtStringListHandle>();
+        result->inner = TDataStd_ExtStringList::Set(label.inner);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// Find TDataStd_ExtStringList on a label. Returns nullptr if not present.
+inline std::unique_ptr<TDataStdExtStringListHandle> tdatastd_extstringlist_find(const TdfLabel& label) {
+    Handle(TDataStd_ExtStringList) attr;
+    if (label.inner.FindAttribute(TDataStd_ExtStringList::GetID(), attr)) {
+        auto result = std::make_unique<TDataStdExtStringListHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+
+// TDF_Label::ForgetAttribute(GUID) const — removes the ExtStringList
+// attribute if present. Returns false if it was not present. No exception path.
+inline bool tdatastd_extstringlist_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_ExtStringList::GetID()) == Standard_True;
+}
+
+// TDataStd_ExtStringList::Extent() const — number of elements.
+inline Standard_Integer tdatastd_extstringlist_extent(const TDataStdExtStringListHandle& h) {
+    return h.inner->Extent();
+}
+
+// TDataStd_ExtStringList::IsEmpty() const.
+inline bool tdatastd_extstringlist_is_empty(const TDataStdExtStringListHandle& h) {
+    return h.inner->IsEmpty() == Standard_True;
+}
+
+// TDataStd_ExtStringList::List() const, 0-based walk-and-advance. Same UTF-8
+// conversion as tdatastd_name_get/tdatastd_extstringarray_value, applied per
+// element. Caller must ensure 0 <= index < Extent().
+inline rust::String tdatastd_extstringlist_at(
+    const TDataStdExtStringListHandle& h, Standard_Integer index)
+{
+    const TDataStd_ListOfExtendedString& lst = h.inner->List();
+    auto it = lst.begin();
+    std::advance(it, static_cast<std::ptrdiff_t>(index));
+    const TCollection_ExtendedString& ext = *it;
+    Standard_Integer len = ext.LengthOfCString();
+    std::string buf(static_cast<size_t>(len) + 1, '\0');
+    char* ptr = buf.data();
+    ext.ToUTF8CString(ptr);
+    return rust::String(buf.c_str());
+}
+
+// TDataStd_ExtStringList::Append(value) — isMultiByte=true: see
+// tdatastd_name_set. Non-const on the attribute, but callable through a
+// const handle reference (see Handle::operator-> note in
+// bound_api_reference.md). Must be called inside an open command scope.
+inline void tdatastd_extstringlist_append(const TDataStdExtStringListHandle& h, rust::Str value) {
+    std::string s(value.data(), value.size());
+    TCollection_ExtendedString ext(s.c_str(), Standard_True);
+    h.inner->Append(ext);
+}
+
+// ── TDataStd_BooleanList ──────────────────────────────────────────────────────
+
+struct TDataStdBooleanListHandle {
+    Handle(TDataStd_BooleanList) inner;
+};
+
+// TDataStd_BooleanList::Set(L) — static.
+// Finds, or creates, an empty list-of-booleans attribute on L.
+// Must be called inside an open command scope.
+inline std::unique_ptr<TDataStdBooleanListHandle> tdatastd_booleanlist_set(const TdfLabel& label)
+{
+    try {
+        auto result = std::make_unique<TDataStdBooleanListHandle>();
+        result->inner = TDataStd_BooleanList::Set(label.inner);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// Find TDataStd_BooleanList on a label. Returns nullptr if not present.
+inline std::unique_ptr<TDataStdBooleanListHandle> tdatastd_booleanlist_find(const TdfLabel& label) {
+    Handle(TDataStd_BooleanList) attr;
+    if (label.inner.FindAttribute(TDataStd_BooleanList::GetID(), attr)) {
+        auto result = std::make_unique<TDataStdBooleanListHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+
+// TDF_Label::ForgetAttribute(GUID) const — removes the BooleanList attribute
+// if present. Returns false if it was not present. No exception path.
+inline bool tdatastd_booleanlist_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_BooleanList::GetID()) == Standard_True;
+}
+
+// TDataStd_BooleanList::Extent() const — number of elements.
+inline Standard_Integer tdatastd_booleanlist_extent(const TDataStdBooleanListHandle& h) {
+    return h.inner->Extent();
+}
+
+// TDataStd_BooleanList::IsEmpty() const.
+inline bool tdatastd_booleanlist_is_empty(const TDataStdBooleanListHandle& h) {
+    return h.inner->IsEmpty() == Standard_True;
+}
+
+// TDataStd_BooleanList::List() const, 0-based walk-and-advance. Underlying
+// storage is TDataStd_ListOfByte (NCollection_List<Standard_Byte>), 1=TRUE
+// / 0=FALSE per the OCCT header's documented convention — converted to bool
+// here. Caller must ensure 0 <= index < Extent().
+inline bool tdatastd_booleanlist_at(
+    const TDataStdBooleanListHandle& h, Standard_Integer index)
+{
+    const TDataStd_ListOfByte& lst = h.inner->List();
+    auto it = lst.begin();
+    std::advance(it, static_cast<std::ptrdiff_t>(index));
+    return *it != 0;
+}
+
+// TDataStd_BooleanList::Append(value) — Standard_Boolean is bool, no
+// conversion needed for write. Non-const on the attribute, but callable
+// through a const handle reference (see Handle::operator-> note in
+// bound_api_reference.md). Must be called inside an open command scope.
+inline void tdatastd_booleanlist_append(const TDataStdBooleanListHandle& h, bool value) {
+    h.inner->Append(value);
 }
 
 // ── TDataStd_Integer ──────────────────────────────────────────────────────────
