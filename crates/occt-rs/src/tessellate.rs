@@ -95,8 +95,7 @@ pub struct TessFace {
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(C)]
 pub struct Affine3 {
-    /// rows[i] = [m_i1, m_i2, m_i3, t_i]
-    pub rows: [[f64; 4]; 3],
+    pub cols: [[f64; 3]; 4],
 }
 
 /// A tessellated edge polyline.
@@ -237,23 +236,25 @@ pub fn compute(
                 None
             } else {
                 Some(Affine3 {
-                    rows: [
+                    cols: [
                         [
                             tri.placement_value(0),
-                            tri.placement_value(1),
-                            tri.placement_value(2),
-                            tri.placement_value(3),
-                        ],
-                        [
                             tri.placement_value(4),
-                            tri.placement_value(5),
-                            tri.placement_value(6),
-                            tri.placement_value(7),
+                            tri.placement_value(8),
                         ],
                         [
-                            tri.placement_value(8),
+                            tri.placement_value(1),
+                            tri.placement_value(5),
                             tri.placement_value(9),
+                        ],
+                        [
+                            tri.placement_value(2),
+                            tri.placement_value(6),
                             tri.placement_value(10),
+                        ],
+                        [
+                            tri.placement_value(3),
+                            tri.placement_value(7),
                             tri.placement_value(11),
                         ],
                     ],
