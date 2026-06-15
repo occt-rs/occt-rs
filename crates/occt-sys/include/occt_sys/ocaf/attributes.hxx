@@ -48,12 +48,38 @@
 #include <TDataStd_ListOfByte.hxx>
 #include <TDataStd_UAttribute.hxx>
 #include <Standard_GUID.hxx>
+#include <TDataStd_NamedData.hxx>
 #include <TDF_Label.hxx>
 #include <TDF_LabelList.hxx>
 
 #include "label.hxx"
 #include "../exception.hxx"
 #include "rust/cxx.h"
+
+// ── Shared string-conversion helpers ────────────────────────────────────────
+//
+// isMultiByte=true: decode UTF-8 input as Unicode code points, not Latin-1
+// (see tdatastd_name_set for the bug this avoids). ToUTF8CString re-encodes
+// for the return direction (see tdatastd_name_get).
+//
+// NOTE: tdatastd_name_set/get, tdatastd_comment_set/get,
+// tdatastd_extstringarray_value/set_value, and
+// tdatastd_extstringlist_at/append all inline this same conversion. Migrating
+// them to these helpers is a worthwhile follow-up cleanup, not done here to
+// keep this batch scoped to NamedData.
+
+inline TCollection_ExtendedString to_ext_string(rust::Str s) {
+    std::string buf(s.data(), s.size());
+    return TCollection_ExtendedString(buf.c_str(), Standard_True);
+}
+
+inline rust::String ext_string_to_rust(const TCollection_ExtendedString& ext) {
+    Standard_Integer len = ext.LengthOfCString();
+    std::string buf(static_cast<size_t>(len) + 1, '\0');
+    char* ptr = buf.data();
+    ext.ToUTF8CString(ptr);
+    return rust::String(buf.c_str());
+}
 
 // ── TDataStd_Name ─────────────────────────────────────────────────────────────
 
@@ -1026,6 +1052,155 @@ inline bool tdatastd_uattribute_forget(
     uint8_t a8b1, uint8_t a8b2, uint8_t a8b3, uint8_t a8b4, uint8_t a8b5, uint8_t a8b6)
 {
     return label.inner.ForgetAttribute(make_guid(a32b, a16b1, a16b2, a16b3, a8b1, a8b2, a8b3, a8b4, a8b5, a8b6)) == Standard_True;
+}
+
+// ── TDataStd_NamedData ───────────────────────────────────────────────────────
+// Scalar-valued groups only (Integer/Real/String/Byte): Has*/Get*/Set* by
+// key. GetXContainer/ChangeX (bulk access via TColStd_DataMapOfStringX /
+// TDataStd_DataMapOfStringX — C++-only collection types) and the
+// array-valued groups (ArrayOfIntegers/ArrayOfReals, via
+// Handle(TColStd_HArray1OfX)) are deferred.
+
+struct TDataStdNamedDataHandle {
+    Handle(TDataStd_NamedData) inner;
+};
+
+// TDataStd_NamedData::Set(L) — static.
+// Finds, or creates, a named-data attribute on L with no entries.
+// Must be called inside an open command scope.
+inline std::unique_ptr<TDataStdNamedDataHandle> tdatastd_nameddata_set(const TdfLabel& label)
+{
+    try {
+        auto result = std::make_unique<TDataStdNamedDataHandle>();
+        result->inner = TDataStd_NamedData::Set(label.inner);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// Find TDataStd_NamedData on a label. Returns nullptr if not present.
+inline std::unique_ptr<TDataStdNamedDataHandle> tdatastd_nameddata_find(const TdfLabel& label) {
+    Handle(TDataStd_NamedData) attr;
+    if (label.inner.FindAttribute(TDataStd_NamedData::GetID(), attr)) {
+        auto result = std::make_unique<TDataStdNamedDataHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+
+// TDF_Label::ForgetAttribute(GUID) const — removes the NamedData attribute
+// if present. Returns false if it was not present. No exception path.
+inline bool tdatastd_nameddata_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataStd_NamedData::GetID()) == Standard_True;
+}
+
+// ── Integers ──
+
+inline bool tdatastd_nameddata_has_integers(const TDataStdNamedDataHandle& h) {
+    return h.inner->HasIntegers() == Standard_True;
+}
+
+inline bool tdatastd_nameddata_has_integer(const TDataStdNamedDataHandle& h, rust::Str name) {
+    return h.inner->HasInteger(to_ext_string(name)) == Standard_True;
+}
+
+// Returns 0 if name is not present. Checked here (not delegated to
+// TDataStd_NamedData::GetInteger) — see get_string below for why.
+inline Standard_Integer tdatastd_nameddata_get_integer(const TDataStdNamedDataHandle& h, rust::Str name) {
+    TCollection_ExtendedString key = to_ext_string(name);
+    if (!h.inner->HasInteger(key)) {
+        return 0;
+    }
+    return h.inner->GetInteger(key);
+}
+
+// Must be called inside an open command scope.
+inline void tdatastd_nameddata_set_integer(const TDataStdNamedDataHandle& h, rust::Str name, Standard_Integer value) {
+    h.inner->SetInteger(to_ext_string(name), value);
+}
+
+// ── Reals ──
+
+inline bool tdatastd_nameddata_has_reals(const TDataStdNamedDataHandle& h) {
+    return h.inner->HasReals() == Standard_True;
+}
+
+inline bool tdatastd_nameddata_has_real(const TDataStdNamedDataHandle& h, rust::Str name) {
+    return h.inner->HasReal(to_ext_string(name)) == Standard_True;
+}
+
+// Returns 0.0 if name is not present. Checked here — see get_string below.
+inline Standard_Real tdatastd_nameddata_get_real(const TDataStdNamedDataHandle& h, rust::Str name) {
+    TCollection_ExtendedString key = to_ext_string(name);
+    if (!h.inner->HasReal(key)) {
+        return 0.0;
+    }
+    return h.inner->GetReal(key);
+}
+
+// Must be called inside an open command scope.
+inline void tdatastd_nameddata_set_real(const TDataStdNamedDataHandle& h, rust::Str name, Standard_Real value) {
+    h.inner->SetReal(to_ext_string(name), value);
+}
+
+// ── Strings ──
+
+inline bool tdatastd_nameddata_has_strings(const TDataStdNamedDataHandle& h) {
+    return h.inner->HasStrings() == Standard_True;
+}
+
+inline bool tdatastd_nameddata_has_string(const TDataStdNamedDataHandle& h, rust::Str name) {
+    return h.inner->HasString(to_ext_string(name)) == Standard_True;
+}
+
+// Returns an empty string if name is not present.
+//
+// IMPORTANT: this check is load-bearing, not defensive. Despite the header
+// doc claiming GetString returns empty for an absent key,
+// TDataStd_NamedData::GetString (const TCollection_ExtendedString&, a
+// reference-returning accessor) raises Standard_NoSuchObject uncaught when
+// the key is absent — and with no try/catch in this shim, that escapes as a
+// raw C++ exception across the cxx noexcept boundary, causing
+// std::terminate rather than a Rust panic or Err. The HasString guard avoids
+// calling GetString at all for absent keys.
+//
+// Both key and value undergo isMultiByte=true conversion.
+inline rust::String tdatastd_nameddata_get_string(const TDataStdNamedDataHandle& h, rust::Str name) {
+    TCollection_ExtendedString key = to_ext_string(name);
+    if (!h.inner->HasString(key)) {
+        return rust::String("");
+    }
+    return ext_string_to_rust(h.inner->GetString(key));
+}
+
+// Must be called inside an open command scope.
+inline void tdatastd_nameddata_set_string(const TDataStdNamedDataHandle& h, rust::Str name, rust::Str value) {
+    h.inner->SetString(to_ext_string(name), to_ext_string(value));
+}
+
+// ── Bytes ──
+
+inline bool tdatastd_nameddata_has_bytes(const TDataStdNamedDataHandle& h) {
+    return h.inner->HasBytes() == Standard_True;
+}
+
+inline bool tdatastd_nameddata_has_byte(const TDataStdNamedDataHandle& h, rust::Str name) {
+    return h.inner->HasByte(to_ext_string(name)) == Standard_True;
+}
+
+// Returns 0 if name is not present. Checked here — see get_string above.
+inline Standard_Byte tdatastd_nameddata_get_byte(const TDataStdNamedDataHandle& h, rust::Str name) {
+    TCollection_ExtendedString key = to_ext_string(name);
+    if (!h.inner->HasByte(key)) {
+        return 0;
+    }
+    return h.inner->GetByte(key);
+}
+
+// Must be called inside an open command scope.
+inline void tdatastd_nameddata_set_byte(const TDataStdNamedDataHandle& h, rust::Str name, Standard_Byte value) {
+    h.inner->SetByte(to_ext_string(name), value);
 }
 
 // ── TDataStd_Integer ──────────────────────────────────────────────────────────

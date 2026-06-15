@@ -3,7 +3,8 @@
 //! RealArray, IntegerArray, BooleanArray, ByteArray, ExtStringArray,
 //! IntegerList, RealList, ExtStringList, BooleanList), plus the
 //! presence-only UAttribute marker (TDataStd_UAttribute) and the OcGuid
-//! value type its caller-supplied identification uses.
+//! value type its caller-supplied identification uses, plus the scalar
+//! groups (Integer/Real/String/Byte) of NamedData (TDataStd_NamedData).
 //!
 //! Each type wraps a `Handle(TDataStd_*)` shim.  The operations per type are:
 //!
@@ -975,6 +976,181 @@ impl OcUAttribute {
             guid.a8[4],
             guid.a8[5],
         )
+    }
+}
+
+// ── OcNamedData ──────────────────────────────────────────────────────────────
+
+/// A `TDataStd_NamedData` attribute handle — a keyed property bag holding
+/// named integers, reals, strings, and bytes.
+///
+/// Unlike the scalar attributes, [`set`](OcNamedData::set) finds-or-creates
+/// an attribute with no entries — populate via the per-type setters
+/// ([`set_integer`](Self::set_integer), [`set_real`](Self::set_real),
+/// [`set_string`](Self::set_string), [`set_byte`](Self::set_byte)).
+///
+/// Keys are UTF-8 strings, converted to `TCollection_ExtendedString` via the
+/// same `isMultiByte = Standard_True` conversion as [`OcName`]/[`OcComment`],
+/// applied on every call — every `has_*`/`get_*`/`set_*` does a key
+/// conversion. String *values* (not just keys) undergo the same conversion.
+///
+/// `get_*` methods return a default (`0`, `0.0`, empty string) if `name` is
+/// not present, per OCCT's own documented convention — call the
+/// corresponding `has_*` first if the distinction matters.
+///
+/// This binds the four scalar-valued groups (Integer/Real/String/Byte).
+/// `GetXContainer`/`ChangeX` (bulk access via `TColStd_DataMapOfStringX` /
+/// `TDataStd_DataMapOfStringX` — C++-only collection types, same situation as
+/// `TDF_LabelList`) and the two array-valued groups
+/// (`ArrayOfIntegers`/`ArrayOfReals`, via `Handle(TColStd_HArray1OfX)`) are
+/// deferred.
+pub struct OcNamedData {
+    inner: cxx::UniquePtr<ffi::TDataStdNamedDataHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcNamedData {
+    /// Finds, or creates, a `TDataStd_NamedData` attribute on `label` with no
+    /// entries.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+        let inner = ffi::tdatastd_nameddata_set(&label.inner).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataStd_NamedData` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    /// No command scope required for read-only access.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdatastd_nameddata_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataStd_NamedData` attribute from `label`, if present.
+    ///
+    /// Returns `false` if the attribute was not present. Must be called
+    /// inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdatastd_nameddata_forget(&label.inner)
+    }
+
+    // ── Integers ─────────────────────────────────────────────────────────
+
+    /// Returns `true` if at least one named integer is present.
+    pub fn has_integers(&self) -> bool {
+        ffi::tdatastd_nameddata_has_integers(&self.inner)
+    }
+
+    /// Returns `true` if `name` has an associated integer value.
+    pub fn has_integer(&self, name: &str) -> bool {
+        ffi::tdatastd_nameddata_has_integer(&self.inner, name)
+    }
+
+    /// Returns the integer value for `name`, or `0` if not present.
+    pub fn get_integer(&self, name: &str) -> i32 {
+        ffi::tdatastd_nameddata_get_integer(&self.inner, name)
+    }
+
+    /// Sets the integer value for `name`, creating or overwriting it.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set_integer(&self, _cmd: &Command<'_>, name: &str, value: i32) {
+        ffi::tdatastd_nameddata_set_integer(&self.inner, name, value);
+    }
+
+    // ── Reals ────────────────────────────────────────────────────────────
+
+    /// Returns `true` if at least one named real is present.
+    pub fn has_reals(&self) -> bool {
+        ffi::tdatastd_nameddata_has_reals(&self.inner)
+    }
+
+    /// Returns `true` if `name` has an associated real value.
+    pub fn has_real(&self, name: &str) -> bool {
+        ffi::tdatastd_nameddata_has_real(&self.inner, name)
+    }
+
+    /// Returns the real value for `name`, or `0.0` if not present.
+    pub fn get_real(&self, name: &str) -> f64 {
+        ffi::tdatastd_nameddata_get_real(&self.inner, name)
+    }
+
+    /// Sets the real value for `name`, creating or overwriting it.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set_real(&self, _cmd: &Command<'_>, name: &str, value: f64) {
+        ffi::tdatastd_nameddata_set_real(&self.inner, name, value);
+    }
+
+    // ── Strings ──────────────────────────────────────────────────────────
+
+    /// Returns `true` if at least one named string is present.
+    pub fn has_strings(&self) -> bool {
+        ffi::tdatastd_nameddata_has_strings(&self.inner)
+    }
+
+    /// Returns `true` if `name` has an associated string value.
+    pub fn has_string(&self, name: &str) -> bool {
+        ffi::tdatastd_nameddata_has_string(&self.inner, name)
+    }
+
+    /// Returns the string value for `name`, or an empty string if not present.
+    pub fn get_string(&self, name: &str) -> String {
+        ffi::tdatastd_nameddata_get_string(&self.inner, name)
+    }
+
+    /// Sets the string value for `name`, creating or overwriting it.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set_string(&self, _cmd: &Command<'_>, name: &str, value: &str) {
+        ffi::tdatastd_nameddata_set_string(&self.inner, name, value);
+    }
+
+    // ── Bytes ────────────────────────────────────────────────────────────
+
+    /// Returns `true` if at least one named byte is present.
+    pub fn has_bytes(&self) -> bool {
+        ffi::tdatastd_nameddata_has_bytes(&self.inner)
+    }
+
+    /// Returns `true` if `name` has an associated byte value.
+    pub fn has_byte(&self, name: &str) -> bool {
+        ffi::tdatastd_nameddata_has_byte(&self.inner, name)
+    }
+
+    /// Returns the byte value for `name`, or `0` if not present.
+    pub fn get_byte(&self, name: &str) -> u8 {
+        ffi::tdatastd_nameddata_get_byte(&self.inner, name)
+    }
+
+    /// Sets the byte value for `name`, creating or overwriting it.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set_byte(&self, _cmd: &Command<'_>, name: &str, value: u8) {
+        ffi::tdatastd_nameddata_set_byte(&self.inner, name, value);
+    }
+}
+
+impl std::fmt::Debug for OcNamedData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcNamedData")
+            .field("has_integers", &self.has_integers())
+            .field("has_reals", &self.has_reals())
+            .field("has_strings", &self.has_strings())
+            .field("has_bytes", &self.has_bytes())
+            .finish()
     }
 }
 
@@ -3325,5 +3501,188 @@ mod tests {
         assert!(OcUAttribute::is_present(&label, TEST_GUID));
         doc.undo().unwrap();
         assert!(!OcUAttribute::is_present(&label, TEST_GUID));
+    }
+    // ── OcNamedData ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn nameddata_set_creates_and_is_findable() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcNamedData::set(&cmd, &label).unwrap();
+            cmd.commit().unwrap();
+        }
+        let found = OcNamedData::find(&label).expect("named data should be present");
+        assert!(!found.has_integers());
+        assert!(!found.has_reals());
+        assert!(!found.has_strings());
+        assert!(!found.has_bytes());
+    }
+
+    #[test]
+    fn nameddata_find_absent_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(OcNamedData::find(&label).is_none());
+    }
+
+    #[test]
+    fn nameddata_forget_removes_attribute() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcNamedData::set(&cmd, &label).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcNamedData::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcNamedData::find(&label).is_none());
+    }
+
+    #[test]
+    fn nameddata_integer_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let nd;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            nd = OcNamedData::set(&cmd, &label).unwrap();
+            assert!(!nd.has_integer("count"));
+            assert_eq!(nd.get_integer("count"), 0);
+            nd.set_integer(&cmd, "count", 42);
+            cmd.commit().unwrap();
+        }
+        assert!(nd.has_integers());
+        assert!(nd.has_integer("count"));
+        assert_eq!(nd.get_integer("count"), 42);
+    }
+
+    #[test]
+    fn nameddata_real_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let nd;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            nd = OcNamedData::set(&cmd, &label).unwrap();
+            assert!(!nd.has_real("radius"));
+            assert_eq!(nd.get_real("radius"), 0.0);
+            nd.set_real(&cmd, "radius", 3.5);
+            cmd.commit().unwrap();
+        }
+        assert!(nd.has_reals());
+        assert!(nd.has_real("radius"));
+        assert!((nd.get_real("radius") - 3.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn nameddata_string_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let nd;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            nd = OcNamedData::set(&cmd, &label).unwrap();
+            assert!(!nd.has_string("material"));
+            assert_eq!(nd.get_string("material"), "");
+            nd.set_string(&cmd, "material", "aluminum");
+            cmd.commit().unwrap();
+        }
+        assert!(nd.has_strings());
+        assert!(nd.has_string("material"));
+        assert_eq!(nd.get_string("material"), "aluminum");
+    }
+
+    #[test]
+    fn nameddata_string_unicode_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let nd;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            nd = OcNamedData::set(&cmd, &label).unwrap();
+            // Both key and value carry non-ASCII / non-BMP content.
+            nd.set_string(&cmd, "matériau 😀", "café 😀");
+            cmd.commit().unwrap();
+        }
+        assert!(nd.has_string("matériau 😀"));
+        assert_eq!(nd.get_string("matériau 😀"), "café 😀");
+    }
+
+    #[test]
+    fn nameddata_byte_round_trip() {
+        let (_app, mut doc) = new_doc();
+        let nd;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            nd = OcNamedData::set(&cmd, &label).unwrap();
+            assert!(!nd.has_byte("flags"));
+            assert_eq!(nd.get_byte("flags"), 0);
+            nd.set_byte(&cmd, "flags", 0xFF);
+            cmd.commit().unwrap();
+        }
+        assert!(nd.has_bytes());
+        assert!(nd.has_byte("flags"));
+        assert_eq!(nd.get_byte("flags"), 0xFF);
+    }
+
+    #[test]
+    fn nameddata_set_overwrites_existing_key() {
+        let (_app, mut doc) = new_doc();
+        let nd;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            nd = OcNamedData::set(&cmd, &label).unwrap();
+            nd.set_integer(&cmd, "count", 1);
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            nd.set_integer(&cmd, "count", 2);
+            cmd.commit().unwrap();
+        }
+        assert_eq!(nd.get_integer("count"), 2);
+    }
+
+    #[test]
+    fn nameddata_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let nd;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            nd = OcNamedData::set(&cmd, &label).unwrap();
+            nd.set_integer(&cmd, "count", 1);
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            nd.set_integer(&cmd, "count", 2);
+            cmd.commit().unwrap();
+        }
+        assert_eq!(nd.get_integer("count"), 2);
+        doc.undo().unwrap();
+        assert_eq!(nd.get_integer("count"), 1);
     }
 }

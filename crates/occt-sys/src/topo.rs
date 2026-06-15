@@ -298,6 +298,42 @@ pub mod ffi {
             a8b6: u8,
         ) -> bool;
 
+        // ── TDataStdNamedDataHandle ───────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_NamedData) by value. Scalar-valued groups only
+        // (Integer/Real/String/Byte) — see attributes.hxx for what's deferred.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___named_data.html
+        type TDataStdNamedDataHandle;
+
+        fn tdatastd_nameddata_set(label: &TdfLabel) -> Result<UniquePtr<TDataStdNamedDataHandle>>;
+        fn tdatastd_nameddata_find(label: &TdfLabel) -> UniquePtr<TDataStdNamedDataHandle>;
+        fn tdatastd_nameddata_forget(label: &TdfLabel) -> bool;
+
+        // Integers — get returns 0 if name absent; use has_integer to check first.
+        fn tdatastd_nameddata_has_integers(h: &TDataStdNamedDataHandle) -> bool;
+        fn tdatastd_nameddata_has_integer(h: &TDataStdNamedDataHandle, name: &str) -> bool;
+        fn tdatastd_nameddata_get_integer(h: &TDataStdNamedDataHandle, name: &str) -> i32;
+        fn tdatastd_nameddata_set_integer(h: &TDataStdNamedDataHandle, name: &str, value: i32);
+
+        // Reals — get returns 0.0 if name absent; use has_real to check first.
+        fn tdatastd_nameddata_has_reals(h: &TDataStdNamedDataHandle) -> bool;
+        fn tdatastd_nameddata_has_real(h: &TDataStdNamedDataHandle, name: &str) -> bool;
+        fn tdatastd_nameddata_get_real(h: &TDataStdNamedDataHandle, name: &str) -> f64;
+        fn tdatastd_nameddata_set_real(h: &TDataStdNamedDataHandle, name: &str, value: f64);
+
+        // Strings — get returns "" if name absent; use has_string to check first.
+        // isMultiByte=true UTF-8 conversion on both key and value.
+        fn tdatastd_nameddata_has_strings(h: &TDataStdNamedDataHandle) -> bool;
+        fn tdatastd_nameddata_has_string(h: &TDataStdNamedDataHandle, name: &str) -> bool;
+        fn tdatastd_nameddata_get_string(h: &TDataStdNamedDataHandle, name: &str) -> String;
+        fn tdatastd_nameddata_set_string(h: &TDataStdNamedDataHandle, name: &str, value: &str);
+
+        // Bytes — get returns 0 if name absent; use has_byte to check first.
+        fn tdatastd_nameddata_has_bytes(h: &TDataStdNamedDataHandle) -> bool;
+        fn tdatastd_nameddata_has_byte(h: &TDataStdNamedDataHandle, name: &str) -> bool;
+        fn tdatastd_nameddata_get_byte(h: &TDataStdNamedDataHandle, name: &str) -> u8;
+        fn tdatastd_nameddata_set_byte(h: &TDataStdNamedDataHandle, name: &str, value: u8);
+
         // ── TDataStdReferenceArrayHandle ─────────────────────────────────────────────
         // Shim holding Handle(TDataStd_ReferenceArray) by value.
         //
