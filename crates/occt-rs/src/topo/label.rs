@@ -19,8 +19,15 @@ use crate::topo::document::Command;
 
 /// A non-owning reference to a node in a document's label tree.
 ///
-/// Wraps `TDF_Label`.  `'doc` is the lifetime of the [`OcDocument`] that
-/// owns the underlying `TDF_Data` tree; labels cannot outlive it.
+/// Wraps `TDF_Label`, a non-owning reference into the `TDF_Data` tree owned
+/// by an [`OcDocument`].
+///
+/// **The document tie is not tracked by the type system.** `OcLabel` carries
+/// no `'doc` parameter — deliberately: parameterising it conflicts with
+/// `Command<'doc>`, which holds a mutable borrow of the document and would
+/// make it impossible to obtain a label (e.g. via `doc.main()`) while a
+/// command is live. That a label must not be used after its document is
+/// dropped is therefore a *caller obligation*, not a compile-time guarantee.
 ///
 /// A null label (returned by [`find_child`] when the child is absent) has
 /// [`is_null()`] returning `true`.  Calling any
@@ -32,8 +39,9 @@ use crate::topo::document::Command;
 pub struct OcLabel {
     // Fixme: audit how to construct a TnamingBuilder. Currently: `TnamingBuilder::new(new_tnaming_builder(&label.inner))`
     pub(crate) inner: cxx::UniquePtr<ffi::TdfLabel>,
-    /// Ties this label to the document lifetime — labels cannot outlive
-    /// the TDF_Data tree owned by the document.
+    /// `!Send` / `!Sync` marker only. Does **not** tie the label to any
+    /// document lifetime (`*mut ()` carries no lifetime); see the type-level
+    /// note on why `OcLabel` is intentionally un-parameterised.
     _not_send: PhantomData<*mut ()>,
 }
 

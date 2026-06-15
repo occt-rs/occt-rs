@@ -11,6 +11,26 @@
 //! - **`forget`** — removes the attribute from a label (inside a command).
 //!
 //! GUIDs are kept on the C++ side; the Rust API never names them.
+//!
+//! ## Indexing: lists panic, arrays return `Result`
+//!
+//! The fixed arrays (`Oc*Array`) expose `value`/`set_value` returning `Result`,
+//! mirroring OCCT's `Value(index)`/`SetValue(index, _)`, which raise
+//! `OutOfRange`. The lists (`Oc*List`) expose `at`, which panics on an
+//! out-of-bounds index like `Vec` indexing. OCCT's list types have no indexed
+//! accessor, so `at` is a Rust convenience over `List()` and takes Rust's
+//! indexing semantics rather than inventing a fallible one. The split is
+//! deliberate and follows the underlying API shape.
+//!
+//! ## Writes take `&self`
+//!
+//! `append`/`set_value` mutate document state through `&self`, not `&mut self`.
+//! An `Oc*List`/`Oc*Array` handle is a view onto an attribute owned by the
+//! document's `TDF_Data`, not the storage itself — the write lands in the
+//! document, and the `_cmd: &Command<'_>` argument is what gates it to an open
+//! transaction. `&mut self` would falsely imply the handle has exclusive
+//! ownership of the attribute (it doesn't; several handles to the same one can
+//! coexist).
 
 use std::marker::PhantomData;
 
@@ -850,13 +870,13 @@ impl OcReferenceArray {
     }
 
     /// Number of elements in this array (the `len` passed to [`set`](Self::set)).
+    ///
+    /// Always `>= 1`: `len < 1` is rejected at construction, so there is no
+    /// `is_empty` — it would be a constant `false` and read as a live check
+    /// that can never fire.
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> i32 {
         ffi::tdatastd_referencearray_length(&self.inner)
-    }
-
-    /// Returns `true` if this array has zero elements.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 
     /// Returns the label at `index` (0-based).
@@ -967,15 +987,13 @@ impl OcRealArray {
     }
 
     /// Number of elements in this array (the `len` passed to [`set`](Self::set)).
+    ///
+    /// Always `>= 1`: `len < 1` is rejected at construction, so there is no
+    /// `is_empty` — it would be a constant `false` and read as a live check
+    /// that can never fire.
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> i32 {
         ffi::tdatastd_realarray_length(&self.inner)
-    }
-
-    /// Returns `true` if this array has zero elements.
-    ///
-    /// Always `false` in practice — `len >= 1` is enforced at construction.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 
     /// Returns the value at `index` (0-based).
@@ -1076,15 +1094,13 @@ impl OcIntegerArray {
     }
 
     /// Number of elements in this array (the `len` passed to [`set`](Self::set)).
+    ///
+    /// Always `>= 1`: `len < 1` is rejected at construction, so there is no
+    /// `is_empty` — it would be a constant `false` and read as a live check
+    /// that can never fire.
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> i32 {
         ffi::tdatastd_integerarray_length(&self.inner)
-    }
-
-    /// Returns `true` if this array has zero elements.
-    ///
-    /// Always `false` in practice — `len >= 1` is enforced at construction.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 
     /// Returns the value at `index` (0-based).
@@ -1184,15 +1200,13 @@ impl OcBooleanArray {
     }
 
     /// Number of elements in this array (the `len` passed to [`set`](Self::set)).
+    ///
+    /// Always `>= 1`: `len < 1` is rejected at construction, so there is no
+    /// `is_empty` — it would be a constant `false` and read as a live check
+    /// that can never fire.
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> i32 {
         ffi::tdatastd_booleanarray_length(&self.inner)
-    }
-
-    /// Returns `true` if this array has zero elements.
-    ///
-    /// Always `false` in practice — `len >= 1` is enforced at construction.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 
     /// Returns the value at `index` (0-based).
@@ -1319,15 +1333,13 @@ impl OcByteArray {
     }
 
     /// Number of elements in this array (the `len` passed to [`set`](Self::set)).
+    ///
+    /// Always `>= 1`: `len < 1` is rejected at construction, so there is no
+    /// `is_empty` — it would be a constant `false` and read as a live check
+    /// that can never fire.
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> i32 {
         ffi::tdatastd_bytearray_length(&self.inner)
-    }
-
-    /// Returns `true` if this array has zero elements.
-    ///
-    /// Always `false` in practice — `len >= 1` is enforced at construction.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 
     /// Returns the value at `index` (0-based).
@@ -1433,15 +1445,13 @@ impl OcExtStringArray {
     }
 
     /// Number of elements in this array (the `len` passed to [`set`](Self::set)).
+    ///
+    /// Always `>= 1`: `len < 1` is rejected at construction, so there is no
+    /// `is_empty` — it would be a constant `false` and read as a live check
+    /// that can never fire.
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> i32 {
         ffi::tdatastd_extstringarray_length(&self.inner)
-    }
-
-    /// Returns `true` if this array has zero elements.
-    ///
-    /// Always `false` in practice — `len >= 1` is enforced at construction.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 
     /// Returns the string at `index` (0-based).
@@ -1945,10 +1955,9 @@ mod tests {
             cmd.commit().unwrap();
         }
         {
-            let b = doc
-                .main()
-                .get_or_create_child(&doc.begin_command().unwrap(), 3);
+            let main = doc.main();
             let cmd = doc.begin_command().unwrap();
+            let b = main.get_or_create_child(&cmd, 3);
             list.append(&cmd, &b);
             cmd.commit().unwrap();
         }
@@ -2373,6 +2382,26 @@ mod tests {
         }
         assert!(arr.value(2).is_err());
         assert!(arr.value(-1).is_err());
+    }
+    #[test]
+    fn booleanarray_value_oob_crosses_byte_boundary() {
+        // len 9 spans two packed bytes (indices 0..=8); indices 9..=15 occupy
+        // real, allocated slack in byte 1, so OCCT's byte-level OutOfRange
+        // would accept them. Only the Rust-side guard rejects these.
+        let (_app, mut doc) = new_doc();
+        let arr;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let label = main.get_or_create_child(&cmd, 1);
+            arr = OcBooleanArray::set(&cmd, &label, 9).unwrap();
+            cmd.commit().unwrap();
+        }
+        // Last valid index is fine.
+        assert!(arr.value(8).is_ok());
+        // Upper-byte slack — would be silently accepted without the guard.
+        assert!(arr.value(9).is_err());
+        assert!(arr.value(15).is_err());
     }
 
     #[test]
