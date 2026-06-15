@@ -144,6 +144,276 @@ pub mod ffi {
         fn tdatastd_asciistring_find(label: &TdfLabel) -> UniquePtr<TDataStdAsciiStringHandle>;
         // ForgetAttribute(GUID) const — true if present and removed.
         fn tdatastd_asciistring_forget(label: &TdfLabel) -> bool;
+
+        // ── TDataStdReferenceListHandle ──────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_ReferenceList) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___reference_list.html
+        type TDataStdReferenceListHandle;
+
+        // Set: static on TDataStd_ReferenceList; finds or creates an empty
+        // list-of-references attribute on label. Must be called inside an open
+        // command scope.
+        fn tdatastd_referencelist_set(
+            label: &TdfLabel,
+        ) -> Result<UniquePtr<TDataStdReferenceListHandle>>;
+        // Find: returns nullptr (None on Rust side) when attribute is absent.
+        fn tdatastd_referencelist_find(label: &TdfLabel) -> UniquePtr<TDataStdReferenceListHandle>;
+        // ForgetAttribute(GUID) const — true if present and removed.
+        fn tdatastd_referencelist_forget(label: &TdfLabel) -> bool;
+        // Extent: const — number of label references.
+        fn tdatastd_referencelist_extent(h: &TDataStdReferenceListHandle) -> i32;
+        // IsEmpty: const.
+        fn tdatastd_referencelist_is_empty(h: &TDataStdReferenceListHandle) -> bool;
+        // At: 0-based walk-and-advance indexed access. Caller must ensure
+        // 0 <= index < extent.
+        fn tdatastd_referencelist_at(
+            h: &TDataStdReferenceListHandle,
+            index: i32,
+        ) -> UniquePtr<TdfLabel>;
+        // Append: non-const on the attribute, but callable through a const handle
+        // reference (see shim comment). Must be called inside an open command scope.
+        fn tdatastd_referencelist_append(h: &TDataStdReferenceListHandle, value: &TdfLabel);
+
+        // ── TDataStdIntegerListHandle ─────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_IntegerList) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___integer_list.html
+        type TDataStdIntegerListHandle;
+
+        fn tdatastd_integerlist_set(
+            label: &TdfLabel,
+        ) -> Result<UniquePtr<TDataStdIntegerListHandle>>;
+        fn tdatastd_integerlist_find(label: &TdfLabel) -> UniquePtr<TDataStdIntegerListHandle>;
+        fn tdatastd_integerlist_forget(label: &TdfLabel) -> bool;
+        fn tdatastd_integerlist_extent(h: &TDataStdIntegerListHandle) -> i32;
+        fn tdatastd_integerlist_is_empty(h: &TDataStdIntegerListHandle) -> bool;
+        // At: 0-based walk-and-advance. Caller must ensure 0 <= index < extent.
+        fn tdatastd_integerlist_at(h: &TDataStdIntegerListHandle, index: i32) -> i32;
+        fn tdatastd_integerlist_append(h: &TDataStdIntegerListHandle, value: i32);
+
+        // ── TDataStdRealListHandle ────────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_RealList) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___real_list.html
+        type TDataStdRealListHandle;
+
+        fn tdatastd_reallist_set(label: &TdfLabel) -> Result<UniquePtr<TDataStdRealListHandle>>;
+        fn tdatastd_reallist_find(label: &TdfLabel) -> UniquePtr<TDataStdRealListHandle>;
+        fn tdatastd_reallist_forget(label: &TdfLabel) -> bool;
+        fn tdatastd_reallist_extent(h: &TDataStdRealListHandle) -> i32;
+        fn tdatastd_reallist_is_empty(h: &TDataStdRealListHandle) -> bool;
+        // At: 0-based walk-and-advance. Caller must ensure 0 <= index < extent.
+        fn tdatastd_reallist_at(h: &TDataStdRealListHandle, index: i32) -> f64;
+        fn tdatastd_reallist_append(h: &TDataStdRealListHandle, value: f64);
+
+        // ── TDataStdExtStringListHandle ───────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_ExtStringList) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___ext_string_list.html
+        type TDataStdExtStringListHandle;
+
+        fn tdatastd_extstringlist_set(
+            label: &TdfLabel,
+        ) -> Result<UniquePtr<TDataStdExtStringListHandle>>;
+        fn tdatastd_extstringlist_find(label: &TdfLabel) -> UniquePtr<TDataStdExtStringListHandle>;
+        fn tdatastd_extstringlist_forget(label: &TdfLabel) -> bool;
+        fn tdatastd_extstringlist_extent(h: &TDataStdExtStringListHandle) -> i32;
+        fn tdatastd_extstringlist_is_empty(h: &TDataStdExtStringListHandle) -> bool;
+        // At: 0-based walk-and-advance, UTF-8 per element (same conversion as
+        // tdatastd_name_get). Caller must ensure 0 <= index < extent.
+        fn tdatastd_extstringlist_at(h: &TDataStdExtStringListHandle, index: i32) -> String;
+        // Append: isMultiByte=true UTF-8 decode, same as tdatastd_name_set, per element.
+        fn tdatastd_extstringlist_append(h: &TDataStdExtStringListHandle, value: &str);
+
+        // ── TDataStdBooleanListHandle ─────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_BooleanList) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___boolean_list.html
+        type TDataStdBooleanListHandle;
+
+        fn tdatastd_booleanlist_set(
+            label: &TdfLabel,
+        ) -> Result<UniquePtr<TDataStdBooleanListHandle>>;
+        fn tdatastd_booleanlist_find(label: &TdfLabel) -> UniquePtr<TDataStdBooleanListHandle>;
+        fn tdatastd_booleanlist_forget(label: &TdfLabel) -> bool;
+        fn tdatastd_booleanlist_extent(h: &TDataStdBooleanListHandle) -> i32;
+        fn tdatastd_booleanlist_is_empty(h: &TDataStdBooleanListHandle) -> bool;
+        // At: 0-based walk-and-advance over underlying ListOfByte (1=true/0=false).
+        // Caller must ensure 0 <= index < extent.
+        fn tdatastd_booleanlist_at(h: &TDataStdBooleanListHandle, index: i32) -> bool;
+        fn tdatastd_booleanlist_append(h: &TDataStdBooleanListHandle, value: bool);
+
+        // ── TDataStdReferenceArrayHandle ─────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_ReferenceArray) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___reference_array.html
+        type TDataStdReferenceArrayHandle;
+
+        // Set: static on TDataStd_ReferenceArray; finds or creates a reference array
+        // attribute on label with 0-based bounds [0, len-1]. Elements are
+        // default-initialized (null labels) until set_value is called. Must be
+        // called inside an open command scope.
+        fn tdatastd_referencearray_set(
+            label: &TdfLabel,
+            len: i32,
+        ) -> Result<UniquePtr<TDataStdReferenceArrayHandle>>;
+        // Find: returns nullptr (None on Rust side) when attribute is absent.
+        fn tdatastd_referencearray_find(
+            label: &TdfLabel,
+        ) -> UniquePtr<TDataStdReferenceArrayHandle>;
+        // ForgetAttribute(GUID) const — true if present and removed.
+        fn tdatastd_referencearray_forget(label: &TdfLabel) -> bool;
+        // Length: const — number of elements (== len passed to set).
+        fn tdatastd_referencearray_length(h: &TDataStdReferenceArrayHandle) -> i32;
+        // Value: 0-based. Raises OutOfRange (-> Err) if index is outside [0, length-1].
+        fn tdatastd_referencearray_value(
+            h: &TDataStdReferenceArrayHandle,
+            index: i32,
+        ) -> Result<UniquePtr<TdfLabel>>;
+        // SetValue: 0-based. Raises OutOfRange (-> Err) if index is outside [0, length-1].
+        // Must be called inside an open command scope.
+        fn tdatastd_referencearray_set_value(
+            h: &TDataStdReferenceArrayHandle,
+            index: i32,
+            value: &TdfLabel,
+        ) -> Result<()>;
+
+        // ── TDataStdRealArrayHandle ───────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_RealArray) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___real_array.html
+        type TDataStdRealArrayHandle;
+
+        // Set: static on TDataStd_RealArray; finds or creates a real array attribute
+        // on label with 0-based bounds [0, len-1]. isDelta omitted (OCCT default
+        // Standard_False applies). Must be called inside an open command scope.
+        fn tdatastd_realarray_set(
+            label: &TdfLabel,
+            len: i32,
+        ) -> Result<UniquePtr<TDataStdRealArrayHandle>>;
+        // Find: returns nullptr (None on Rust side) when attribute is absent.
+        fn tdatastd_realarray_find(label: &TdfLabel) -> UniquePtr<TDataStdRealArrayHandle>;
+        // ForgetAttribute(GUID) const — true if present and removed.
+        fn tdatastd_realarray_forget(label: &TdfLabel) -> bool;
+        // Length: const — number of elements (== len passed to set).
+        fn tdatastd_realarray_length(h: &TDataStdRealArrayHandle) -> i32;
+        // Value: 0-based. Raises OutOfRange (-> Err) if index is outside [0, length-1].
+        fn tdatastd_realarray_value(h: &TDataStdRealArrayHandle, index: i32) -> Result<f64>;
+        // SetValue: 0-based. Raises OutOfRange (-> Err) if index is outside [0, length-1].
+        // Must be called inside an open command scope.
+        fn tdatastd_realarray_set_value(
+            h: &TDataStdRealArrayHandle,
+            index: i32,
+            value: f64,
+        ) -> Result<()>;
+
+        // ── TDataStdIntegerArrayHandle ────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_IntegerArray) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___integer_array.html
+        type TDataStdIntegerArrayHandle;
+
+        // Set: static on TDataStd_IntegerArray; finds or creates an integer array
+        // attribute on label with 0-based bounds [0, len-1]. isDelta omitted (OCCT
+        // default Standard_False applies). Must be called inside an open command scope.
+        fn tdatastd_integerarray_set(
+            label: &TdfLabel,
+            len: i32,
+        ) -> Result<UniquePtr<TDataStdIntegerArrayHandle>>;
+        // Find: returns nullptr (None on Rust side) when attribute is absent.
+        fn tdatastd_integerarray_find(label: &TdfLabel) -> UniquePtr<TDataStdIntegerArrayHandle>;
+        // ForgetAttribute(GUID) const — true if present and removed.
+        fn tdatastd_integerarray_forget(label: &TdfLabel) -> bool;
+        // Length: const — number of elements (== len passed to set).
+        fn tdatastd_integerarray_length(h: &TDataStdIntegerArrayHandle) -> i32;
+        // Value: 0-based. Raises OutOfRange (-> Err) if index is outside [0, length-1].
+        fn tdatastd_integerarray_value(h: &TDataStdIntegerArrayHandle, index: i32) -> Result<i32>;
+        // SetValue: 0-based. Raises OutOfRange (-> Err) if index is outside [0, length-1].
+        // Must be called inside an open command scope.
+        fn tdatastd_integerarray_set_value(
+            h: &TDataStdIntegerArrayHandle,
+            index: i32,
+            value: i32,
+        ) -> Result<()>;
+
+        // ── TDataStdBooleanArrayHandle ────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_BooleanArray) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___boolean_array.html
+        type TDataStdBooleanArrayHandle;
+
+        // Set: static on TDataStd_BooleanArray; finds or creates a boolean array
+        // attribute on label with 0-based bounds [0, len-1]. No isDelta parameter
+        // (unlike RealArray/IntegerArray/ByteArray/ExtStringArray). Must be called
+        // inside an open command scope.
+        fn tdatastd_booleanarray_set(
+            label: &TdfLabel,
+            len: i32,
+        ) -> Result<UniquePtr<TDataStdBooleanArrayHandle>>;
+        fn tdatastd_booleanarray_find(label: &TdfLabel) -> UniquePtr<TDataStdBooleanArrayHandle>;
+        fn tdatastd_booleanarray_forget(label: &TdfLabel) -> bool;
+        fn tdatastd_booleanarray_length(h: &TDataStdBooleanArrayHandle) -> i32;
+        fn tdatastd_booleanarray_value(h: &TDataStdBooleanArrayHandle, index: i32) -> Result<bool>;
+        fn tdatastd_booleanarray_set_value(
+            h: &TDataStdBooleanArrayHandle,
+            index: i32,
+            value: bool,
+        ) -> Result<()>;
+
+        // ── TDataStdByteArrayHandle ───────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_ByteArray) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___byte_array.html
+        type TDataStdByteArrayHandle;
+
+        // Set: static on TDataStd_ByteArray; finds or creates a byte array attribute
+        // on label with 0-based bounds [0, len-1]. isDelta omitted (OCCT default
+        // Standard_False applies). Must be called inside an open command scope.
+        fn tdatastd_bytearray_set(
+            label: &TdfLabel,
+            len: i32,
+        ) -> Result<UniquePtr<TDataStdByteArrayHandle>>;
+        fn tdatastd_bytearray_find(label: &TdfLabel) -> UniquePtr<TDataStdByteArrayHandle>;
+        fn tdatastd_bytearray_forget(label: &TdfLabel) -> bool;
+        fn tdatastd_bytearray_length(h: &TDataStdByteArrayHandle) -> i32;
+        fn tdatastd_bytearray_value(h: &TDataStdByteArrayHandle, index: i32) -> Result<u8>;
+        fn tdatastd_bytearray_set_value(
+            h: &TDataStdByteArrayHandle,
+            index: i32,
+            value: u8,
+        ) -> Result<()>;
+
+        // ── TDataStdExtStringArrayHandle ──────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_ExtStringArray) by value.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___ext_string_array.html
+        type TDataStdExtStringArrayHandle;
+
+        // Set: static on TDataStd_ExtStringArray; finds or creates an ExtStringArray
+        // attribute on label with 0-based bounds [0, len-1]. isDelta omitted (OCCT
+        // default Standard_False applies). Must be called inside an open command scope.
+        fn tdatastd_extstringarray_set(
+            label: &TdfLabel,
+            len: i32,
+        ) -> Result<UniquePtr<TDataStdExtStringArrayHandle>>;
+        fn tdatastd_extstringarray_find(
+            label: &TdfLabel,
+        ) -> UniquePtr<TDataStdExtStringArrayHandle>;
+        fn tdatastd_extstringarray_forget(label: &TdfLabel) -> bool;
+        fn tdatastd_extstringarray_length(h: &TDataStdExtStringArrayHandle) -> i32;
+        // Value: UTF-8, same conversion as tdatastd_name_get, per element.
+        fn tdatastd_extstringarray_value(
+            h: &TDataStdExtStringArrayHandle,
+            index: i32,
+        ) -> Result<String>;
+        // SetValue: isMultiByte=true UTF-8 decode, same as tdatastd_name_set, per element.
+        fn tdatastd_extstringarray_set_value(
+            h: &TDataStdExtStringArrayHandle,
+            index: i32,
+            value: &str,
+        ) -> Result<()>;
+
         // ── TdfLabel ──────────────────────────────────────────────────────────────
         // Shim holding TDF_Label by value.  TDF_Label is a non-owning reference
         // into a TDF_Data tree; the Rust wrapper carries a lifetime parameter
