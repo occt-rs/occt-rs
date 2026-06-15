@@ -46,6 +46,8 @@
 #include <TColStd_ListOfReal.hxx>
 #include <TDataStd_ListOfExtendedString.hxx>
 #include <TDataStd_ListOfByte.hxx>
+#include <TDataStd_UAttribute.hxx>
+#include <Standard_GUID.hxx>
 #include <TDF_Label.hxx>
 #include <TDF_LabelList.hxx>
 
@@ -964,6 +966,66 @@ inline bool tdatastd_booleanlist_at(
 // bound_api_reference.md). Must be called inside an open command scope.
 inline void tdatastd_booleanlist_append(const TDataStdBooleanListHandle& h, bool value) {
     h.inner->Append(value);
+}
+
+// ── TDataStd_UAttribute ───────────────────────────────────────────────────────
+
+// Constructs a Standard_GUID from its 10 canonical fields (4-2-2-2-6 UUID
+// grouping, matching Standard_GUID's scalar constructor). Pure value
+// construction, no OCCT state — called immediately before
+// Set/FindAttribute/ForgetAttribute, never stored. Generic infrastructure;
+// UAttribute is its first consumer but not its only plausible one — could be
+// relocated to a shared header if a second consumer appears.
+inline Standard_GUID make_guid(
+    uint32_t a32b, uint16_t a16b1, uint16_t a16b2, uint16_t a16b3,
+    uint8_t a8b1, uint8_t a8b2, uint8_t a8b3, uint8_t a8b4, uint8_t a8b5, uint8_t a8b6)
+{
+    return Standard_GUID(
+        static_cast<Standard_Integer>(a32b),
+        static_cast<Standard_ExtCharacter>(a16b1),
+        static_cast<Standard_ExtCharacter>(a16b2),
+        static_cast<Standard_ExtCharacter>(a16b3),
+        static_cast<Standard_Byte>(a8b1), static_cast<Standard_Byte>(a8b2),
+        static_cast<Standard_Byte>(a8b3), static_cast<Standard_Byte>(a8b4),
+        static_cast<Standard_Byte>(a8b5), static_cast<Standard_Byte>(a8b6));
+}
+
+// TDataStd_UAttribute::Set(L, guid) — static. Finds, or creates, a
+// presence-only marker attribute identified by guid on L. No value to
+// retrieve — presence is the entire state. Must be called inside an open
+// command scope.
+inline void tdatastd_uattribute_set(
+    const TdfLabel& label,
+    uint32_t a32b, uint16_t a16b1, uint16_t a16b2, uint16_t a16b3,
+    uint8_t a8b1, uint8_t a8b2, uint8_t a8b3, uint8_t a8b4, uint8_t a8b5, uint8_t a8b6)
+{
+    try {
+        TDataStd_UAttribute::Set(label.inner, make_guid(a32b, a16b1, a16b2, a16b3, a8b1, a8b2, a8b3, a8b4, a8b5, a8b6));
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// TDF_Label::FindAttribute(guid, attr) const — true if a UAttribute marker
+// with this guid is present. The found handle is discarded; only presence
+// matters. No exception path, no command scope required.
+inline bool tdatastd_uattribute_is_present(
+    const TdfLabel& label,
+    uint32_t a32b, uint16_t a16b1, uint16_t a16b2, uint16_t a16b3,
+    uint8_t a8b1, uint8_t a8b2, uint8_t a8b3, uint8_t a8b4, uint8_t a8b5, uint8_t a8b6)
+{
+    Handle(TDataStd_UAttribute) attr;
+    return label.inner.FindAttribute(make_guid(a32b, a16b1, a16b2, a16b3, a8b1, a8b2, a8b3, a8b4, a8b5, a8b6), attr) == Standard_True;
+}
+
+// TDF_Label::ForgetAttribute(guid) const — removes the UAttribute marker with
+// this guid if present. Returns false if it was not present. No exception
+// path. Must be called inside an open command scope.
+inline bool tdatastd_uattribute_forget(
+    const TdfLabel& label,
+    uint32_t a32b, uint16_t a16b1, uint16_t a16b2, uint16_t a16b3,
+    uint8_t a8b1, uint8_t a8b2, uint8_t a8b3, uint8_t a8b4, uint8_t a8b5, uint8_t a8b6)
+{
+    return label.inner.ForgetAttribute(make_guid(a32b, a16b1, a16b2, a16b3, a8b1, a8b2, a8b3, a8b4, a8b5, a8b6)) == Standard_True;
 }
 
 // ── TDataStd_Integer ──────────────────────────────────────────────────────────

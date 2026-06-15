@@ -1,7 +1,9 @@
 //! Standard TDF attributes: scalars (Name, Integer, Real, Comment,
 //! AsciiString) and list/array attributes (ReferenceList, ReferenceArray,
 //! RealArray, IntegerArray, BooleanArray, ByteArray, ExtStringArray,
-//! IntegerList, RealList, ExtStringList, BooleanList).
+//! IntegerList, RealList, ExtStringList, BooleanList), plus the
+//! presence-only UAttribute marker (TDataStd_UAttribute) and the OcGuid
+//! value type its caller-supplied identification uses.
 //!
 //! Each type wraps a `Handle(TDataStd_*)` shim.  The operations per type are:
 //!
@@ -806,6 +808,173 @@ impl std::fmt::Debug for OcBooleanList {
         f.debug_struct("OcBooleanList")
             .field("extent", &self.extent())
             .finish()
+    }
+}
+
+// ── OcGuid ───────────────────────────────────────────────────────────────────
+
+/// A 128-bit GUID, as used for OCAF attribute identification (e.g.
+/// [`OcUAttribute`]'s local ID).
+///
+/// Pure-Rust value type — construction, [`Display`](std::fmt::Display), and
+/// [`FromStr`](std::str::FromStr) (canonical `8-4-4-4-12` hex form) are all
+/// arithmetic on the fields below, with no FFI involved. `Standard_GUID` is
+/// materialized via its 10-scalar constructor (matching `a32b`/`a16b1..3`/
+/// `a8[0..6]` below) only at the point of an actual OCCT call
+/// (`Set`/`FindAttribute`/`ForgetAttribute`) — the same zero-cost-abstraction
+/// shape as the `gp_*` value types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OcGuid {
+    a32b: u32,
+    a16b1: u16,
+    a16b2: u16,
+    a16b3: u16,
+    a8: [u8; 6],
+}
+
+impl OcGuid {
+    /// Constructs a GUID from its raw fields, matching the grouping of
+    /// `Standard_GUID`'s 10-scalar constructor
+    /// (`a32b`-`a16b1`-`a16b2`-`a16b3`-`a8[0..6]`).
+    pub const fn from_fields(a32b: u32, a16b1: u16, a16b2: u16, a16b3: u16, a8: [u8; 6]) -> Self {
+        Self {
+            a32b,
+            a16b1,
+            a16b2,
+            a16b3,
+            a8,
+        }
+    }
+}
+
+impl std::fmt::Display for OcGuid {
+    /// Canonical `8-4-4-4-12` hex form, e.g.
+    /// `12345678-1234-1234-1234-123456789abc`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:08x}-{:04x}-{:04x}-{:04x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+            self.a32b,
+            self.a16b1,
+            self.a16b2,
+            self.a16b3,
+            self.a8[0],
+            self.a8[1],
+            self.a8[2],
+            self.a8[3],
+            self.a8[4],
+            self.a8[5],
+        )
+    }
+}
+
+impl std::str::FromStr for OcGuid {
+    type Err = std::num::ParseIntError;
+
+    /// Parses the canonical `8-4-4-4-12` hex form.
+    ///
+    /// On malformed input (wrong group count or non-hex characters), returns
+    /// a [`ParseIntError`](std::num::ParseIntError) from whichever group
+    /// failed first — this does not distinguish "wrong group count" from
+    /// "invalid hex digit" in the error itself. Acceptable for the primary
+    /// use case (round-tripping a hardcoded feature-type GUID literal); a
+    /// dedicated error type would be warranted if this ever parses untrusted
+    /// input where the distinction matters to the caller.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split('-').collect();
+        let a32b = u32::from_str_radix(parts.first().copied().unwrap_or(""), 16)?;
+        let a16b1 = u16::from_str_radix(parts.get(1).copied().unwrap_or(""), 16)?;
+        let a16b2 = u16::from_str_radix(parts.get(2).copied().unwrap_or(""), 16)?;
+        let a16b3 = u16::from_str_radix(parts.get(3).copied().unwrap_or(""), 16)?;
+        let tail = parts.get(4).copied().unwrap_or("");
+        let mut a8 = [0u8; 6];
+        for (i, byte) in a8.iter_mut().enumerate() {
+            let chunk = tail.get(i * 2..i * 2 + 2).unwrap_or("");
+            *byte = u8::from_str_radix(chunk, 16)?;
+        }
+        Ok(Self {
+            a32b,
+            a16b1,
+            a16b2,
+            a16b3,
+            a8,
+        })
+    }
+}
+
+// ── OcUAttribute ─────────────────────────────────────────────────────────────
+
+/// `TDataStd_UAttribute` — a presence-only marker attribute identified by a
+/// caller-supplied [`OcGuid`].
+///
+/// Unlike every other type in this module, the GUID is not a fixed per-type
+/// `GetID()` baked into the shim — it's a parameter to every operation.
+/// There is no value to retrieve: an `OcUAttribute` either is or isn't
+/// present on a label for a given GUID. This is a zero-sized marker type;
+/// all operations are associated functions, not methods on an instance.
+pub struct OcUAttribute;
+
+impl OcUAttribute {
+    /// Finds, or creates, a `TDataStd_UAttribute` marker identified by `guid`
+    /// on `label`.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, guid: OcGuid) -> Result<(), OcctError> {
+        ffi::tdatastd_uattribute_set(
+            &label.inner,
+            guid.a32b,
+            guid.a16b1,
+            guid.a16b2,
+            guid.a16b3,
+            guid.a8[0],
+            guid.a8[1],
+            guid.a8[2],
+            guid.a8[3],
+            guid.a8[4],
+            guid.a8[5],
+        )
+        .map_err(OcctError::from)
+    }
+
+    /// Returns `true` if a `TDataStd_UAttribute` marker identified by `guid`
+    /// is present on `label`.
+    ///
+    /// No command scope required for read-only access.
+    pub fn is_present(label: &OcLabel, guid: OcGuid) -> bool {
+        ffi::tdatastd_uattribute_is_present(
+            &label.inner,
+            guid.a32b,
+            guid.a16b1,
+            guid.a16b2,
+            guid.a16b3,
+            guid.a8[0],
+            guid.a8[1],
+            guid.a8[2],
+            guid.a8[3],
+            guid.a8[4],
+            guid.a8[5],
+        )
+    }
+
+    /// Removes the `TDataStd_UAttribute` marker identified by `guid` from
+    /// `label`, if present.
+    ///
+    /// Returns `false` if it was not present. Must be called inside an open
+    /// [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel, guid: OcGuid) -> bool {
+        ffi::tdatastd_uattribute_forget(
+            &label.inner,
+            guid.a32b,
+            guid.a16b1,
+            guid.a16b2,
+            guid.a16b3,
+            guid.a8[0],
+            guid.a8[1],
+            guid.a8[2],
+            guid.a8[3],
+            guid.a8[4],
+            guid.a8[5],
+        )
     }
 }
 
@@ -3034,5 +3203,127 @@ mod tests {
         assert_eq!(list.extent(), 2);
         doc.undo().unwrap();
         assert_eq!(list.to_vec(), vec![true]);
+    }
+    // ── OcGuid ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn guid_display_and_parse_round_trip() {
+        let g = OcGuid::from_fields(
+            0x12345678,
+            0x1234,
+            0x5678,
+            0x9abc,
+            [0xde, 0xf0, 0x12, 0x34, 0x56, 0x78],
+        );
+        let s = g.to_string();
+        assert_eq!(s, "12345678-1234-5678-9abc-def012345678");
+        let parsed: OcGuid = s.parse().unwrap();
+        assert_eq!(parsed, g);
+    }
+
+    #[test]
+    fn guid_parse_rejects_malformed() {
+        assert!("not-a-guid".parse::<OcGuid>().is_err());
+        assert!("12345678-1234-5678-9abc".parse::<OcGuid>().is_err());
+    }
+
+    // ── OcUAttribute ─────────────────────────────────────────────────────────
+
+    const TEST_GUID: OcGuid = OcGuid::from_fields(
+        0x12345678,
+        0x1234,
+        0x5678,
+        0x9abc,
+        [0xde, 0xf0, 0x12, 0x34, 0x56, 0x78],
+    );
+    const OTHER_GUID: OcGuid =
+        OcGuid::from_fields(0x00000000, 0x0000, 0x0000, 0x0000, [0, 0, 0, 0, 0, 1]);
+
+    #[test]
+    fn uattribute_set_and_is_present() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcUAttribute::set(&cmd, &label, TEST_GUID).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert!(OcUAttribute::is_present(&label, TEST_GUID));
+    }
+
+    #[test]
+    fn uattribute_is_present_absent_returns_false() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        cmd.commit().unwrap();
+        assert!(!OcUAttribute::is_present(&label, TEST_GUID));
+    }
+
+    #[test]
+    fn uattribute_distinguishes_different_guids() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcUAttribute::set(&cmd, &label, TEST_GUID).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert!(OcUAttribute::is_present(&label, TEST_GUID));
+        assert!(!OcUAttribute::is_present(&label, OTHER_GUID));
+    }
+
+    #[test]
+    fn uattribute_forget_removes() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            OcUAttribute::set(&cmd, &label, TEST_GUID).unwrap();
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcUAttribute::forget(&cmd, &label, TEST_GUID));
+            cmd.commit().unwrap();
+        }
+        assert!(!OcUAttribute::is_present(&label, TEST_GUID));
+    }
+
+    #[test]
+    fn uattribute_forget_absent_returns_false() {
+        let (_app, mut doc) = new_doc();
+        let main = doc.main();
+        let cmd = doc.begin_command().unwrap();
+        let label = main.get_or_create_child(&cmd, 1);
+        assert!(!OcUAttribute::forget(&cmd, &label, TEST_GUID));
+        cmd.commit().unwrap();
+    }
+
+    #[test]
+    fn uattribute_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let label;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            label = main.get_or_create_child(&cmd, 1);
+            cmd.commit().unwrap();
+        }
+        {
+            let cmd = doc.begin_command().unwrap();
+            OcUAttribute::set(&cmd, &label, TEST_GUID).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert!(OcUAttribute::is_present(&label, TEST_GUID));
+        doc.undo().unwrap();
+        assert!(!OcUAttribute::is_present(&label, TEST_GUID));
     }
 }
