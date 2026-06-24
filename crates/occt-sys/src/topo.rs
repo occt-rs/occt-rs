@@ -244,6 +244,96 @@ pub mod ffi {
         fn tdatastd_booleanlist_at(h: &TDataStdBooleanListHandle, index: i32) -> bool;
         fn tdatastd_booleanlist_append(h: &TDataStdBooleanListHandle, value: bool);
 
+        // ── TDataStd_UAttribute ────────────────────────────────────────────────────────
+        // Presence-only marker attribute, keyed by a caller-supplied GUID rather than
+        // a fixed per-type GetID(). No value to retrieve.
+        //
+        // GUID passed as its 10 canonical fields (4-2-2-2-6 UUID grouping);
+        // materialized via Standard_GUID's scalar constructor inside the shim.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___u_attribute.html
+
+        // Set: finds or creates a UAttribute marker with the given GUID. Must be
+        // called inside an open command scope.
+        fn tdatastd_uattribute_set(
+            label: &TdfLabel,
+            a32b: u32,
+            a16b1: u16,
+            a16b2: u16,
+            a16b3: u16,
+            a8b1: u8,
+            a8b2: u8,
+            a8b3: u8,
+            a8b4: u8,
+            a8b5: u8,
+            a8b6: u8,
+        ) -> Result<()>;
+        // IsPresent: true if a UAttribute with this GUID is attached to label.
+        // No command scope required.
+        fn tdatastd_uattribute_is_present(
+            label: &TdfLabel,
+            a32b: u32,
+            a16b1: u16,
+            a16b2: u16,
+            a16b3: u16,
+            a8b1: u8,
+            a8b2: u8,
+            a8b3: u8,
+            a8b4: u8,
+            a8b5: u8,
+            a8b6: u8,
+        ) -> bool;
+        // ForgetAttribute(guid) const — true if present and removed.
+        fn tdatastd_uattribute_forget(
+            label: &TdfLabel,
+            a32b: u32,
+            a16b1: u16,
+            a16b2: u16,
+            a16b3: u16,
+            a8b1: u8,
+            a8b2: u8,
+            a8b3: u8,
+            a8b4: u8,
+            a8b5: u8,
+            a8b6: u8,
+        ) -> bool;
+
+        // ── TDataStdNamedDataHandle ───────────────────────────────────────────────────
+        // Shim holding Handle(TDataStd_NamedData) by value. Scalar-valued groups only
+        // (Integer/Real/String/Byte) — see attributes.hxx for what's deferred.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_std___named_data.html
+        type TDataStdNamedDataHandle;
+
+        fn tdatastd_nameddata_set(label: &TdfLabel) -> Result<UniquePtr<TDataStdNamedDataHandle>>;
+        fn tdatastd_nameddata_find(label: &TdfLabel) -> UniquePtr<TDataStdNamedDataHandle>;
+        fn tdatastd_nameddata_forget(label: &TdfLabel) -> bool;
+
+        // Integers — get returns 0 if name absent; use has_integer to check first.
+        fn tdatastd_nameddata_has_integers(h: &TDataStdNamedDataHandle) -> bool;
+        fn tdatastd_nameddata_has_integer(h: &TDataStdNamedDataHandle, name: &str) -> bool;
+        fn tdatastd_nameddata_get_integer(h: &TDataStdNamedDataHandle, name: &str) -> i32;
+        fn tdatastd_nameddata_set_integer(h: &TDataStdNamedDataHandle, name: &str, value: i32);
+
+        // Reals — get returns 0.0 if name absent; use has_real to check first.
+        fn tdatastd_nameddata_has_reals(h: &TDataStdNamedDataHandle) -> bool;
+        fn tdatastd_nameddata_has_real(h: &TDataStdNamedDataHandle, name: &str) -> bool;
+        fn tdatastd_nameddata_get_real(h: &TDataStdNamedDataHandle, name: &str) -> f64;
+        fn tdatastd_nameddata_set_real(h: &TDataStdNamedDataHandle, name: &str, value: f64);
+
+        // Strings — get returns "" if name absent; use has_string to check first.
+        // isMultiByte=true UTF-8 conversion on both key and value.
+        fn tdatastd_nameddata_has_strings(h: &TDataStdNamedDataHandle) -> bool;
+        fn tdatastd_nameddata_has_string(h: &TDataStdNamedDataHandle, name: &str) -> bool;
+        fn tdatastd_nameddata_get_string(h: &TDataStdNamedDataHandle, name: &str) -> String;
+        fn tdatastd_nameddata_set_string(h: &TDataStdNamedDataHandle, name: &str, value: &str);
+
+        // Bytes — get returns 0 if name absent; use has_byte to check first.
+        fn tdatastd_nameddata_has_bytes(h: &TDataStdNamedDataHandle) -> bool;
+        fn tdatastd_nameddata_has_byte(h: &TDataStdNamedDataHandle, name: &str) -> bool;
+        fn tdatastd_nameddata_get_byte(h: &TDataStdNamedDataHandle, name: &str) -> u8;
+        fn tdatastd_nameddata_set_byte(h: &TDataStdNamedDataHandle, name: &str, value: u8);
+
         // ── TDataStdReferenceArrayHandle ─────────────────────────────────────────────
         // Shim holding Handle(TDataStd_ReferenceArray) by value.
         //
