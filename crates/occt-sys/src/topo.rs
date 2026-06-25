@@ -504,6 +504,131 @@ pub mod ffi {
             value: &str,
         ) -> Result<()>;
 
+        // ── Bridge additions for crates/occt-sys/src/topo.rs ─────────────────────────
+        //
+        // Add inside the existing `unsafe extern "C++"` block.
+        // No new include! entry — add `"occt_sys/ocaf/tdataxtd.hxx"` to the umbrella
+        // header at `crates/occt-sys/include/occt_sys/topo.hxx` instead.
+
+        // ── TDataXtd_Geometry ─────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___geometry.html
+        type TDataXtdGeometryHandle;
+
+        // Set(label) — static; finds or creates the attribute. Type defaults
+        // to TDataXtd_ANY_GEOM. Call tdataxtd_geometry_set_type to update.
+        // Must be inside an open command scope.
+        fn tdataxtd_geometry_set(label: &TdfLabel) -> Result<UniquePtr<TDataXtdGeometryHandle>>;
+
+        // SetType(T) — non-const; updates the geometry kind.
+        // Must be inside an open command scope.
+        fn tdataxtd_geometry_set_type(h: Pin<&mut TDataXtdGeometryHandle>, geom_type: i32);
+
+        // GetType() const — reads the TDataXtd_GeometryEnum ordinal.
+        fn tdataxtd_geometry_get_type(h: &TDataXtdGeometryHandle) -> i32;
+
+        // Type(label) — static; raises (Err) if no attribute is present.
+        fn tdataxtd_geometry_type_on_label(label: &TdfLabel) -> Result<i32>;
+
+        // FindAttribute — returns null UniquePtr when attribute is absent.
+        fn tdataxtd_geometry_find(label: &TdfLabel) -> UniquePtr<TDataXtdGeometryHandle>;
+
+        fn tdataxtd_geometry_forget(label: &TdfLabel) -> bool;
+
+        // ── TDataXtd_Constraint ───────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___constraint.html
+        //
+        // Geometry participants are Handle(TNaming_NamedShape).
+        // C++ overload set (1–4 geometries) is split into four named shims;
+        // the safe Rust API collapses them into a single set(&[&TnamingNamedShape]).
+        type TDataXtdConstraintHandle;
+
+        fn tdataxtd_constraint_set1(
+            label: &TdfLabel,
+            constraint_type: i32,
+            g1: &TnamingNamedShapeHandle,
+        ) -> Result<UniquePtr<TDataXtdConstraintHandle>>;
+
+        fn tdataxtd_constraint_set2(
+            label: &TdfLabel,
+            constraint_type: i32,
+            g1: &TnamingNamedShapeHandle,
+            g2: &TnamingNamedShapeHandle,
+        ) -> Result<UniquePtr<TDataXtdConstraintHandle>>;
+
+        fn tdataxtd_constraint_set3(
+            label: &TdfLabel,
+            constraint_type: i32,
+            g1: &TnamingNamedShapeHandle,
+            g2: &TnamingNamedShapeHandle,
+            g3: &TnamingNamedShapeHandle,
+        ) -> Result<UniquePtr<TDataXtdConstraintHandle>>;
+
+        fn tdataxtd_constraint_set4(
+            label: &TdfLabel,
+            constraint_type: i32,
+            g1: &TnamingNamedShapeHandle,
+            g2: &TnamingNamedShapeHandle,
+            g3: &TnamingNamedShapeHandle,
+            g4: &TnamingNamedShapeHandle,
+        ) -> Result<UniquePtr<TDataXtdConstraintHandle>>;
+
+        // SetGeometry(index, ns) — 1-based; non-const.
+        fn tdataxtd_constraint_set_geometry(
+            c: Pin<&mut TDataXtdConstraintHandle>,
+            index: i32,
+            ns: &TnamingNamedShapeHandle,
+        );
+
+        // SetValue — associates a TDataStd_Real as dimension value; non-const.
+        fn tdataxtd_constraint_set_value(
+            c: Pin<&mut TDataXtdConstraintHandle>,
+            val: &TDataStdRealHandle,
+        );
+
+        // SetType — non-const.
+        fn tdataxtd_constraint_set_type(
+            c: Pin<&mut TDataXtdConstraintHandle>,
+            constraint_type: i32,
+        );
+
+        fn tdataxtd_constraint_get_type(c: &TDataXtdConstraintHandle) -> i32;
+        fn tdataxtd_constraint_nb_geometries(c: &TDataXtdConstraintHandle) -> i32;
+
+        // GetGeometry — 1-based; returns null UniquePtr when OOB.
+        fn tdataxtd_constraint_get_geometry(
+            c: &TDataXtdConstraintHandle,
+            index: i32,
+        ) -> UniquePtr<TnamingNamedShapeHandle>;
+
+        fn tdataxtd_constraint_is_dimension(c: &TDataXtdConstraintHandle) -> bool;
+
+        // GetValue — returns null UniquePtr when IsDimension() is false.
+        fn tdataxtd_constraint_get_value(
+            c: &TDataXtdConstraintHandle,
+        ) -> UniquePtr<TDataStdRealHandle>;
+
+        fn tdataxtd_constraint_verified(c: &TDataXtdConstraintHandle) -> bool;
+
+        // Verified(bool) — non-const.
+        fn tdataxtd_constraint_set_verified(c: Pin<&mut TDataXtdConstraintHandle>, status: bool);
+
+        fn tdataxtd_constraint_is_planar(c: &TDataXtdConstraintHandle) -> bool;
+
+        // GetPlane — returns null UniquePtr when IsPlanar() is false.
+        fn tdataxtd_constraint_get_plane(
+            c: &TDataXtdConstraintHandle,
+        ) -> UniquePtr<TnamingNamedShapeHandle>;
+
+        // SetPlane — non-const.
+        fn tdataxtd_constraint_set_plane(
+            c: Pin<&mut TDataXtdConstraintHandle>,
+            plane: &TnamingNamedShapeHandle,
+        );
+
+        fn tdataxtd_constraint_find(label: &TdfLabel) -> UniquePtr<TDataXtdConstraintHandle>;
+
+        fn tdataxtd_constraint_forget(label: &TdfLabel) -> bool;
+
         // ── TdfLabel ──────────────────────────────────────────────────────────────
         // Shim holding TDF_Label by value.  TDF_Label is a non-owning reference
         // into a TDF_Data tree; the Rust wrapper carries a lifetime parameter

@@ -137,6 +137,13 @@ pub struct TnamingNamedShape {
 }
 
 impl TnamingNamedShape {
+    pub fn new(inner: UniquePtr<ffi::TnamingNamedShapeHandle>) -> Self {
+        Self {
+            inner,
+            _not_send: PhantomData,
+        }
+    }
+
     /// Returns `None` if no `TNaming_NamedShape` attribute is present on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         // find_tnaming_named_shape writes into `out` on success.
@@ -183,6 +190,10 @@ impl TnamingNamedShape {
         TnamingEvolution::from_raw(ffi::tnaming_named_shape_evolution(
             self.inner.as_ref().unwrap(),
         ))
+    }
+
+    pub(crate) fn inner(&self) -> &UniquePtr<ffi::TnamingNamedShapeHandle> {
+        &self.inner
     }
 }
 #[test]
