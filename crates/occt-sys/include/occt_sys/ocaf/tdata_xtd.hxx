@@ -35,9 +35,8 @@
 #include <TDF_Label.hxx>
 
 #include "label.hxx"
-#include "attributes.hxx"
-#include "tdata_xtd.hxx"
-#include "tnaming.hxx"
+#include "attributes.hxx"   // TDataStdRealHandle
+#include "tnaming.hxx"      // TnamingNamedShapeHandle
 #include "../exception.hxx"
 #include "rust/cxx.h"
 
@@ -65,25 +64,44 @@ struct TDataXtdGeometryHandle {
     Handle(TDataXtd_Geometry) inner;
 };
 
-// Set(label) — static.
-// Finds or creates a TDataXtd_Geometry attribute on label.
-// Type defaults to TDataXtd_ANY_GEOM; call tdataxtd_geometry_set_type to
-// update it within the same command.
+// Set(label, geom_type) — finds or creates a TDataXtd_Geometry attribute on
+// label with the given type set atomically before AddAttribute.
+//
+// When creating a new attribute, SetType is called on the raw object before
+// AddAttribute so the type is part of the single AddAttribute delta that undo
+// can cleanly reverse.  Calling SetType after AddAttribute would call Backup()
+// on a freshly-added but not-yet-committed attribute, producing a corrupt undo
+// delta that leaves the attribute on the label after undo.
+//
+// When the attribute already exists, SetType is called on the existing handle;
+// Backup() then operates correctly on the committed state.
+//
 // Must be called inside an open command scope.
 // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___geometry.html
 inline std::unique_ptr<TDataXtdGeometryHandle> tdataxtd_geometry_set(
-    const TdfLabel& label)
+    const TdfLabel& label, int geom_type)
 {
     try {
         auto result = std::make_unique<TDataXtdGeometryHandle>();
-        result->inner = TDataXtd_Geometry::Set(label.inner);
+        Handle(TDataXtd_Geometry) A;
+        if (!label.inner.FindAttribute(TDataXtd_Geometry::GetID(), A)) {
+            A = new TDataXtd_Geometry();
+            A->SetType(static_cast<TDataXtd_GeometryEnum>(geom_type));
+            label.inner.AddAttribute(A);
+        } else {
+            A->SetType(static_cast<TDataXtd_GeometryEnum>(geom_type));
+        }
+        result->inner = A;
         return result;
     } catch (const std::runtime_error&) { throw; }
     catch (...) { rethrow_occt_as_runtime_error(); }
 }
 
 // SetType(T) — non-const instance method.
-// Updates the geometry kind on an existing handle.
+// Updates the geometry kind on an already-committed attribute.
+// Safe to call on an existing attribute: Backup() operates on committed state.
+// Do NOT call this on a freshly-created attribute before its first commit —
+// use tdataxtd_geometry_set with the desired type instead.
 // Must be called inside an open command scope.
 // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___geometry.html
 inline void tdataxtd_geometry_set_type(
@@ -96,18 +114,6 @@ inline void tdataxtd_geometry_set_type(
 // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___geometry.html
 inline int tdataxtd_geometry_get_type(const TDataXtdGeometryHandle& h) {
     return static_cast<int>(h.inner->GetType());
-}
-
-// Type(label) — static; reads the geometry kind from a label directly.
-// NOTE: raises Standard_NoSuchObject (rethrown as runtime_error) if no
-// TDataXtd_Geometry attribute is present on the label.  Callers should probe
-// with tdataxtd_geometry_find before calling this if presence is uncertain.
-// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___geometry.html
-inline int tdataxtd_geometry_type_on_label(const TdfLabel& label) {
-    try {
-        return static_cast<int>(TDataXtd_Geometry::Type(label.inner));
-    } catch (const std::runtime_error&) { throw; }
-    catch (...) { rethrow_occt_as_runtime_error(); }
 }
 
 // FindAttribute pattern — returns nullptr if attribute is absent.
@@ -165,20 +171,18 @@ struct TDataXtdConstraintHandle {
     Handle(TDataXtd_Constraint) inner;
 };
 
-// tdataxtd_constraint_find_or_create — finds or creates the constraint
-// attribute on label via FindAttribute / new TDataXtd_Constraint.
-// Used internally by the set shims to obtain the handle to call Set() on.
-// (TDataXtd_Constraint::Set() is a non-static member in OCCT 8.0 / 7.9.)
-// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___constraint.html
-static inline Handle(TDataXtd_Constraint) tdataxtd_constraint_find_or_create(
+// tdataxtd_constraint_ensure_handle — returns an existing TDataXtd_Constraint
+// handle from label, or nullptr if absent.  Used by set shims to decide
+// whether to create and AddAttribute a new one.
+// The set shims call Set() on the raw object BEFORE AddAttribute so that
+// Backup() inside Set() is a no-op (attribute has no label yet), and
+// AddAttribute records the fully-initialized state as the single undo delta.
+static inline Handle(TDataXtd_Constraint) tdataxtd_constraint_find_existing(
     const TDF_Label& label)
 {
     Handle(TDataXtd_Constraint) attr;
-    if (!label.FindAttribute(TDataXtd_Constraint::GetID(), attr)) {
-        attr = new TDataXtd_Constraint();
-        label.AddAttribute(attr);
-    }
-    return attr;
+    label.FindAttribute(TDataXtd_Constraint::GetID(), attr);
+    return attr; // null handle if absent
 }
 
 // Set with one TNaming_NamedShape geometry reference.
@@ -191,10 +195,18 @@ inline std::unique_ptr<TDataXtdConstraintHandle> tdataxtd_constraint_set1(
 {
     try {
         auto result = std::make_unique<TDataXtdConstraintHandle>();
-        result->inner = tdataxtd_constraint_find_or_create(label.inner);
-        result->inner->Set(
-            static_cast<TDataXtd_ConstraintEnum>(constraint_type),
-            g1.inner);
+        Handle(TDataXtd_Constraint) attr =
+            tdataxtd_constraint_find_existing(label.inner);
+        if (attr.IsNull()) {
+            attr = new TDataXtd_Constraint();
+            attr->Set(static_cast<TDataXtd_ConstraintEnum>(constraint_type),
+                      g1.inner);
+            label.inner.AddAttribute(attr);
+        } else {
+            attr->Set(static_cast<TDataXtd_ConstraintEnum>(constraint_type),
+                      g1.inner);
+        }
+        result->inner = attr;
         return result;
     } catch (const std::runtime_error&) { throw; }
     catch (...) { rethrow_occt_as_runtime_error(); }
@@ -211,10 +223,18 @@ inline std::unique_ptr<TDataXtdConstraintHandle> tdataxtd_constraint_set2(
 {
     try {
         auto result = std::make_unique<TDataXtdConstraintHandle>();
-        result->inner = tdataxtd_constraint_find_or_create(label.inner);
-        result->inner->Set(
-            static_cast<TDataXtd_ConstraintEnum>(constraint_type),
-            g1.inner, g2.inner);
+        Handle(TDataXtd_Constraint) attr =
+            tdataxtd_constraint_find_existing(label.inner);
+        if (attr.IsNull()) {
+            attr = new TDataXtd_Constraint();
+            attr->Set(static_cast<TDataXtd_ConstraintEnum>(constraint_type),
+                      g1.inner, g2.inner);
+            label.inner.AddAttribute(attr);
+        } else {
+            attr->Set(static_cast<TDataXtd_ConstraintEnum>(constraint_type),
+                      g1.inner, g2.inner);
+        }
+        result->inner = attr;
         return result;
     } catch (const std::runtime_error&) { throw; }
     catch (...) { rethrow_occt_as_runtime_error(); }
@@ -232,10 +252,18 @@ inline std::unique_ptr<TDataXtdConstraintHandle> tdataxtd_constraint_set3(
 {
     try {
         auto result = std::make_unique<TDataXtdConstraintHandle>();
-        result->inner = tdataxtd_constraint_find_or_create(label.inner);
-        result->inner->Set(
-            static_cast<TDataXtd_ConstraintEnum>(constraint_type),
-            g1.inner, g2.inner, g3.inner);
+        Handle(TDataXtd_Constraint) attr =
+            tdataxtd_constraint_find_existing(label.inner);
+        if (attr.IsNull()) {
+            attr = new TDataXtd_Constraint();
+            attr->Set(static_cast<TDataXtd_ConstraintEnum>(constraint_type),
+                      g1.inner, g2.inner, g3.inner);
+            label.inner.AddAttribute(attr);
+        } else {
+            attr->Set(static_cast<TDataXtd_ConstraintEnum>(constraint_type),
+                      g1.inner, g2.inner, g3.inner);
+        }
+        result->inner = attr;
         return result;
     } catch (const std::runtime_error&) { throw; }
     catch (...) { rethrow_occt_as_runtime_error(); }
@@ -254,10 +282,18 @@ inline std::unique_ptr<TDataXtdConstraintHandle> tdataxtd_constraint_set4(
 {
     try {
         auto result = std::make_unique<TDataXtdConstraintHandle>();
-        result->inner = tdataxtd_constraint_find_or_create(label.inner);
-        result->inner->Set(
-            static_cast<TDataXtd_ConstraintEnum>(constraint_type),
-            g1.inner, g2.inner, g3.inner, g4.inner);
+        Handle(TDataXtd_Constraint) attr =
+            tdataxtd_constraint_find_existing(label.inner);
+        if (attr.IsNull()) {
+            attr = new TDataXtd_Constraint();
+            attr->Set(static_cast<TDataXtd_ConstraintEnum>(constraint_type),
+                      g1.inner, g2.inner, g3.inner, g4.inner);
+            label.inner.AddAttribute(attr);
+        } else {
+            attr->Set(static_cast<TDataXtd_ConstraintEnum>(constraint_type),
+                      g1.inner, g2.inner, g3.inner, g4.inner);
+        }
+        result->inner = attr;
         return result;
     } catch (const std::runtime_error&) { throw; }
     catch (...) { rethrow_occt_as_runtime_error(); }

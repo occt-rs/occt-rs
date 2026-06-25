@@ -504,20 +504,17 @@ pub mod ffi {
             value: &str,
         ) -> Result<()>;
 
-        // ── Bridge additions for crates/occt-sys/src/topo.rs ─────────────────────────
-        //
-        // Add inside the existing `unsafe extern "C++"` block.
-        // No new include! entry — add `"occt_sys/ocaf/tdataxtd.hxx"` to the umbrella
-        // header at `crates/occt-sys/include/occt_sys/topo.hxx` instead.
-
         // ── TDataXtd_Geometry ─────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___geometry.html
         type TDataXtdGeometryHandle;
 
-        // Set(label) — static; finds or creates the attribute. Type defaults
-        // to TDataXtd_ANY_GEOM. Call tdataxtd_geometry_set_type to update.
+        // Set(label, geom_type) — finds or creates the attribute with the given
+        // type set atomically before AddAttribute, so undo cleanly removes it.
         // Must be inside an open command scope.
-        fn tdataxtd_geometry_set(label: &TdfLabel) -> Result<UniquePtr<TDataXtdGeometryHandle>>;
+        fn tdataxtd_geometry_set(
+            label: &TdfLabel,
+            geom_type: i32,
+        ) -> Result<UniquePtr<TDataXtdGeometryHandle>>;
 
         // SetType(T) — non-const; updates the geometry kind.
         // Must be inside an open command scope.
@@ -525,9 +522,6 @@ pub mod ffi {
 
         // GetType() const — reads the TDataXtd_GeometryEnum ordinal.
         fn tdataxtd_geometry_get_type(h: &TDataXtdGeometryHandle) -> i32;
-
-        // Type(label) — static; raises (Err) if no attribute is present.
-        fn tdataxtd_geometry_type_on_label(label: &TdfLabel) -> Result<i32>;
 
         // FindAttribute — returns null UniquePtr when attribute is absent.
         fn tdataxtd_geometry_find(label: &TdfLabel) -> UniquePtr<TDataXtdGeometryHandle>;

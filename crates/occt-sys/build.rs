@@ -32,7 +32,6 @@ const OCCT_TOOLKITS: &[&str] = &[
     "TKCDF",
     "TKDCAF",
     "TKLCAF",
-    // "TKDataXtd",
 ];
 
 fn main() {
@@ -58,7 +57,6 @@ fn main() {
     println!("cargo:rerun-if-changed=include/occt_sys/ocaf/application.hxx");
     println!("cargo:rerun-if-changed=include/occt_sys/ocaf/attributes.hxx");
     println!("cargo:rerun-if-changed=include/occt_sys/ocaf/tdata_xtd.hxx");
-    // println!("cargo:rerun-if-changed=include/occt_sys/topo/edge_polygon.hxx");
     println!("cargo:rerun-if-env-changed=OCCT_DIR");
 
     let include_paths = discover_occt();

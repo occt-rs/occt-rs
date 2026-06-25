@@ -104,23 +104,34 @@ pub struct OcGeometryAttr {
 }
 
 impl OcGeometryAttr {
-    /// Finds or creates a `TDataXtd_Geometry` attribute on `label`.
+    /// Finds or creates a `TDataXtd_Geometry` attribute on `label` with the
+    /// given `kind` set atomically.
     ///
-    /// The type defaults to [`GeometryKind::Any`]; call [`Self::set_type`]
-    /// within the same command to assign a specific kind.
+    /// The type is applied before the attribute is registered with the label,
+    /// so the single `AddAttribute` operation is the complete undo delta.
+    /// This means undo cleanly removes the attribute rather than reverting it
+    /// to a default state.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
-        let inner = ffi::tdataxtd_geometry_set(&label.inner).map_err(OcctError::from)?;
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, kind: GeometryKind) -> Result<Self, OcctError> {
+        let inner =
+            ffi::tdataxtd_geometry_set(&label.inner, kind as i32).map_err(OcctError::from)?;
         Ok(Self {
             inner,
             _not_send: PhantomData,
         })
     }
 
-    /// Updates the geometry kind on this handle.
+    /// Updates the geometry kind on an already-committed attribute.
+    ///
+    /// Safe only on an attribute that has already been committed in a prior
+    /// command — `Backup()` inside OCCT's `SetType` requires a committed state
+    /// to snapshot correctly.  For new attributes, pass the kind to [`set`]
+    /// directly.
     ///
     /// Must be called inside an open [`Command`] scope.
+    ///
+    /// [`set`]: Self::set
     pub fn set_type(&mut self, _cmd: &Command<'_>, kind: GeometryKind) {
         ffi::tdataxtd_geometry_set_type(self.inner.pin_mut(), kind as i32);
     }
@@ -128,15 +139,6 @@ impl OcGeometryAttr {
     /// Reads the geometry kind from this handle.
     pub fn kind(&self) -> GeometryKind {
         GeometryKind::from_raw(ffi::tdataxtd_geometry_get_type(&self.inner))
-    }
-
-    /// Reads the geometry kind directly from `label` without retrieving the handle.
-    ///
-    /// Returns `Err` when no `TDataXtd_Geometry` attribute is on the label.
-    pub fn kind_on_label(label: &OcLabel) -> Result<GeometryKind, OcctError> {
-        ffi::tdataxtd_geometry_type_on_label(&label.inner)
-            .map(GeometryKind::from_raw)
-            .map_err(OcctError::from)
     }
 
     /// Probes for a `TDataXtd_Geometry` attribute on `label`.
@@ -352,7 +354,7 @@ impl OcConstraintAttr {
         if inner.is_null() {
             None
         } else {
-            Some(TnamingNamedShape::new(inner))
+            Some(TnamingNamedShape::from_ffi(inner))
         }
     }
 
@@ -398,7 +400,7 @@ impl OcConstraintAttr {
         if inner.is_null() {
             None
         } else {
-            Some(TnamingNamedShape::new(inner))
+            Some(TnamingNamedShape::from_ffi(inner))
         }
     }
 
@@ -480,7 +482,64 @@ mod tests {
         builder.named_shape()
     }
 
-    // ── OcGeometryAttr ────────────────────────────────────────────────────
+    #[test]
+    fn geometry_set_diagnostic() {
+        let (_app, mut doc) = new_doc();
+
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            cmd.commit().unwrap();
+            l
+        };
+
+        assert!(
+            OcGeometryAttr::find(&label).is_none(),
+            "attribute should not exist before cmd2"
+        );
+
+        {
+            let cmd = doc.begin_command().unwrap();
+            let result = OcGeometryAttr::set(&cmd, &label, GeometryKind::Line);
+            assert!(result.is_ok(), "set returned Err: {:?}", result.err());
+            assert!(
+                OcGeometryAttr::find(&label).is_some(),
+                "find inside open command returned None"
+            );
+            cmd.commit().unwrap();
+        }
+
+        assert!(
+            OcGeometryAttr::find(&label).is_some(),
+            "attribute not found after commit"
+        );
+
+        {
+            let cmd = doc.begin_command().unwrap();
+            let forgotten = OcGeometryAttr::forget(&cmd, &label);
+            assert!(forgotten, "forget returned false");
+            cmd.commit().unwrap();
+        }
+        assert!(
+            OcGeometryAttr::find(&label).is_none(),
+            "attribute still present after forget"
+        );
+
+        let undo_forget = doc.undo();
+        println!("undo-of-forget result: {:?}", undo_forget);
+        assert!(
+            OcGeometryAttr::find(&label).is_some(),
+            "attribute not restored after undo-of-forget"
+        );
+
+        let undo_set = doc.undo();
+        println!("undo-of-set result: {:?}", undo_set);
+        assert!(
+            OcGeometryAttr::find(&label).is_none(),
+            "attribute still present after undo-of-set"
+        );
+    }
 
     #[test]
     fn geometry_set_and_find() {
@@ -490,8 +549,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             label = main.get_or_create_child(&cmd, 1);
-            let mut attr = OcGeometryAttr::set(&cmd, &label).unwrap();
-            attr.set_type(&cmd, GeometryKind::Circle);
+            OcGeometryAttr::set(&cmd, &label, GeometryKind::Circle).unwrap();
             cmd.commit().unwrap();
         }
         let found = OcGeometryAttr::find(&label).expect("attribute should be present");
@@ -504,37 +562,9 @@ mod tests {
         let main = doc.main();
         let cmd = doc.begin_command().unwrap();
         let label = main.get_or_create_child(&cmd, 1);
-        let attr = OcGeometryAttr::set(&cmd, &label).unwrap();
+        let attr = OcGeometryAttr::set(&cmd, &label, GeometryKind::Any).unwrap();
         assert_eq!(attr.kind(), GeometryKind::Any);
         cmd.commit().unwrap();
-    }
-
-    #[test]
-    fn geometry_kind_on_label() {
-        let (_app, mut doc) = new_doc();
-        let label;
-        {
-            let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            let mut attr = OcGeometryAttr::set(&cmd, &label).unwrap();
-            attr.set_type(&cmd, GeometryKind::Line);
-            cmd.commit().unwrap();
-        }
-        assert_eq!(
-            OcGeometryAttr::kind_on_label(&label).unwrap(),
-            GeometryKind::Line
-        );
-    }
-
-    #[test]
-    fn geometry_kind_on_label_absent_returns_err() {
-        let (_app, mut doc) = new_doc();
-        let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
-        assert!(OcGeometryAttr::kind_on_label(&label).is_err());
     }
 
     #[test]
@@ -545,7 +575,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             label = main.get_or_create_child(&cmd, 1);
-            OcGeometryAttr::set(&cmd, &label).unwrap();
+            OcGeometryAttr::set(&cmd, &label, GeometryKind::Any).unwrap();
             cmd.commit().unwrap();
         }
         {
@@ -558,17 +588,19 @@ mod tests {
 
     #[test]
     fn geometry_undo_restores() {
+        // Label created in cmd1 so it survives undo of cmd2.
+        // Matches the two-command pattern used in attributes.rs undo tests.
         let (_app, mut doc) = new_doc();
-        let label;
-        {
+        let label = {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
+            let l = main.get_or_create_child(&cmd, 1);
             cmd.commit().unwrap();
-        }
+            l
+        };
         {
             let cmd = doc.begin_command().unwrap();
-            OcGeometryAttr::set(&cmd, &label).unwrap();
+            OcGeometryAttr::set(&cmd, &label, GeometryKind::Any).unwrap();
             cmd.commit().unwrap();
         }
         assert!(OcGeometryAttr::find(&label).is_some());
@@ -696,14 +728,20 @@ mod tests {
 
     #[test]
     fn constraint_undo_restores() {
+        // Label and named shape created in cmd1; constraint set in cmd2.
+        // Undo of cmd2 removes the constraint while the label survives.
         let (_app, mut doc) = new_doc();
-        let c_label;
-        {
+        let (l1, c_label, ns) = {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let l1 = main.get_or_create_child(&cmd, 1);
-            c_label = main.get_or_create_child(&cmd, 2);
+            let cl = main.get_or_create_child(&cmd, 2);
             let ns = record_named_shape(&cmd, &l1);
+            cmd.commit().unwrap();
+            (l1, cl, ns)
+        };
+        {
+            let cmd = doc.begin_command().unwrap();
             OcConstraintAttr::set(&cmd, &c_label, ConstraintKind::Fix, &[&ns]).unwrap();
             cmd.commit().unwrap();
         }

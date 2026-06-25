@@ -1853,7 +1853,7 @@ impl std::fmt::Debug for OcExtStringArray {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::topo::{OcApplication, OcDocument};
+    use crate::topo::{OcApplication, OcDocument, OcGeometryAttr};
 
     fn new_doc() -> (OcApplication, OcDocument) {
         let mut app = OcApplication::new();

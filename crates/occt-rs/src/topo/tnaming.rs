@@ -137,7 +137,7 @@ pub struct TnamingNamedShape {
 }
 
 impl TnamingNamedShape {
-    pub fn new(inner: UniquePtr<ffi::TnamingNamedShapeHandle>) -> Self {
+    pub(crate) fn from_ffi(inner: UniquePtr<ffi::TnamingNamedShapeHandle>) -> Self {
         Self {
             inner,
             _not_send: PhantomData,
