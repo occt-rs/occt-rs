@@ -42,6 +42,7 @@ use crate::topo::attributes::OcReal;
 use crate::topo::document::Command;
 use crate::topo::label::OcLabel;
 use crate::topo::tnaming::TnamingNamedShape;
+use crate::OcPnt;
 
 // ── GeometryKind ─────────────────────────────────────────────────────────────
 
@@ -445,6 +446,108 @@ impl std::fmt::Debug for OcConstraintAttr {
             .finish()
     }
 }
+// ── OcPositionAttr ───────────────────────────────────────────────────────────
+
+/// A `TDataXtd_Position` attribute handle — stores a 3-D point on a label.
+///
+/// Unlike [`OcGeometryAttr`] (which only tags a label), `OcPositionAttr`
+/// owns its `gp_Pnt` data directly inside the OCCT attribute.  The stored
+/// point can be read back without inspecting any co-located `TNaming_NamedShape`.
+///
+/// # Undo ordering
+///
+/// [`set`] applies the position before `AddAttribute`, so the single
+/// `AddAttribute` operation is the complete undo delta.  [`set_position`] is
+/// for updating a position that was committed in a **prior** command; calling
+/// it on a freshly-created, not-yet-committed attribute is unsound.
+///
+/// # Usage pattern
+///
+/// ```ignore
+/// // Inside an open command:
+/// let attr = OcPositionAttr::set(&cmd, &label, OcPnt::new(1.0, 2.0, 3.0))?;
+/// assert_eq!(attr.position(), OcPnt::new(1.0, 2.0, 3.0));
+/// ```
+///
+/// Reference: <https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___position.html>
+pub struct OcPositionAttr {
+    inner: cxx::UniquePtr<ffi::TDataXtdPositionHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcPositionAttr {
+    /// Finds or creates a `TDataXtd_Position` attribute on `label` with the
+    /// given point set atomically before `AddAttribute`.
+    ///
+    /// The position is applied to the raw attribute object before it is
+    /// registered with the label, so `AddAttribute` is the sole undo delta.
+    /// Undo therefore cleanly removes the attribute rather than reverting to
+    /// a default state.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, pos: OcPnt) -> Result<Self, OcctError> {
+        let inner = ffi::tdataxtd_position_set(&label.inner, pos.x, pos.y, pos.z)
+            .map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Updates the stored position on an already-committed attribute.
+    ///
+    /// Safe only when this attribute was committed in a prior command —
+    /// `SetPosition` inside OCCT calls `Backup()`, which requires a committed
+    /// state to snapshot correctly.  For new attributes, pass the position
+    /// to [`set`] directly.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// [`set`]: Self::set
+    pub fn set_position(&mut self, _cmd: &Command<'_>, pos: OcPnt) {
+        ffi::tdataxtd_position_set_position(self.inner.pin_mut(), pos.x, pos.y, pos.z);
+    }
+
+    /// Reads the stored position from this handle.
+    pub fn position(&self) -> OcPnt {
+        let mut x = 0.0_f64;
+        let mut y = 0.0_f64;
+        let mut z = 0.0_f64;
+        ffi::tdataxtd_position_get_position(&self.inner, &mut x, &mut y, &mut z);
+        OcPnt::new(x, y, z)
+    }
+
+    /// Probes for a `TDataXtd_Position` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdataxtd_position_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataXtd_Position` attribute from `label`.
+    ///
+    /// Returns `false` if the attribute was not present.
+    /// Must be called inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdataxtd_position_forget(&label.inner)
+    }
+}
+
+impl std::fmt::Debug for OcPositionAttr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcPositionAttr")
+            .field("position", &self.position())
+            .finish()
+    }
+}
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
@@ -748,5 +851,141 @@ mod tests {
         assert!(OcConstraintAttr::find(&c_label).is_some());
         doc.undo().unwrap();
         assert!(OcConstraintAttr::find(&c_label).is_none());
+    }
+    mod position_tests {
+        use super::*;
+        use crate::OcPnt;
+
+        fn new_doc() -> (
+            crate::topo::application::OcApplication,
+            crate::topo::document::OcDocument,
+        ) {
+            let mut app = crate::topo::application::OcApplication::new();
+            let doc = app.new_document("BinXCAF").unwrap();
+            (app, doc)
+        }
+
+        #[test]
+        fn position_set_and_find() {
+            let (_app, mut doc) = new_doc();
+            let label = {
+                let main = doc.main();
+                let cmd = doc.begin_command().unwrap();
+                let l = main.get_or_create_child(&cmd, 1);
+                OcPositionAttr::set(&cmd, &l, OcPnt::new(1.0, 2.0, 3.0)).unwrap();
+                cmd.commit().unwrap();
+                l
+            };
+            let found = OcPositionAttr::find(&label).expect("attribute should be present");
+            let p = found.position();
+            assert!((p.x - 1.0).abs() < 1e-12);
+            assert!((p.y - 2.0).abs() < 1e-12);
+            assert!((p.z - 3.0).abs() < 1e-12);
+        }
+
+        #[test]
+        fn position_set_position_updates() {
+            // Two-command pattern: create in cmd1, update in cmd2.
+            let (_app, mut doc) = new_doc();
+            let label = {
+                let main = doc.main();
+                let cmd = doc.begin_command().unwrap();
+                let l = main.get_or_create_child(&cmd, 1);
+                OcPositionAttr::set(&cmd, &l, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
+                cmd.commit().unwrap();
+                l
+            };
+            {
+                let cmd = doc.begin_command().unwrap();
+                let mut attr = OcPositionAttr::find(&label).unwrap();
+                attr.set_position(&cmd, OcPnt::new(4.0, 5.0, 6.0));
+                cmd.commit().unwrap();
+            }
+            let found = OcPositionAttr::find(&label).unwrap();
+            let p = found.position();
+            assert!((p.x - 4.0).abs() < 1e-12);
+            assert!((p.y - 5.0).abs() < 1e-12);
+            assert!((p.z - 6.0).abs() < 1e-12);
+        }
+
+        #[test]
+        fn position_forget_removes() {
+            let (_app, mut doc) = new_doc();
+            let label = {
+                let main = doc.main();
+                let cmd = doc.begin_command().unwrap();
+                let l = main.get_or_create_child(&cmd, 1);
+                OcPositionAttr::set(&cmd, &l, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+                cmd.commit().unwrap();
+                l
+            };
+            {
+                let cmd = doc.begin_command().unwrap();
+                assert!(OcPositionAttr::forget(&cmd, &label));
+                cmd.commit().unwrap();
+            }
+            assert!(OcPositionAttr::find(&label).is_none());
+        }
+
+        #[test]
+        fn position_undo_restores() {
+            // Label created in cmd1 so it survives undo of cmd2.
+            let (_app, mut doc) = new_doc();
+            let label = {
+                let main = doc.main();
+                let cmd = doc.begin_command().unwrap();
+                let l = main.get_or_create_child(&cmd, 1);
+                cmd.commit().unwrap();
+                l
+            };
+            {
+                let cmd = doc.begin_command().unwrap();
+                OcPositionAttr::set(&cmd, &label, OcPnt::new(7.0, 8.0, 9.0)).unwrap();
+                cmd.commit().unwrap();
+            }
+            assert!(OcPositionAttr::find(&label).is_some());
+            doc.undo().unwrap();
+            assert!(OcPositionAttr::find(&label).is_none());
+        }
+
+        #[test]
+        fn position_undo_set_position_restores() {
+            // Two-command pattern: create in cmd1, update in cmd2, undo cmd2.
+            // After undo, position should revert to cmd1 value.
+            let (_app, mut doc) = new_doc();
+            let label = {
+                let main = doc.main();
+                let cmd = doc.begin_command().unwrap();
+                let l = main.get_or_create_child(&cmd, 1);
+                OcPositionAttr::set(&cmd, &l, OcPnt::new(1.0, 2.0, 3.0)).unwrap();
+                cmd.commit().unwrap();
+                l
+            };
+            {
+                let cmd = doc.begin_command().unwrap();
+                let mut attr = OcPositionAttr::find(&label).unwrap();
+                attr.set_position(&cmd, OcPnt::new(9.0, 9.0, 9.0));
+                cmd.commit().unwrap();
+            }
+            doc.undo().unwrap();
+            let found =
+                OcPositionAttr::find(&label).expect("attribute should survive undo of update");
+            let p = found.position();
+            assert!(
+                (p.x - 1.0).abs() < 1e-12,
+                "x should revert to 1.0, got {}",
+                p.x
+            );
+            assert!(
+                (p.y - 2.0).abs() < 1e-12,
+                "y should revert to 2.0, got {}",
+                p.y
+            );
+            assert!(
+                (p.z - 3.0).abs() < 1e-12,
+                "z should revert to 3.0, got {}",
+                p.z
+            );
+        }
     }
 }

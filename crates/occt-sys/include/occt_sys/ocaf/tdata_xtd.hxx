@@ -30,13 +30,15 @@
 #include <TDataXtd_GeometryEnum.hxx>
 #include <TDataXtd_Constraint.hxx>
 #include <TDataXtd_ConstraintEnum.hxx>
+#include <TDataXtd_Position.hxx>
 #include <TNaming_NamedShape.hxx>
 #include <TDataStd_Real.hxx>
 #include <TDF_Label.hxx>
+#include <gp_Pnt.hxx>
 
 #include "label.hxx"
-#include "attributes.hxx"   // TDataStdRealHandle
-#include "tnaming.hxx"      // TnamingNamedShapeHandle
+#include "attributes.hxx"
+#include "tnaming.hxx"
 #include "../exception.hxx"
 #include "rust/cxx.h"
 
@@ -438,3 +440,95 @@ inline std::unique_ptr<TDataXtdConstraintHandle> tdataxtd_constraint_find(
 inline bool tdataxtd_constraint_forget(const TdfLabel& label) {
     return label.inner.ForgetAttribute(TDataXtd_Constraint::GetID()) == Standard_True;
 }
+
+// ── TDataXtd_Position ────────────────────────────────────────────────────────
+//
+// API notes (sourced from TDataXtd_Position.hxx / .cxx, local headers):
+//   Set(label, gp_Pnt) — static void; finds or creates attribute, calls
+//                         SetPosition(pnt).  SetPosition calls Backup().
+//   Set(label)         — static; finds or creates with default pos (0,0,0).
+//   Get(label, gp_Pnt&)— static bool; writes position into out-param.
+//                         Returns false when attribute is absent.
+//   GetPosition() const— instance method; reads stored gp_Pnt.
+//   SetPosition(pnt)   — non-static; updates stored pnt, calls Backup().
+//   GetID()            — static GUID accessor.
+//
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___position.html
+ 
+struct TDataXtdPositionHandle {
+    Handle(TDataXtd_Position) inner;
+};
+ 
+// Set(label, x, y, z) — finds or creates a TDataXtd_Position attribute on
+// label with the given position set atomically before AddAttribute.
+//
+// When creating a new attribute, SetPosition is called on the raw object
+// before AddAttribute so the position is part of the single AddAttribute
+// delta that undo can cleanly reverse.  When the attribute already exists,
+// SetPosition is called on the committed handle; Backup() then operates
+// correctly on the committed state.
+//
+// Must be called inside an open command scope.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___position.html
+inline std::unique_ptr<TDataXtdPositionHandle> tdataxtd_position_set(
+    const TdfLabel& label, double x, double y, double z)
+{
+    try {
+        auto result = std::make_unique<TDataXtdPositionHandle>();
+        Handle(TDataXtd_Position) A;
+        gp_Pnt pnt(x, y, z);
+        if (!label.inner.FindAttribute(TDataXtd_Position::GetID(), A)) {
+            A = new TDataXtd_Position();
+            A->SetPosition(pnt);   // Backup() no-op on unattached object
+            label.inner.AddAttribute(A);
+        } else {
+            A->SetPosition(pnt);   // Backup() on committed state — correct
+        }
+        result->inner = A;
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+ 
+// SetPosition(x, y, z) — updates position on an already-committed attribute.
+// Calls Backup() on committed state; correct for use in a subsequent command.
+// Must be called inside an open command scope.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___position.html
+inline void tdataxtd_position_set_position(
+    TDataXtdPositionHandle& h, double x, double y, double z)
+{
+    h.inner->SetPosition(gp_Pnt(x, y, z));
+}
+ 
+// GetPosition() const — reads the stored gp_Pnt; decomposes to scalars so
+// no gp type crosses the cxx bridge.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___position.html
+inline void tdataxtd_position_get_position(
+    const TDataXtdPositionHandle& h,
+    double& x, double& y, double& z)
+{
+    const gp_Pnt& p = h.inner->GetPosition();
+    x = p.X(); y = p.Y(); z = p.Z();
+}
+ 
+// FindAttribute pattern — returns nullptr if attribute is absent.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___position.html
+inline std::unique_ptr<TDataXtdPositionHandle> tdataxtd_position_find(
+    const TdfLabel& label)
+{
+    Handle(TDataXtd_Position) attr;
+    if (label.inner.FindAttribute(TDataXtd_Position::GetID(), attr)) {
+        auto result = std::make_unique<TDataXtdPositionHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+ 
+// ForgetAttribute — removes TDataXtd_Position from label.
+// Returns false if not present.  Must be inside an open command.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_d_f___label.html
+inline bool tdataxtd_position_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataXtd_Position::GetID()) == Standard_True;
+}
+

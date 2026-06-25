@@ -623,6 +623,46 @@ pub mod ffi {
 
         fn tdataxtd_constraint_forget(label: &TdfLabel) -> bool;
 
+        // ── TDataXtd_Position ─────────────────────────────────────────────
+        // TDataXtd_Position stores a gp_Pnt directly in the attribute (unlike
+        // TDataXtd_Point/Axis/Plane which are GenericEmpty tags).
+        // gp_Pnt is decomposed to f64 scalars at the bridge boundary.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___position.html
+        type TDataXtdPositionHandle;
+
+        // Set(label, x, y, z) — finds or creates attribute with position set
+        // atomically before AddAttribute (undo ordering rule).
+        // Must be inside an open command scope.
+        fn tdataxtd_position_set(
+            label: &TdfLabel,
+            x: f64,
+            y: f64,
+            z: f64,
+        ) -> Result<UniquePtr<TDataXtdPositionHandle>>;
+
+        // SetPosition — non-const; updates position on a committed attribute.
+        // Must be inside an open command scope.
+        fn tdataxtd_position_set_position(
+            h: Pin<&mut TDataXtdPositionHandle>,
+            x: f64,
+            y: f64,
+            z: f64,
+        );
+
+        // GetPosition — const; decomposes gp_Pnt to scalar out-params.
+        fn tdataxtd_position_get_position(
+            h: &TDataXtdPositionHandle,
+            x: &mut f64,
+            y: &mut f64,
+            z: &mut f64,
+        );
+
+        // FindAttribute — returns null UniquePtr when attribute is absent.
+        fn tdataxtd_position_find(label: &TdfLabel) -> UniquePtr<TDataXtdPositionHandle>;
+
+        fn tdataxtd_position_forget(label: &TdfLabel) -> bool;
+
         // ── TdfLabel ──────────────────────────────────────────────────────────────
         // Shim holding TDF_Label by value.  TDF_Label is a non-owning reference
         // into a TDF_Data tree; the Rust wrapper carries a lifetime parameter
