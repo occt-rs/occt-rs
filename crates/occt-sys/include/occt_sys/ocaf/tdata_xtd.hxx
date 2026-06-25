@@ -156,6 +156,39 @@ inline bool tdataxtd_geometry_forget(const TdfLabel& label) {
     return label.inner.ForgetAttribute(TDataXtd_Geometry::GetID()) == Standard_True;
 }
 
+// TDataXtd_Geometry::Type(label) — static; infers the geometry kind by
+// inspecting the TNaming_NamedShape topology on the label.  This is the
+// OCCT-prescribed way to read geometry kind from a label without holding a
+// handle to the TDataXtd_Geometry attribute.
+//
+// Unlike GetType() on a handle, this does not read the TDataXtd_Geometry
+// attribute — it inspects the actual shape topology:
+//   TopAbs_VERTEX             → TDataXtd_POINT
+//   linear edge curve         → TDataXtd_LINE
+//   circular edge curve       → TDataXtd_CIRCLE
+//   elliptical edge curve     → TDataXtd_ELLIPSE
+//   spline edge curve         → TDataXtd_SPLINE
+//   planar face surface       → TDataXtd_PLANE
+//   cylindrical face surface  → TDataXtd_CYLINDER
+//   anything else             → TDataXtd_ANY_GEOM
+//
+// Raises Standard_NoSuchObject when no TNaming_NamedShape is on the label;
+// the shim catches and rethrows as std::runtime_error → Rust Err.
+//
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___geometry.html
+ 
+// tdataxtd_geometry_type_on_label — static Type(label) shim.
+// Returns the TDataXtd_GeometryEnum ordinal inferred from the NamedShape
+// topology on label.  Returns Err when no NamedShape is present.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___geometry.html
+inline int tdataxtd_geometry_type_on_label(const TdfLabel& label)
+{
+    try {
+        return static_cast<int>(TDataXtd_Geometry::Type(label.inner));
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
 // ── TDataXtd_Constraint ──────────────────────────────────────────────────────
 //
 // TDataXtd_Constraint records a constraint on a label.  Each geometry

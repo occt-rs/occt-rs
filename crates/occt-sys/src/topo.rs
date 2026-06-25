@@ -528,6 +528,12 @@ pub mod ffi {
 
         fn tdataxtd_geometry_forget(label: &TdfLabel) -> bool;
 
+        // Type(label) — static; infers GeometryKind from TNaming_NamedShape
+        // topology on label.  Does not read the TDataXtd_Geometry attribute.
+        // Returns Err when no TNaming_NamedShape is present on the label.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___geometry.html
+        fn tdataxtd_geometry_type_on_label(label: &TdfLabel) -> Result<i32>;
+
         // ── TDataXtd_Constraint ───────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___constraint.html
         //

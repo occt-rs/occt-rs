@@ -168,6 +168,23 @@ impl OcGeometryAttr {
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdataxtd_geometry_forget(&label.inner)
     }
+    /// Infers the geometry kind of `label` by inspecting its
+    /// [`TnamingNamedShape`] topology.
+    ///
+    /// This is the OCCT-prescribed read path for Point, Axis, and Plane labels:
+    /// rather than reading the `TDataXtd_Geometry` qualifier attribute, it
+    /// inspects the actual shape topology — vertex → [`GeometryKind::Point`],
+    /// linear edge → [`GeometryKind::Line`], planar face →
+    /// [`GeometryKind::Plane`], and so on.
+    ///
+    /// Returns `Err` when no `TNaming_NamedShape` is present on the label.
+    ///
+    /// Reference: <https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___geometry.html>
+    pub fn type_on_label(label: &OcLabel) -> Result<GeometryKind, OcctError> {
+        ffi::tdataxtd_geometry_type_on_label(&label.inner)
+            .map(GeometryKind::from_raw)
+            .map_err(OcctError::from)
+    }
 }
 
 impl std::fmt::Debug for OcGeometryAttr {
@@ -622,6 +639,37 @@ impl OcPointAttr {
             _not_send: PhantomData,
         })
     }
+    /// Returns the position of the vertex on `label`.
+    ///
+    /// Uses [`OcGeometryAttr::type_on_label`] to verify the shape is a point,
+    /// then extracts coordinates via `BRep_Tool::Pnt`.
+    ///
+    /// Returns `None` when no `TNaming_NamedShape` is present.
+    /// Returns `Err` when the shape is present but is not a vertex.
+    pub fn get(label: &OcLabel) -> Result<Option<OcPnt>, OcctError> {
+        match OcGeometryAttr::type_on_label(label) {
+            Err(_) | Ok(GeometryKind::Any) => return Ok(None),
+            Ok(GeometryKind::Point) => {}
+            Ok(other) => {
+                return Err(OcctError {
+                    kind: crate::error::OcctErrorKind::DomainError,
+                    message: format!(
+                        "OcPointAttr::get: expected Point geometry, found {:?}",
+                        other
+                    ),
+                })
+            }
+        }
+        let ns = TnamingNamedShape::find(label)
+            .expect("NamedShape must be present: type_on_label succeeded");
+        let shape = OcShape::from_ffi(ffi::tnaming_named_shape_get(ns.inner()));
+        let vertex = ffi::shape_as_vertex(shape.as_ffi());
+        Ok(Some(OcPnt::new(
+            ffi::vertex_pnt_x(&vertex),
+            ffi::vertex_pnt_y(&vertex),
+            ffi::vertex_pnt_z(&vertex),
+        )))
+    }
 
     /// Probes for a `TDataXtd_Point` attribute on `label`.
     ///
@@ -720,6 +768,28 @@ impl OcAxisAttr {
             inner,
             _not_send: PhantomData,
         })
+    }
+
+    /// Returns the geometry kind and named shape of the axis on `label`.
+    ///
+    /// Returns the [`GeometryKind`] inferred from the shape topology (Line,
+    /// Circle, Ellipse, Spline, etc.) alongside the [`TnamingNamedShape`]
+    /// handle.  The caller uses the kind to decide how to interpret the shape —
+    /// for a [`GeometryKind::Line`] they might extract an `OcAx1` via
+    /// BRep_Tool; for a circle they would extract the axis differently.
+    ///
+    /// This follows the OCCT prescription: `TDataXtd_Geometry::Type(label)`
+    /// identifies what the shape is; the caller does the geometry extraction.
+    ///
+    /// Returns `None` when no `TNaming_NamedShape` is present.
+    pub fn get(label: &OcLabel) -> Result<Option<(GeometryKind, TnamingNamedShape)>, OcctError> {
+        let kind = match OcGeometryAttr::type_on_label(label) {
+            Err(_) | Ok(GeometryKind::Any) => return Ok(None),
+            Ok(k) => k,
+        };
+        let ns = TnamingNamedShape::find(label)
+            .expect("NamedShape must be present: type_on_label returned non-Any");
+        Ok(Some((kind, ns)))
     }
 
     /// Probes for a `TDataXtd_Axis` attribute on `label`.
@@ -824,6 +894,24 @@ impl OcPlaneAttr {
             inner,
             _not_send: PhantomData,
         })
+    }
+
+    /// Returns the geometry kind and named shape of the plane on `label`.
+    ///
+    /// Returns the [`GeometryKind`] inferred from the shape topology alongside
+    /// the [`TnamingNamedShape`] handle.  For a well-formed plane label the
+    /// kind will be [`GeometryKind::Plane`]; the caller extracts the `gp_Pln`
+    /// frame via BRep_Tool on the face in the named shape.
+    ///
+    /// Returns `None` when no `TNaming_NamedShape` is present.
+    pub fn get(label: &OcLabel) -> Result<Option<(GeometryKind, TnamingNamedShape)>, OcctError> {
+        let kind = match OcGeometryAttr::type_on_label(label) {
+            Err(_) | Ok(GeometryKind::Any) => return Ok(None),
+            Ok(k) => k,
+        };
+        let ns = TnamingNamedShape::find(label)
+            .expect("NamedShape must be present: type_on_label returned non-Any");
+        Ok(Some((kind, ns)))
     }
 
     /// Probes for a `TDataXtd_Plane` attribute on `label`.
@@ -1563,5 +1651,143 @@ mod tests {
         assert!(OcPlaneAttr::find(&label).is_some());
         doc.undo().unwrap();
         assert!(OcPlaneAttr::find(&label).is_none());
+    }
+
+    #[test]
+    fn type_on_label_point() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            OcPointAttr::record_shape(&cmd, &l, OcPnt::new(1.0, 2.0, 3.0)).unwrap();
+            OcPointAttr::set(&cmd, &l).unwrap();
+            cmd.commit().unwrap();
+            l
+        };
+        assert_eq!(
+            OcGeometryAttr::type_on_label(&label).unwrap(),
+            GeometryKind::Point
+        );
+    }
+
+    #[test]
+    fn type_on_label_line() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            let axis = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
+            OcAxisAttr::record_shape(&cmd, &l, axis).unwrap();
+            OcAxisAttr::set(&cmd, &l).unwrap();
+            cmd.commit().unwrap();
+            l
+        };
+        assert_eq!(
+            OcGeometryAttr::type_on_label(&label).unwrap(),
+            GeometryKind::Line
+        );
+    }
+
+    #[test]
+    fn type_on_label_plane() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            let frame = OcAx2::new(
+                OcPnt::origin(),
+                OcDir::new(0.0, 0.0, 1.0).unwrap(),
+                OcDir::new(1.0, 0.0, 0.0).unwrap(),
+            )
+            .unwrap();
+            OcPlaneAttr::record_shape(&cmd, &l, frame).unwrap();
+            OcPlaneAttr::set(&cmd, &l).unwrap();
+            cmd.commit().unwrap();
+            l
+        };
+        assert_eq!(
+            OcGeometryAttr::type_on_label(&label).unwrap(),
+            GeometryKind::Plane
+        );
+    }
+
+    #[test]
+    fn type_on_label_without_named_shape_returns_any() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            cmd.commit().unwrap();
+            l
+        };
+        assert_eq!(
+            OcGeometryAttr::type_on_label(&label).unwrap(),
+            GeometryKind::Any
+        );
+    }
+
+    #[test]
+    fn point_get_round_trips() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            OcPointAttr::record_shape(&cmd, &l, OcPnt::new(3.0, 4.0, 5.0)).unwrap();
+            OcPointAttr::set(&cmd, &l).unwrap();
+            cmd.commit().unwrap();
+            l
+        };
+        let p = OcPointAttr::get(&label)
+            .unwrap()
+            .expect("should be present");
+        assert!((p.x - 3.0).abs() < 1e-12);
+        assert!((p.y - 4.0).abs() < 1e-12);
+        assert!((p.z - 5.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn axis_get_returns_kind_and_named_shape() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            let axis = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
+            OcAxisAttr::record_shape(&cmd, &l, axis).unwrap();
+            OcAxisAttr::set(&cmd, &l).unwrap();
+            cmd.commit().unwrap();
+            l
+        };
+        let (kind, _ns) = OcAxisAttr::get(&label).unwrap().expect("should be present");
+        assert_eq!(kind, GeometryKind::Line);
+    }
+
+    #[test]
+    fn plane_get_returns_kind_and_named_shape() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            let frame = OcAx2::new(
+                OcPnt::origin(),
+                OcDir::new(0.0, 0.0, 1.0).unwrap(),
+                OcDir::new(1.0, 0.0, 0.0).unwrap(),
+            )
+            .unwrap();
+            OcPlaneAttr::record_shape(&cmd, &l, frame).unwrap();
+            OcPlaneAttr::set(&cmd, &l).unwrap();
+            cmd.commit().unwrap();
+            l
+        };
+        let (kind, _ns) = OcPlaneAttr::get(&label)
+            .unwrap()
+            .expect("should be present");
+        assert_eq!(kind, GeometryKind::Plane);
     }
 }
