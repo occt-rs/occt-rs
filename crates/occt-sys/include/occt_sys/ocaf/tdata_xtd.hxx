@@ -31,10 +31,27 @@
 #include <TDataXtd_Constraint.hxx>
 #include <TDataXtd_ConstraintEnum.hxx>
 #include <TDataXtd_Position.hxx>
+#include <TDataXtd_Point.hxx>
+#include <TDataXtd_Axis.hxx>
+#include <TDataXtd_Plane.hxx>
+#include <BRepBuilderAPI_MakeVertex.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
 #include <TNaming_NamedShape.hxx>
 #include <TDataStd_Real.hxx>
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
+#include <gp_Lin.hxx>
+#include <gp_Pln.hxx>
+#include <gp_Ax1.hxx>
+#include <gp_Ax2.hxx>
+#include <gp_Dir.hxx>
+#include <gp_Pnt.hxx>
+#include <TopoDS_Vertex.hxx>
+#include <TopoDS_Edge.hxx>
+#include <TopoDS_Face.hxx>
+
+
 
 #include "label.hxx"
 #include "attributes.hxx"
@@ -531,4 +548,215 @@ inline std::unique_ptr<TDataXtdPositionHandle> tdataxtd_position_find(
 inline bool tdataxtd_position_forget(const TdfLabel& label) {
     return label.inner.ForgetAttribute(TDataXtd_Position::GetID()) == Standard_True;
 }
+// ── Shape constructors (gp → TopoDS) ─────────────────────────────────────────
+//
+// These are free functions used by the Option B safe API to build the shape
+// before passing it to TnamingBuilderShim::generated_fresh.  They are not
+// specific to TDataXtd but live here because they exist solely to support
+// these three attribute types.
+ 
+// make_vertex_shape — BRepBuilderAPI_MakeVertex from point coordinates.
+// Returns a TopoDS_Vertex for use with generated_fresh.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_vertex.html
+inline std::unique_ptr<TopoDS_Vertex> tdataxtd_make_vertex_shape(
+    double x, double y, double z)
+{
+    try {
+        auto result = std::make_unique<TopoDS_Vertex>();
+        *result = BRepBuilderAPI_MakeVertex(gp_Pnt(x, y, z));
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+ 
+// make_infinite_edge_from_ax1 — BRepBuilderAPI_MakeEdge(gp_Lin) from Ax1
+// scalars (origin + direction).  gp_Lin and gp_Ax1 are structurally
+// identical; gp_Lin has a constructor from gp_Ax1.
+// Returns a TopoDS_Edge for use with generated_fresh.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_edge.html
+inline std::unique_ptr<TopoDS_Edge> tdataxtd_make_infinite_edge_from_ax1(
+    double ox, double oy, double oz,
+    double dx, double dy, double dz)
+{
+    try {
+        auto result = std::make_unique<TopoDS_Edge>();
+        gp_Ax1 ax1(gp_Pnt(ox, oy, oz), gp_Dir(dx, dy, dz));
+        gp_Lin lin(ax1);
+        *result = BRepBuilderAPI_MakeEdge(lin);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+ 
+// make_face_from_ax2 — BRepBuilderAPI_MakeFace(gp_Pln) from Ax2 scalars
+// (origin + normal + x_direction).  gp_Pln is constructed from gp_Ax3;
+// gp_Ax3 has a constructor from gp_Ax2.
+// Returns a TopoDS_Face for use with generated_fresh.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_face.html
+inline std::unique_ptr<TopoDS_Face> tdataxtd_make_face_from_ax2(
+    double ox, double oy, double oz,
+    double nx, double ny, double nz,
+    double xx, double xy, double xz)
+{
+    try {
+        auto result = std::make_unique<TopoDS_Face>();
+        gp_Ax2 ax2(gp_Pnt(ox, oy, oz), gp_Dir(nx, ny, nz), gp_Dir(xx, xy, xz));
+        gp_Pln pln(ax2);
+        *result = BRepBuilderAPI_MakeFace(pln);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+ 
+// ── TDataXtd_Point ───────────────────────────────────────────────────────────
+//
+// Tag attribute: marks a label whose TNaming_NamedShape contains a vertex.
+// Set(label) — static; finds or creates the marker.  No geometry here.
+// API notes (sourced from TDataXtd_Point.hxx):
+//   Set(label)      — static; finds or creates the marker attribute.
+//   GetID()         — static GUID accessor.
+//
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___point.html
+ 
+struct TDataXtdPointHandle {
+    Handle(TDataXtd_Point) inner;
+};
+ 
+// Set(label) — finds or creates the TDataXtd_Point tag attribute on label.
+// Caller is responsible for having placed a vertex NamedShape on the label
+// via TnamingBuilder::generated_fresh before or in the same command.
+// Must be called inside an open command scope.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___point.html
+inline std::unique_ptr<TDataXtdPointHandle> tdataxtd_point_set(
+    const TdfLabel& label)
+{
+    try {
+        auto result = std::make_unique<TDataXtdPointHandle>();
+        result->inner = TDataXtd_Point::Set(label.inner);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+ 
+// FindAttribute pattern — returns nullptr if attribute is absent.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___point.html
+inline std::unique_ptr<TDataXtdPointHandle> tdataxtd_point_find(
+    const TdfLabel& label)
+{
+    Handle(TDataXtd_Point) attr;
+    if (label.inner.FindAttribute(TDataXtd_Point::GetID(), attr)) {
+        auto result = std::make_unique<TDataXtdPointHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+ 
+// ForgetAttribute — removes TDataXtd_Point from label.
+// Returns false if not present.  Must be inside an open command.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_d_f___label.html
+inline bool tdataxtd_point_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataXtd_Point::GetID()) == Standard_True;
+}
+ 
+// ── TDataXtd_Axis ────────────────────────────────────────────────────────────
+//
+// Tag attribute: marks a label whose TNaming_NamedShape contains a linear edge.
+// API notes (sourced from TDataXtd_Axis.hxx):
+//   Set(label)      — static; finds or creates the marker attribute.
+//   GetID()         — static GUID accessor.
+//
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___axis.html
+ 
+struct TDataXtdAxisHandle {
+    Handle(TDataXtd_Axis) inner;
+};
+ 
+// Set(label) — finds or creates the TDataXtd_Axis tag attribute on label.
+// Caller is responsible for having placed a linear edge NamedShape on the
+// label via TnamingBuilder::generated_fresh before or in the same command.
+// Must be called inside an open command scope.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___axis.html
+inline std::unique_ptr<TDataXtdAxisHandle> tdataxtd_axis_set(
+    const TdfLabel& label)
+{
+    try {
+        auto result = std::make_unique<TDataXtdAxisHandle>();
+        result->inner = TDataXtd_Axis::Set(label.inner);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+ 
+// FindAttribute pattern — returns nullptr if attribute is absent.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___axis.html
+inline std::unique_ptr<TDataXtdAxisHandle> tdataxtd_axis_find(
+    const TdfLabel& label)
+{
+    Handle(TDataXtd_Axis) attr;
+    if (label.inner.FindAttribute(TDataXtd_Axis::GetID(), attr)) {
+        auto result = std::make_unique<TDataXtdAxisHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+ 
+// ForgetAttribute — removes TDataXtd_Axis from label.
+// Returns false if not present.  Must be inside an open command.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_d_f___label.html
+inline bool tdataxtd_axis_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataXtd_Axis::GetID()) == Standard_True;
+}
+ 
+// ── TDataXtd_Plane ───────────────────────────────────────────────────────────
+//
+// Tag attribute: marks a label whose TNaming_NamedShape contains a planar face.
+// API notes (sourced from TDataXtd_Plane.hxx):
+//   Set(label)      — static; finds or creates the marker attribute.
+//   GetID()         — static GUID accessor.
+//
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___plane.html
+ 
+struct TDataXtdPlaneHandle {
+    Handle(TDataXtd_Plane) inner;
+};
+ 
+// Set(label) — finds or creates the TDataXtd_Plane tag attribute on label.
+// Caller is responsible for having placed a planar face NamedShape on the
+// label via TnamingBuilder::generated_fresh before or in the same command.
+// Must be called inside an open command scope.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___plane.html
+inline std::unique_ptr<TDataXtdPlaneHandle> tdataxtd_plane_set(
+    const TdfLabel& label)
+{
+    try {
+        auto result = std::make_unique<TDataXtdPlaneHandle>();
+        result->inner = TDataXtd_Plane::Set(label.inner);
+        return result;
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+ 
+// FindAttribute pattern — returns nullptr if attribute is absent.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___plane.html
+inline std::unique_ptr<TDataXtdPlaneHandle> tdataxtd_plane_find(
+    const TdfLabel& label)
+{
+    Handle(TDataXtd_Plane) attr;
+    if (label.inner.FindAttribute(TDataXtd_Plane::GetID(), attr)) {
+        auto result = std::make_unique<TDataXtdPlaneHandle>();
+        result->inner = attr;
+        return result;
+    }
+    return nullptr;
+}
+ 
+// ForgetAttribute — removes TDataXtd_Plane from label.
+// Returns false if not present.  Must be inside an open command.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_d_f___label.html
+inline bool tdataxtd_plane_forget(const TdfLabel& label) {
+    return label.inner.ForgetAttribute(TDataXtd_Plane::GetID()) == Standard_True;
+}
+
 

@@ -663,6 +663,84 @@ pub mod ffi {
 
         fn tdataxtd_position_forget(label: &TdfLabel) -> bool;
 
+        // ── Shape constructors for TDataXtd tag attributes ────────────────
+        // Free functions that cross the gp boundary and return TopoDS shapes
+        // for use with TnamingBuilderShim::generated_fresh.  Used by the
+        // Option B safe API for OcPointAttr / OcAxisAttr / OcPlaneAttr.
+
+        // BRepBuilderAPI_MakeVertex from point coordinates.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_vertex.html
+        fn tdataxtd_make_vertex_shape(x: f64, y: f64, z: f64) -> Result<UniquePtr<TopodsVertex>>;
+
+        // BRepBuilderAPI_MakeEdge(gp_Lin) from Ax1 scalars (origin + direction).
+        // Produces an infinite linear edge.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_edge.html
+        fn tdataxtd_make_infinite_edge_from_ax1(
+            ox: f64,
+            oy: f64,
+            oz: f64,
+            dx: f64,
+            dy: f64,
+            dz: f64,
+        ) -> Result<UniquePtr<TopodsEdge>>;
+
+        // BRepBuilderAPI_MakeFace(gp_Pln) from Ax2 scalars
+        // (origin + normal + x_direction).  Produces an infinite planar face.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_face.html
+        fn tdataxtd_make_face_from_ax2(
+            ox: f64,
+            oy: f64,
+            oz: f64,
+            nx: f64,
+            ny: f64,
+            nz: f64,
+            xx: f64,
+            xy: f64,
+            xz: f64,
+        ) -> Result<UniquePtr<TopdsFace>>;
+
+        // ── TDataXtd_Point ────────────────────────────────────────────────
+        // Tag attribute: label whose NamedShape contains a vertex.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___point.html
+        type TDataXtdPointHandle;
+
+        // Set(label) — finds or creates the tag; no geometry here.
+        // Shape must be placed on the label via TnamingBuilder in the same command.
+        fn tdataxtd_point_set(label: &TdfLabel) -> Result<UniquePtr<TDataXtdPointHandle>>;
+
+        // FindAttribute — returns null UniquePtr when attribute is absent.
+        fn tdataxtd_point_find(label: &TdfLabel) -> UniquePtr<TDataXtdPointHandle>;
+
+        fn tdataxtd_point_forget(label: &TdfLabel) -> bool;
+
+        // ── TDataXtd_Axis ─────────────────────────────────────────────────
+        // Tag attribute: label whose NamedShape contains a linear edge.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___axis.html
+        type TDataXtdAxisHandle;
+
+        // Set(label) — finds or creates the tag; no geometry here.
+        // Shape must be placed on the label via TnamingBuilder in the same command.
+        fn tdataxtd_axis_set(label: &TdfLabel) -> Result<UniquePtr<TDataXtdAxisHandle>>;
+
+        // FindAttribute — returns null UniquePtr when attribute is absent.
+        fn tdataxtd_axis_find(label: &TdfLabel) -> UniquePtr<TDataXtdAxisHandle>;
+
+        fn tdataxtd_axis_forget(label: &TdfLabel) -> bool;
+
+        // ── TDataXtd_Plane ────────────────────────────────────────────────
+        // Tag attribute: label whose NamedShape contains a planar face.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___plane.html
+        type TDataXtdPlaneHandle;
+
+        // Set(label) — finds or creates the tag; no geometry here.
+        // Shape must be placed on the label via TnamingBuilder in the same command.
+        fn tdataxtd_plane_set(label: &TdfLabel) -> Result<UniquePtr<TDataXtdPlaneHandle>>;
+
+        // FindAttribute — returns null UniquePtr when attribute is absent.
+        fn tdataxtd_plane_find(label: &TdfLabel) -> UniquePtr<TDataXtdPlaneHandle>;
+
+        fn tdataxtd_plane_forget(label: &TdfLabel) -> bool;
+
         // ── TdfLabel ──────────────────────────────────────────────────────────────
         // Shim holding TDF_Label by value.  TDF_Label is a non-owning reference
         // into a TDF_Data tree; the Rust wrapper carries a lifetime parameter

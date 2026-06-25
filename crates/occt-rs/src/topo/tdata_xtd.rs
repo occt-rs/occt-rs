@@ -38,11 +38,15 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::OcctError;
+use crate::gp::{OcAx1, OcAx2};
 use crate::topo::attributes::OcReal;
 use crate::topo::document::Command;
 use crate::topo::label::OcLabel;
+use crate::topo::tnaming::TnamingBuilder;
 use crate::topo::tnaming::TnamingNamedShape;
-use crate::OcPnt;
+use crate::topo::{OcEdge, OcFace, OcVertex};
+use crate::{OcPnt, OcShape};
+use occt_sys::ffi::new_tnaming_builder;
 
 // ── GeometryKind ─────────────────────────────────────────────────────────────
 
@@ -549,6 +553,310 @@ impl std::fmt::Debug for OcPositionAttr {
     }
 }
 
+// ── OcPointAttr ──────────────────────────────────────────────────────────────
+
+/// A `TDataXtd_Point` attribute handle — semantic tag marking a label as a point.
+///
+/// The geometry lives in a [`TnamingNamedShape`] on the **same label** as a
+/// vertex produced by [`TnamingBuilder::generated_fresh`].  This attribute is
+/// a zero-byte marker that declares the shape's semantic role.
+///
+/// Because the geometry is a TNaming entity, the point can be referenced as a
+/// geometry participant in [`OcConstraintAttr`] and survives topology
+/// operations via the naming graph.  Use [`OcPositionAttr`] instead when you
+/// only need a raw coordinate that participates in undo/redo but not in
+/// topological naming.
+///
+/// # Usage pattern
+///
+/// ```ignore
+/// // Inside an open command — shape first, then tag:
+/// let ns = OcPointAttr::record_shape(&cmd, &label, OcPnt::new(1.0, 2.0, 3.0))?;
+/// let attr = OcPointAttr::set(&cmd, &label)?;
+/// // ns can now be passed to OcConstraintAttr::set as a geometry participant.
+/// ```
+///
+/// Reference: <https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___point.html>
+pub struct OcPointAttr {
+    inner: cxx::UniquePtr<ffi::TDataXtdPointHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcPointAttr {
+    /// Records a vertex at `pos` as a generated shape on `label` via
+    /// `TNaming_Builder`.
+    ///
+    /// This is the shape half of the Option B pattern.  Call this first, then
+    /// call [`set`] to attach the semantic tag in the same command.  The
+    /// returned [`TnamingNamedShape`] can be passed directly to
+    /// [`OcConstraintAttr::set`].
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// [`set`]: Self::set
+    pub fn record_shape(
+        _cmd: &Command<'_>,
+        label: &OcLabel,
+        pos: OcPnt,
+    ) -> Result<TnamingNamedShape, OcctError> {
+        let vertex =
+            ffi::tdataxtd_make_vertex_shape(pos.x, pos.y, pos.z).map_err(OcctError::from)?;
+        let shape = OcShape::from_ffi(ffi::clone_shape(ffi::vertex_as_shape(&vertex)));
+        let mut builder = TnamingBuilder::new(new_tnaming_builder(&label.inner));
+        builder.generated_fresh(&shape);
+        Ok(builder.named_shape())
+    }
+
+    /// Finds or creates the `TDataXtd_Point` tag attribute on `label`.
+    ///
+    /// The vertex [`TnamingNamedShape`] must already be present on the label —
+    /// call [`record_shape`] first in the same command.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// [`record_shape`]: Self::record_shape
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+        let inner = ffi::tdataxtd_point_set(&label.inner).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataXtd_Point` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdataxtd_point_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataXtd_Point` attribute from `label`.
+    ///
+    /// Returns `false` if the attribute was not present.
+    /// Note: this removes the tag only, not the co-located `TNaming_NamedShape`.
+    /// Must be called inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdataxtd_point_forget(&label.inner)
+    }
+}
+
+impl std::fmt::Debug for OcPointAttr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcPointAttr").finish()
+    }
+}
+
+// ── OcAxisAttr ───────────────────────────────────────────────────────────────
+
+/// A `TDataXtd_Axis` attribute handle — semantic tag marking a label as an axis.
+///
+/// The geometry lives in a [`TnamingNamedShape`] on the **same label** as an
+/// infinite linear edge produced by [`TnamingBuilder::generated_fresh`].
+///
+/// The input to [`record_shape`] is an [`OcAx1`] (origin + direction).
+/// Internally this constructs a `gp_Lin` (structurally identical to `gp_Ax1`)
+/// and passes it to `BRepBuilderAPI_MakeEdge`, producing an infinite edge in
+/// the TNaming graph.
+///
+/// [`record_shape`]: Self::record_shape
+///
+/// Reference: <https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___axis.html>
+pub struct OcAxisAttr {
+    inner: cxx::UniquePtr<ffi::TDataXtdAxisHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcAxisAttr {
+    /// Records an infinite linear edge defined by `axis` as a generated shape
+    /// on `label` via `TNaming_Builder`.
+    ///
+    /// Call this first, then call [`set`] to attach the semantic tag in the
+    /// same command.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// [`set`]: Self::set
+    pub fn record_shape(
+        _cmd: &Command<'_>,
+        label: &OcLabel,
+        axis: OcAx1,
+    ) -> Result<TnamingNamedShape, OcctError> {
+        let loc = axis.location();
+        let dir = axis.direction();
+        let edge = ffi::tdataxtd_make_infinite_edge_from_ax1(
+            loc.x,
+            loc.y,
+            loc.z,
+            dir.x(),
+            dir.y(),
+            dir.z(),
+        )
+        .map_err(OcctError::from)?;
+        let shape = OcShape::from_ffi(ffi::clone_shape(ffi::edge_as_shape(&edge)));
+        let mut builder = TnamingBuilder::new(new_tnaming_builder(&label.inner));
+        builder.generated_fresh(&shape);
+        Ok(builder.named_shape())
+    }
+
+    /// Finds or creates the `TDataXtd_Axis` tag attribute on `label`.
+    ///
+    /// The linear edge [`TnamingNamedShape`] must already be present on the
+    /// label — call [`record_shape`] first in the same command.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// [`record_shape`]: Self::record_shape
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+        let inner = ffi::tdataxtd_axis_set(&label.inner).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataXtd_Axis` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdataxtd_axis_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataXtd_Axis` attribute from `label`.
+    ///
+    /// Returns `false` if the attribute was not present.
+    /// Note: this removes the tag only, not the co-located `TNaming_NamedShape`.
+    /// Must be called inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdataxtd_axis_forget(&label.inner)
+    }
+}
+
+impl std::fmt::Debug for OcAxisAttr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcAxisAttr").finish()
+    }
+}
+
+// ── OcPlaneAttr ──────────────────────────────────────────────────────────────
+
+/// A `TDataXtd_Plane` attribute handle — semantic tag marking a label as a plane.
+///
+/// The geometry lives in a [`TnamingNamedShape`] on the **same label** as an
+/// infinite planar face produced by [`TnamingBuilder::generated_fresh`].
+///
+/// The input to [`record_shape`] is an [`OcAx2`] (origin + normal + X direction).
+/// Internally this constructs a `gp_Pln` via `gp_Ax3(gp_Ax2)` and passes it
+/// to `BRepBuilderAPI_MakeFace`.  The X direction determines the orientation
+/// of the plane's local frame, which is relevant for interpreting "horizontal"
+/// and "vertical" in 2D sketch constraints.
+///
+/// [`record_shape`]: Self::record_shape
+///
+/// Reference: <https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___plane.html>
+pub struct OcPlaneAttr {
+    inner: cxx::UniquePtr<ffi::TDataXtdPlaneHandle>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl OcPlaneAttr {
+    /// Records an infinite planar face defined by `frame` as a generated shape
+    /// on `label` via `TNaming_Builder`.
+    ///
+    /// Call this first, then call [`set`] to attach the semantic tag in the
+    /// same command.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// [`set`]: Self::set
+    pub fn record_shape(
+        _cmd: &Command<'_>,
+        label: &OcLabel,
+        frame: OcAx2,
+    ) -> Result<TnamingNamedShape, OcctError> {
+        let loc = frame.location();
+        let n = frame.direction();
+        let x = frame.x_direction();
+        let face = ffi::tdataxtd_make_face_from_ax2(
+            loc.x,
+            loc.y,
+            loc.z,
+            n.x(),
+            n.y(),
+            n.z(),
+            x.x(),
+            x.y(),
+            x.z(),
+        )
+        .map_err(OcctError::from)?;
+        let shape = OcShape::from_ffi(ffi::clone_shape(ffi::face_as_shape(&face)));
+        let mut builder = TnamingBuilder::new(new_tnaming_builder(&label.inner));
+        builder.generated_fresh(&shape);
+        Ok(builder.named_shape())
+    }
+
+    /// Finds or creates the `TDataXtd_Plane` tag attribute on `label`.
+    ///
+    /// The planar face [`TnamingNamedShape`] must already be present on the
+    /// label — call [`record_shape`] first in the same command.
+    ///
+    /// Must be called inside an open [`Command`] scope.
+    ///
+    /// [`record_shape`]: Self::record_shape
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+        let inner = ffi::tdataxtd_plane_set(&label.inner).map_err(OcctError::from)?;
+        Ok(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Probes for a `TDataXtd_Plane` attribute on `label`.
+    ///
+    /// Returns `None` when the attribute is not present.
+    pub fn find(label: &OcLabel) -> Option<Self> {
+        let inner = ffi::tdataxtd_plane_find(&label.inner);
+        if inner.is_null() {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
+    }
+
+    /// Removes the `TDataXtd_Plane` attribute from `label`.
+    ///
+    /// Returns `false` if the attribute was not present.
+    /// Note: this removes the tag only, not the co-located `TNaming_NamedShape`.
+    /// Must be called inside an open [`Command`] scope.
+    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+        ffi::tdataxtd_plane_forget(&label.inner)
+    }
+}
+
+impl std::fmt::Debug for OcPlaneAttr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcPlaneAttr").finish()
+    }
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -559,6 +867,7 @@ mod tests {
     use crate::topo::document::OcDocument;
     use crate::topo::tnaming::TnamingBuilder;
     use crate::topo::{OcEdge, OcFace, OcWire};
+    use crate::OcDir;
     use occt_sys::ffi::new_tnaming_builder;
 
     fn new_doc() -> (OcApplication, OcDocument) {
@@ -987,5 +1296,272 @@ mod tests {
                 p.z
             );
         }
+    }
+    // ── OcPointAttr ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn point_set_and_find() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            OcPointAttr::record_shape(&cmd, &l, OcPnt::new(1.0, 2.0, 3.0)).unwrap();
+            OcPointAttr::set(&cmd, &l).unwrap();
+            cmd.commit().unwrap();
+            l
+        };
+        assert!(OcPointAttr::find(&label).is_some());
+    }
+
+    #[test]
+    fn point_record_shape_returns_named_shape() {
+        // The returned TnamingNamedShape must be non-null and usable as a
+        // constraint geometry participant.
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            let ns = OcPointAttr::record_shape(&cmd, &l, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
+            // Verify the handle is non-null by checking it can be used in a constraint.
+            let c_label = main.get_or_create_child(&cmd, 2);
+            OcConstraintAttr::set(&cmd, &c_label, ConstraintKind::Fix, &[&ns]).unwrap();
+            OcPointAttr::set(&cmd, &l).unwrap();
+            cmd.commit().unwrap();
+            l
+        };
+        assert!(OcPointAttr::find(&label).is_some());
+    }
+
+    #[test]
+    fn point_forget_removes_tag() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            OcPointAttr::record_shape(&cmd, &l, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+            OcPointAttr::set(&cmd, &l).unwrap();
+            cmd.commit().unwrap();
+            l
+        };
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcPointAttr::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcPointAttr::find(&label).is_none());
+    }
+
+    #[test]
+    fn point_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            cmd.commit().unwrap();
+            l
+        };
+        {
+            let cmd = doc.begin_command().unwrap();
+            OcPointAttr::record_shape(&cmd, &label, OcPnt::new(5.0, 0.0, 0.0)).unwrap();
+            OcPointAttr::set(&cmd, &label).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert!(OcPointAttr::find(&label).is_some());
+        doc.undo().unwrap();
+        assert!(OcPointAttr::find(&label).is_none());
+    }
+
+    // ── OcAxisAttr ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn axis_set_and_find() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            let axis = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
+            OcAxisAttr::record_shape(&cmd, &l, axis).unwrap();
+            OcAxisAttr::set(&cmd, &l).unwrap();
+            cmd.commit().unwrap();
+            l
+        };
+        assert!(OcAxisAttr::find(&label).is_some());
+    }
+
+    #[test]
+    fn axis_record_shape_usable_as_constraint_geom() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            let axis = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
+            let ns = OcAxisAttr::record_shape(&cmd, &l, axis).unwrap();
+            let c_label = main.get_or_create_child(&cmd, 2);
+            OcConstraintAttr::set(&cmd, &c_label, ConstraintKind::Fix, &[&ns]).unwrap();
+            OcAxisAttr::set(&cmd, &l).unwrap();
+            cmd.commit().unwrap();
+            l
+        };
+        assert!(OcAxisAttr::find(&label).is_some());
+    }
+
+    #[test]
+    fn axis_forget_removes_tag() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            let axis = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 1.0, 0.0).unwrap());
+            OcAxisAttr::record_shape(&cmd, &l, axis).unwrap();
+            OcAxisAttr::set(&cmd, &l).unwrap();
+            cmd.commit().unwrap();
+            l
+        };
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcAxisAttr::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcAxisAttr::find(&label).is_none());
+    }
+
+    #[test]
+    fn axis_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            cmd.commit().unwrap();
+            l
+        };
+        {
+            let cmd = doc.begin_command().unwrap();
+            let axis = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
+            OcAxisAttr::record_shape(&cmd, &label, axis).unwrap();
+            OcAxisAttr::set(&cmd, &label).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert!(OcAxisAttr::find(&label).is_some());
+        doc.undo().unwrap();
+        assert!(OcAxisAttr::find(&label).is_none());
+    }
+
+    // ── OcPlaneAttr ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn plane_set_and_find() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            let frame = OcAx2::new(
+                OcPnt::origin(),
+                OcDir::new(0.0, 0.0, 1.0).unwrap(),
+                OcDir::new(1.0, 0.0, 0.0).unwrap(),
+            )
+            .unwrap();
+            OcPlaneAttr::record_shape(&cmd, &l, frame).unwrap();
+            OcPlaneAttr::set(&cmd, &l).unwrap();
+            cmd.commit().unwrap();
+            l
+        };
+        assert!(OcPlaneAttr::find(&label).is_some());
+    }
+
+    #[test]
+    fn plane_record_shape_usable_as_constraint_plane() {
+        // The returned NamedShape can be used as the plane of a 2D constraint.
+        let (_app, mut doc) = new_doc();
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let plane_label = main.get_or_create_child(&cmd, 1);
+            let geom_label = main.get_or_create_child(&cmd, 2);
+            let c_label = main.get_or_create_child(&cmd, 3);
+
+            let frame = OcAx2::new(
+                OcPnt::origin(),
+                OcDir::new(0.0, 0.0, 1.0).unwrap(),
+                OcDir::new(1.0, 0.0, 0.0).unwrap(),
+            )
+            .unwrap();
+            let plane_ns = OcPlaneAttr::record_shape(&cmd, &plane_label, frame).unwrap();
+            OcPlaneAttr::set(&cmd, &plane_label).unwrap();
+
+            let geom_ns =
+                OcPointAttr::record_shape(&cmd, &geom_label, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+            OcPointAttr::set(&cmd, &geom_label).unwrap();
+
+            let mut c =
+                OcConstraintAttr::set(&cmd, &c_label, ConstraintKind::Fix, &[&geom_ns]).unwrap();
+            c.set_plane(&cmd, &plane_ns);
+
+            cmd.commit().unwrap();
+            plane_label
+        };
+        assert!(OcPlaneAttr::find(&label).is_some());
+    }
+
+    #[test]
+    fn plane_forget_removes_tag() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            let frame = OcAx2::new(
+                OcPnt::origin(),
+                OcDir::new(0.0, 0.0, 1.0).unwrap(),
+                OcDir::new(1.0, 0.0, 0.0).unwrap(),
+            )
+            .unwrap();
+            OcPlaneAttr::record_shape(&cmd, &l, frame).unwrap();
+            OcPlaneAttr::set(&cmd, &l).unwrap();
+            cmd.commit().unwrap();
+            l
+        };
+        {
+            let cmd = doc.begin_command().unwrap();
+            assert!(OcPlaneAttr::forget(&cmd, &label));
+            cmd.commit().unwrap();
+        }
+        assert!(OcPlaneAttr::find(&label).is_none());
+    }
+
+    #[test]
+    fn plane_undo_restores() {
+        let (_app, mut doc) = new_doc();
+        let label = {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            cmd.commit().unwrap();
+            l
+        };
+        {
+            let cmd = doc.begin_command().unwrap();
+            let frame = OcAx2::new(
+                OcPnt::origin(),
+                OcDir::new(0.0, 0.0, 1.0).unwrap(),
+                OcDir::new(1.0, 0.0, 0.0).unwrap(),
+            )
+            .unwrap();
+            OcPlaneAttr::record_shape(&cmd, &label, frame).unwrap();
+            OcPlaneAttr::set(&cmd, &label).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert!(OcPlaneAttr::find(&label).is_some());
+        doc.undo().unwrap();
+        assert!(OcPlaneAttr::find(&label).is_none());
     }
 }

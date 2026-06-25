@@ -41,6 +41,7 @@ pub use document::{Command as OcCommand, OcDocument};
 pub use history::{BuiltWithHistory, HistoryProvider};
 pub use label::{OcChildIterator, OcLabel};
 pub use tdata_xtd::{
-    ConstraintKind, GeometryKind, OcConstraintAttr, OcGeometryAttr, OcPositionAttr,
+    ConstraintKind, GeometryKind, OcAxisAttr, OcConstraintAttr, OcGeometryAttr, OcPlaneAttr,
+    OcPointAttr, OcPositionAttr,
 };
 pub use tnaming::{TnamingBuilder, TnamingEvolution, TnamingNamedShape, TnamingSelector};
