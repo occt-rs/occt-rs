@@ -6,10 +6,9 @@
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_face.html>
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::gp::OcVec;
+use crate::gp::{OcDir, OcPnt, OcVec};
 use crate::rs_topo::shape::ShapeKey;
 use crate::rs_topo::{OcShape, OcSolid, OcWire};
-use crate::{OcDir, OcPnt};
 use occt_sys::ffi;
 use std::marker::PhantomData;
 

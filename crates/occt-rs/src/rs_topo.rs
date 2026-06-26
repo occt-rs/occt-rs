@@ -13,18 +13,11 @@ pub mod vertex;
 pub mod wire;
 pub mod wire_builder;
 
-// ocaf
-pub mod application;
-pub mod attributes;
-pub mod document;
-pub mod label;
-pub mod tdata_xtd;
-pub mod tnaming;
-
 pub use chamfer::ChamferBuilder;
 pub use edge::OcEdge;
 pub use face::OcFace;
 pub use fillet::FilletBuilder;
+pub use history::{BuiltWithHistory, HistoryProvider};
 pub use offset::{OffsetShapeBuilder, ThickSolidBuilder};
 pub use proximity_wire_builder::ProximityWireBuilder;
 pub use shape::OcShape;
@@ -34,14 +27,3 @@ pub use solid::OcSolid;
 pub use vertex::OcVertex;
 pub use wire::OcWire;
 pub use wire_builder::KeyedWireBuilder;
-
-pub use application::OcApplication;
-pub use attributes::{OcInteger, OcName, OcReal};
-pub use document::{Command as OcCommand, OcDocument};
-pub use history::{BuiltWithHistory, HistoryProvider};
-pub use label::{OcChildIterator, OcLabel};
-pub use tdata_xtd::{
-    ConstraintKind, GeometryKind, OcAxisAttr, OcConstraintAttr, OcGeometryAttr, OcPlaneAttr,
-    OcPointAttr, OcPositionAttr,
-};
-pub use tnaming::{TnamingBuilder, TnamingEvolution, TnamingNamedShape, TnamingSelector};

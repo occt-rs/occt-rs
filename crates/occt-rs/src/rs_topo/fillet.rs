@@ -126,18 +126,19 @@ impl HistoryProvider for FilletBuilder {
 #[cfg(test)]
 mod history_tests {
     use super::*;
-    use crate::{OcFace, OcPnt, OcVec};
+    use crate::{
+        gp::{OcDir, OcPnt, OcVec},
+        rs_topo::{KeyedWireBuilder, OcFace},
+    };
 
     /// Fillet a box, confirm that original faces appear as modified in output,
     /// and that filleted edges report generated faces.
     #[test]
     fn fillet_history_modified_and_generated() {
         // Build a 1×1×1 box
-        let face = OcFace::from_wire_on_plane(
-            OcPnt::origin(),
-            crate::OcDir::new(0.0, 0.0, 1.0).unwrap(),
-            &{
-                use crate::KeyedWireBuilder;
+        let face =
+            OcFace::from_wire_on_plane(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap(), &{
+                use KeyedWireBuilder;
                 let mut b: KeyedWireBuilder<u32> = KeyedWireBuilder::new();
                 b.add_edge(0, OcPnt::new(0.0, 0.0, 0.0), 1, OcPnt::new(1.0, 0.0, 0.0))
                     .unwrap();
@@ -148,9 +149,8 @@ mod history_tests {
                 b.add_edge(3, OcPnt::new(0.0, 1.0, 0.0), 0, OcPnt::new(0.0, 0.0, 0.0))
                     .unwrap();
                 b.build().unwrap()
-            },
-        )
-        .unwrap();
+            })
+            .unwrap();
         let solid = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
         let shape = solid.as_shape();
 

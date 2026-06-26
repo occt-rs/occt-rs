@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::OcctError;
-use crate::rs_topo::document::OcDocument;
+use crate::ocaf::document::OcDocument;
 
 /// An OCAF application — the factory and registry for [`OcDocument`] instances.
 ///

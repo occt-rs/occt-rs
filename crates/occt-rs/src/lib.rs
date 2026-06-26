@@ -1,11 +1,20 @@
+//! # occt-rs
+//!
+//! Safe Rust bindings for OpenCASCADE Technology (OCCT) 7.9.3.
+//!
+//! ## Access convention
+//!
+//! Types are accessed by module path. There are no crate-root re-exports of
+//! primary types; import from the relevant submodule:
+//!
+//! - `occt_rs::gp` — geometry primitives (`OcPnt`, `OcDir`, `OcVec`, …)
+//! - `occt_rs::rs_topo` — BRep topology (`OcShape`, `OcEdge`, `OcFace`, …) and operation builders
+//! - `occt_rs::ocaf` — document/label/attribute/transaction framework (`OcDocument`, `OcLabel`, …)
+//! - `occt_rs::tessellate` — mesh tessellation (`compute`)
+//! - `occt_rs::error` — error types (`OcctError`, `OcctErrorKind`, …)
+
 pub mod error;
 pub mod gp;
-pub mod tessellate;
+pub mod ocaf;
 pub mod rs_topo;
-
-pub use error::{CommonError, FuseError, OcctError, OcctErrorKind};
-pub use gp::{OcAx1, OcAx2, OcDir, OcPnt, OcTrsf, OcVec};
-pub use rs_topo::{
-    ChamferBuilder, FilletBuilder, KeyedWireBuilder, OcEdge, OcFace, OcShape, OcVertex, OcWire,
-    OffsetShapeBuilder, ProximityWireBuilder, SketchPolylineBuilder, ThickSolidBuilder,
-};
+pub mod tessellate;

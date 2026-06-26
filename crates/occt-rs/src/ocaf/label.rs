@@ -7,7 +7,7 @@
 //! Labels are cheap to clone (the underlying OCCT type holds a Handle to the
 //! label node, which is ref-counted).
 //!
-//! [`OcDocument`]: crate::topo::OcDocument
+//! [`OcDocument`]: crate::ocaf::OcDocument
 
 use std::fmt;
 use std::marker::PhantomData;
@@ -15,7 +15,7 @@ use std::str::FromStr;
 
 use occt_sys::ffi;
 
-use crate::rs_topo::document::Command;
+use crate::ocaf::document::Command;
 
 /// A non-owning reference to a node in a document's label tree.
 ///

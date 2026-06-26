@@ -13,11 +13,12 @@ use std::marker::PhantomData;
 
 use occt_sys::ffi;
 
+use crate::error::OcctError;
 use crate::rs_topo::offset::{OffsetShapeBuilder, ThickSolidBuilder};
+use crate::rs_topo::{OcEdge, ShapeType};
 use crate::{
     error::{CommonError, FuseError},
-    rs_topo::{chamfer::ChamferBuilder, face::OcFace, fillet::FilletBuilder, ShapeType},
-    OcEdge, OcctError,
+    rs_topo::{chamfer::ChamferBuilder, face::OcFace, fillet::FilletBuilder},
 };
 
 /// TopAbs_ShapeEnum::TopAbs_FACE.
@@ -282,9 +283,8 @@ impl Clone for OcShape {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gp::OcPnt;
+    use crate::gp::{OcPnt, OcVec};
     use crate::rs_topo::{OcEdge, OcFace, OcWire};
-    use crate::OcVec;
 
     fn triangle_face() -> OcFace {
         let edges = vec![

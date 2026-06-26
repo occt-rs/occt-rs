@@ -16,9 +16,9 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::rs_topo::label::LabelPath;
-use crate::rs_topo::label::OcLabel;
-use crate::rs_topo::tnaming::{TnamingBuilder, TnamingSelector};
+use crate::ocaf::label::LabelPath;
+use crate::ocaf::label::OcLabel;
+use crate::ocaf::tnaming::{TnamingBuilder, TnamingSelector};
 
 /// An in-memory OCAF document.
 ///
@@ -30,7 +30,7 @@ use crate::rs_topo::tnaming::{TnamingBuilder, TnamingSelector};
 /// OCCT Handle ref-counting is not atomic.  `OcDocument` must not be sent
 /// across thread boundaries.
 ///
-/// [`OcApplication`]: crate::topo::OcApplication
+/// [`OcApplication`]: crate::ocaf::OcApplication
 pub struct OcDocument {
     pub(crate) inner: cxx::UniquePtr<ffi::DocumentHandle>,
     _not_send: PhantomData<*mut ()>,
@@ -200,8 +200,9 @@ impl Drop for Command<'_> {
 
 #[cfg(test)]
 mod tests {
+    use crate::ocaf::OcApplication;
+
     use super::*;
-    use crate::rs_topo::OcApplication;
 
     fn new_doc() -> (OcApplication, OcDocument) {
         let mut app = OcApplication::new();
