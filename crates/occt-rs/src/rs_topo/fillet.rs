@@ -127,8 +127,9 @@ impl HistoryProvider for FilletBuilder {
 mod history_tests {
     use super::*;
     use crate::{
+        app_util::KeyedWireBuilder,
         gp::{OcDir, OcPnt, OcVec},
-        rs_topo::{KeyedWireBuilder, OcFace},
+        rs_topo::OcFace,
     };
 
     /// Fillet a box, confirm that original faces appear as modified in output,

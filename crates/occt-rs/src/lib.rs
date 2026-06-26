@@ -13,6 +13,7 @@
 //! - `occt_rs::tessellate` — mesh tessellation (`compute`)
 //! - `occt_rs::error` — error types (`OcctError`, `OcctErrorKind`, …)
 
+pub mod app_util;
 pub mod error;
 pub mod gp;
 pub mod ocaf;
