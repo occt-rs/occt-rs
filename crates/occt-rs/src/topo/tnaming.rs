@@ -7,7 +7,7 @@
 use std::marker::PhantomData;
 
 use cxx::UniquePtr;
-use occt_sys::ffi;
+use occt_sys::ffi::{self, new_tnaming_builder};
 
 use super::{label::OcLabel, shape::OcShape};
 
@@ -54,9 +54,9 @@ pub struct TnamingBuilder<'cmd> {
 }
 
 impl<'cmd> TnamingBuilder<'cmd> {
-    pub(crate) fn new(inner: UniquePtr<ffi::TnamingBuilderShim>) -> Self {
+    pub fn new(label: &OcLabel) -> Self {
         Self {
-            inner,
+            inner: new_tnaming_builder(&label.inner),
             _not_send: PhantomData,
             _cmd: PhantomData,
         }
@@ -232,7 +232,7 @@ fn tnaming_undo_reverses_modify() {
     let (label, named_shape) = {
         let cmd = doc.begin_command().unwrap();
         let label = root.get_or_create_child(&cmd, 1);
-        let mut b = TnamingBuilder::new(new_tnaming_builder(&label.inner));
+        let mut b = TnamingBuilder::new(&label);
         b.generated_fresh(&shape_a);
         let ns = b.named_shape();
         cmd.commit().unwrap();
@@ -242,7 +242,7 @@ fn tnaming_undo_reverses_modify() {
     // Command 2: modify to shape_b
     {
         let cmd = doc.begin_command().unwrap();
-        let mut b = TnamingBuilder::new(new_tnaming_builder(&label.inner));
+        let mut b = TnamingBuilder::new(&label);
         b.modify(&shape_a, &shape_b);
         cmd.commit().unwrap();
     }

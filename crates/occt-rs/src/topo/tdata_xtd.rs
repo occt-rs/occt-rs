@@ -619,7 +619,7 @@ impl OcPointAttr {
         let vertex =
             ffi::tdataxtd_make_vertex_shape(pos.x, pos.y, pos.z).map_err(OcctError::from)?;
         let shape = OcShape::from_ffi(ffi::clone_shape(ffi::vertex_as_shape(&vertex)));
-        let mut builder = TnamingBuilder::new(new_tnaming_builder(&label.inner));
+        let mut builder = TnamingBuilder::new(&label);
         builder.generated_fresh(&shape);
         Ok(builder.named_shape())
     }
@@ -749,7 +749,7 @@ impl OcAxisAttr {
         )
         .map_err(OcctError::from)?;
         let shape = OcShape::from_ffi(ffi::clone_shape(ffi::edge_as_shape(&edge)));
-        let mut builder = TnamingBuilder::new(new_tnaming_builder(&label.inner));
+        let mut builder = TnamingBuilder::new(label);
         builder.generated_fresh(&shape);
         Ok(builder.named_shape())
     }
@@ -875,7 +875,7 @@ impl OcPlaneAttr {
         )
         .map_err(OcctError::from)?;
         let shape = OcShape::from_ffi(ffi::clone_shape(ffi::face_as_shape(&face)));
-        let mut builder = TnamingBuilder::new(new_tnaming_builder(&label.inner));
+        let mut builder = TnamingBuilder::new(&label);
         builder.generated_fresh(&shape);
         Ok(builder.named_shape())
     }
@@ -977,7 +977,7 @@ mod tests {
         let wire = OcWire::from_edges(&edges).unwrap();
         let face = OcFace::from_wire(&wire, true).unwrap();
         let shape = face.as_shape();
-        let mut builder = TnamingBuilder::new(new_tnaming_builder(&label.inner));
+        let mut builder = TnamingBuilder::new(&label);
         builder.generated_fresh(&shape);
         builder.named_shape()
     }

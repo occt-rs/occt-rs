@@ -802,6 +802,7 @@ pub mod ffi {
         fn document_get_available_redos(doc: &DocumentHandle) -> i32;
 
         // Non-const command / transaction operations.
+        fn document_has_open_command(doc: &DocumentHandle) -> bool;
         fn document_new_command(doc: Pin<&mut DocumentHandle>) -> Result<()>;
         fn document_commit_command(doc: Pin<&mut DocumentHandle>) -> Result<bool>;
         fn document_abort_command(doc: Pin<&mut DocumentHandle>) -> Result<()>;
