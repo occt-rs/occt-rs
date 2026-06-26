@@ -104,3 +104,9 @@ inline bool document_redo(DocumentHandle& doc) {
 inline void document_set_undo_limit(DocumentHandle& doc, int n) {
     doc.inner->SetUndoLimit(n);
 }
+// HasOpenCommand() — returns true when a command scope is currently open.
+// Const.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_doc_std___document.html
+inline bool document_has_open_command(const DocumentHandle& doc) {
+    return doc.inner->HasOpenCommand() == Standard_True;
+}

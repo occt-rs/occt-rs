@@ -208,6 +208,16 @@ impl OcReal {
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_real_forget(&label.inner)
     }
+
+    pub(crate) fn inner(&self) -> &cxx::UniquePtr<ffi::TDataStdRealHandle> {
+        &self.inner
+    }
+    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TDataStdRealHandle>) -> Self {
+        Self {
+            inner,
+            _not_send: std::marker::PhantomData,
+        }
+    }
 }
 
 impl std::fmt::Debug for OcReal {
@@ -1843,7 +1853,7 @@ impl std::fmt::Debug for OcExtStringArray {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::topo::{OcApplication, OcDocument};
+    use crate::topo::{OcApplication, OcDocument, OcGeometryAttr};
 
     fn new_doc() -> (OcApplication, OcDocument) {
         let mut app = OcApplication::new();

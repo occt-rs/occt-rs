@@ -29,3 +29,4 @@
 #include "ocaf/application.hxx"
 #include "ocaf/attributes.hxx"
 #include "ocaf/tnaming.hxx"
+#include "ocaf/tdata_xtd.hxx"

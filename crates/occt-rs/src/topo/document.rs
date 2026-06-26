@@ -15,7 +15,7 @@ use std::marker::PhantomData;
 
 use occt_sys::ffi;
 
-use crate::error::OcctError;
+use crate::error::{OcctError, OcctErrorKind};
 use crate::topo::label::LabelPath;
 use crate::topo::label::OcLabel;
 use crate::topo::tnaming::{TnamingBuilder, TnamingSelector};
@@ -75,6 +75,14 @@ impl OcDocument {
     /// Returns `Err` if OCCT raises during `NewCommand` (unlikely for valid
     /// documents, but wrapped defensively).
     pub fn begin_command(&mut self) -> Result<Command<'_>, OcctError> {
+        if ffi::document_has_open_command(&self.inner) {
+            return Err(OcctError {
+                kind: OcctErrorKind::Other("document".into()),
+                message: "begin_command called while a command is already open; \
+                      commit or abort the current command first"
+                    .into(),
+            });
+        }
         let mut pinned = self.inner.pin_mut();
         ffi::document_new_command(pinned.as_mut()).map_err(OcctError::from)?;
         Ok(Command {
@@ -114,6 +122,9 @@ impl OcDocument {
     /// Older entries are discarded when the limit is exceeded.
     pub fn set_undo_limit(&mut self, n: i32) {
         ffi::document_set_undo_limit(self.inner.pin_mut(), n);
+    }
+    pub fn has_open_command(&self) -> bool {
+        ffi::document_has_open_command(&self.inner)
     }
 }
 
@@ -162,7 +173,7 @@ impl<'doc> Command<'doc> {
         Ok(())
     }
     pub fn name_builder<'cmd>(&'cmd self, label: &OcLabel) -> TnamingBuilder<'cmd> {
-        TnamingBuilder::new(ffi::new_tnaming_builder(label.inner.as_ref().unwrap()))
+        TnamingBuilder::new(&label)
     }
     /// Creates a [`TnamingSelector`] bound to `label`.
     ///

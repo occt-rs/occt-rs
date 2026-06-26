@@ -57,6 +57,7 @@ inline std::unique_ptr<DocumentHandle> application_new_document(
             throw std::runtime_error(
                 "OCCT:TDocStd_Application:NewDocument returned a null handle");
         }
+        result->inner->SetUndoLimit(100);
         return result;
     } catch (const std::runtime_error&) { throw; }
     catch (...) { rethrow_occt_as_runtime_error(); }

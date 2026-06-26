@@ -504,6 +504,249 @@ pub mod ffi {
             value: &str,
         ) -> Result<()>;
 
+        // ── TDataXtd_Geometry ─────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___geometry.html
+        type TDataXtdGeometryHandle;
+
+        // Set(label, geom_type) — finds or creates the attribute with the given
+        // type set atomically before AddAttribute, so undo cleanly removes it.
+        // Must be inside an open command scope.
+        fn tdataxtd_geometry_set(
+            label: &TdfLabel,
+            geom_type: i32,
+        ) -> Result<UniquePtr<TDataXtdGeometryHandle>>;
+
+        // SetType(T) — non-const; updates the geometry kind.
+        // Must be inside an open command scope.
+        fn tdataxtd_geometry_set_type(h: Pin<&mut TDataXtdGeometryHandle>, geom_type: i32);
+
+        // GetType() const — reads the TDataXtd_GeometryEnum ordinal.
+        fn tdataxtd_geometry_get_type(h: &TDataXtdGeometryHandle) -> i32;
+
+        // FindAttribute — returns null UniquePtr when attribute is absent.
+        fn tdataxtd_geometry_find(label: &TdfLabel) -> UniquePtr<TDataXtdGeometryHandle>;
+
+        fn tdataxtd_geometry_forget(label: &TdfLabel) -> bool;
+
+        // Type(label) — static; infers GeometryKind from TNaming_NamedShape
+        // topology on label.  Does not read the TDataXtd_Geometry attribute.
+        // Returns Err when no TNaming_NamedShape is present on the label.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___geometry.html
+        fn tdataxtd_geometry_type_on_label(label: &TdfLabel) -> Result<i32>;
+
+        // ── TDataXtd_Constraint ───────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___constraint.html
+        //
+        // Geometry participants are Handle(TNaming_NamedShape).
+        // C++ overload set (1–4 geometries) is split into four named shims;
+        // the safe Rust API collapses them into a single set(&[&TnamingNamedShape]).
+        type TDataXtdConstraintHandle;
+
+        fn tdataxtd_constraint_set1(
+            label: &TdfLabel,
+            constraint_type: i32,
+            g1: &TnamingNamedShapeHandle,
+        ) -> Result<UniquePtr<TDataXtdConstraintHandle>>;
+
+        fn tdataxtd_constraint_set2(
+            label: &TdfLabel,
+            constraint_type: i32,
+            g1: &TnamingNamedShapeHandle,
+            g2: &TnamingNamedShapeHandle,
+        ) -> Result<UniquePtr<TDataXtdConstraintHandle>>;
+
+        fn tdataxtd_constraint_set3(
+            label: &TdfLabel,
+            constraint_type: i32,
+            g1: &TnamingNamedShapeHandle,
+            g2: &TnamingNamedShapeHandle,
+            g3: &TnamingNamedShapeHandle,
+        ) -> Result<UniquePtr<TDataXtdConstraintHandle>>;
+
+        fn tdataxtd_constraint_set4(
+            label: &TdfLabel,
+            constraint_type: i32,
+            g1: &TnamingNamedShapeHandle,
+            g2: &TnamingNamedShapeHandle,
+            g3: &TnamingNamedShapeHandle,
+            g4: &TnamingNamedShapeHandle,
+        ) -> Result<UniquePtr<TDataXtdConstraintHandle>>;
+
+        // SetGeometry(index, ns) — 1-based; non-const.
+        fn tdataxtd_constraint_set_geometry(
+            c: Pin<&mut TDataXtdConstraintHandle>,
+            index: i32,
+            ns: &TnamingNamedShapeHandle,
+        );
+
+        // SetValue — associates a TDataStd_Real as dimension value; non-const.
+        fn tdataxtd_constraint_set_value(
+            c: Pin<&mut TDataXtdConstraintHandle>,
+            val: &TDataStdRealHandle,
+        );
+
+        // SetType — non-const.
+        fn tdataxtd_constraint_set_type(
+            c: Pin<&mut TDataXtdConstraintHandle>,
+            constraint_type: i32,
+        );
+
+        fn tdataxtd_constraint_get_type(c: &TDataXtdConstraintHandle) -> i32;
+        fn tdataxtd_constraint_nb_geometries(c: &TDataXtdConstraintHandle) -> i32;
+
+        // GetGeometry — 1-based; returns null UniquePtr when OOB.
+        fn tdataxtd_constraint_get_geometry(
+            c: &TDataXtdConstraintHandle,
+            index: i32,
+        ) -> UniquePtr<TnamingNamedShapeHandle>;
+
+        fn tdataxtd_constraint_is_dimension(c: &TDataXtdConstraintHandle) -> bool;
+
+        // GetValue — returns null UniquePtr when IsDimension() is false.
+        fn tdataxtd_constraint_get_value(
+            c: &TDataXtdConstraintHandle,
+        ) -> UniquePtr<TDataStdRealHandle>;
+
+        fn tdataxtd_constraint_verified(c: &TDataXtdConstraintHandle) -> bool;
+
+        // Verified(bool) — non-const.
+        fn tdataxtd_constraint_set_verified(c: Pin<&mut TDataXtdConstraintHandle>, status: bool);
+
+        fn tdataxtd_constraint_is_planar(c: &TDataXtdConstraintHandle) -> bool;
+
+        // GetPlane — returns null UniquePtr when IsPlanar() is false.
+        fn tdataxtd_constraint_get_plane(
+            c: &TDataXtdConstraintHandle,
+        ) -> UniquePtr<TnamingNamedShapeHandle>;
+
+        // SetPlane — non-const.
+        fn tdataxtd_constraint_set_plane(
+            c: Pin<&mut TDataXtdConstraintHandle>,
+            plane: &TnamingNamedShapeHandle,
+        );
+
+        fn tdataxtd_constraint_find(label: &TdfLabel) -> UniquePtr<TDataXtdConstraintHandle>;
+
+        fn tdataxtd_constraint_forget(label: &TdfLabel) -> bool;
+
+        // ── TDataXtd_Position ─────────────────────────────────────────────
+        // TDataXtd_Position stores a gp_Pnt directly in the attribute (unlike
+        // TDataXtd_Point/Axis/Plane which are GenericEmpty tags).
+        // gp_Pnt is decomposed to f64 scalars at the bridge boundary.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___position.html
+        type TDataXtdPositionHandle;
+
+        // Set(label, x, y, z) — finds or creates attribute with position set
+        // atomically before AddAttribute (undo ordering rule).
+        // Must be inside an open command scope.
+        fn tdataxtd_position_set(
+            label: &TdfLabel,
+            x: f64,
+            y: f64,
+            z: f64,
+        ) -> Result<UniquePtr<TDataXtdPositionHandle>>;
+
+        // SetPosition — non-const; updates position on a committed attribute.
+        // Must be inside an open command scope.
+        fn tdataxtd_position_set_position(
+            h: Pin<&mut TDataXtdPositionHandle>,
+            x: f64,
+            y: f64,
+            z: f64,
+        );
+
+        // GetPosition — const; decomposes gp_Pnt to scalar out-params.
+        fn tdataxtd_position_get_position(
+            h: &TDataXtdPositionHandle,
+            x: &mut f64,
+            y: &mut f64,
+            z: &mut f64,
+        );
+
+        // FindAttribute — returns null UniquePtr when attribute is absent.
+        fn tdataxtd_position_find(label: &TdfLabel) -> UniquePtr<TDataXtdPositionHandle>;
+
+        fn tdataxtd_position_forget(label: &TdfLabel) -> bool;
+
+        // ── Shape constructors for TDataXtd tag attributes ────────────────
+        // Free functions that cross the gp boundary and return TopoDS shapes
+        // for use with TnamingBuilderShim::generated_fresh.  Used by the
+        // Option B safe API for OcPointAttr / OcAxisAttr / OcPlaneAttr.
+
+        // BRepBuilderAPI_MakeVertex from point coordinates.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_vertex.html
+        fn tdataxtd_make_vertex_shape(x: f64, y: f64, z: f64) -> Result<UniquePtr<TopodsVertex>>;
+
+        // BRepBuilderAPI_MakeEdge(gp_Lin) from Ax1 scalars (origin + direction).
+        // Produces an infinite linear edge.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_edge.html
+        fn tdataxtd_make_infinite_edge_from_ax1(
+            ox: f64,
+            oy: f64,
+            oz: f64,
+            dx: f64,
+            dy: f64,
+            dz: f64,
+        ) -> Result<UniquePtr<TopodsEdge>>;
+
+        // BRepBuilderAPI_MakeFace(gp_Pln) from Ax2 scalars
+        // (origin + normal + x_direction).  Produces an infinite planar face.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_face.html
+        fn tdataxtd_make_face_from_ax2(
+            ox: f64,
+            oy: f64,
+            oz: f64,
+            nx: f64,
+            ny: f64,
+            nz: f64,
+            xx: f64,
+            xy: f64,
+            xz: f64,
+        ) -> Result<UniquePtr<TopdsFace>>;
+
+        // ── TDataXtd_Point ────────────────────────────────────────────────
+        // Tag attribute: label whose NamedShape contains a vertex.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___point.html
+        type TDataXtdPointHandle;
+
+        // Set(label) — finds or creates the tag; no geometry here.
+        // Shape must be placed on the label via TnamingBuilder in the same command.
+        fn tdataxtd_point_set(label: &TdfLabel) -> Result<UniquePtr<TDataXtdPointHandle>>;
+
+        // FindAttribute — returns null UniquePtr when attribute is absent.
+        fn tdataxtd_point_find(label: &TdfLabel) -> UniquePtr<TDataXtdPointHandle>;
+
+        fn tdataxtd_point_forget(label: &TdfLabel) -> bool;
+
+        // ── TDataXtd_Axis ─────────────────────────────────────────────────
+        // Tag attribute: label whose NamedShape contains a linear edge.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___axis.html
+        type TDataXtdAxisHandle;
+
+        // Set(label) — finds or creates the tag; no geometry here.
+        // Shape must be placed on the label via TnamingBuilder in the same command.
+        fn tdataxtd_axis_set(label: &TdfLabel) -> Result<UniquePtr<TDataXtdAxisHandle>>;
+
+        // FindAttribute — returns null UniquePtr when attribute is absent.
+        fn tdataxtd_axis_find(label: &TdfLabel) -> UniquePtr<TDataXtdAxisHandle>;
+
+        fn tdataxtd_axis_forget(label: &TdfLabel) -> bool;
+
+        // ── TDataXtd_Plane ────────────────────────────────────────────────
+        // Tag attribute: label whose NamedShape contains a planar face.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___plane.html
+        type TDataXtdPlaneHandle;
+
+        // Set(label) — finds or creates the tag; no geometry here.
+        // Shape must be placed on the label via TnamingBuilder in the same command.
+        fn tdataxtd_plane_set(label: &TdfLabel) -> Result<UniquePtr<TDataXtdPlaneHandle>>;
+
+        // FindAttribute — returns null UniquePtr when attribute is absent.
+        fn tdataxtd_plane_find(label: &TdfLabel) -> UniquePtr<TDataXtdPlaneHandle>;
+
+        fn tdataxtd_plane_forget(label: &TdfLabel) -> bool;
+
         // ── TdfLabel ──────────────────────────────────────────────────────────────
         // Shim holding TDF_Label by value.  TDF_Label is a non-owning reference
         // into a TDF_Data tree; the Rust wrapper carries a lifetime parameter
@@ -559,6 +802,7 @@ pub mod ffi {
         fn document_get_available_redos(doc: &DocumentHandle) -> i32;
 
         // Non-const command / transaction operations.
+        fn document_has_open_command(doc: &DocumentHandle) -> bool;
         fn document_new_command(doc: Pin<&mut DocumentHandle>) -> Result<()>;
         fn document_commit_command(doc: Pin<&mut DocumentHandle>) -> Result<bool>;
         fn document_abort_command(doc: Pin<&mut DocumentHandle>) -> Result<()>;
