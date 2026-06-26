@@ -6,7 +6,7 @@
 
 use crate::error::OcctError;
 use crate::gp::OcPnt;
-use crate::topo::{OcEdge, OcVertex, OcWire};
+use crate::rs_topo::{OcEdge, OcVertex, OcWire};
 use std::collections::HashMap;
 use std::hash::Hash;
 

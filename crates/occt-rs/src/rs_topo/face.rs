@@ -7,8 +7,8 @@
 
 use crate::error::{OcctError, OcctErrorKind};
 use crate::gp::OcVec;
-use crate::topo::shape::ShapeKey;
-use crate::topo::{OcShape, OcSolid, OcWire};
+use crate::rs_topo::shape::ShapeKey;
+use crate::rs_topo::{OcShape, OcSolid, OcWire};
 use crate::{OcDir, OcPnt};
 use occt_sys::ffi;
 use std::marker::PhantomData;
@@ -179,7 +179,7 @@ impl Clone for OcFace {
 mod tests {
     use super::*;
     use crate::gp::OcPnt;
-    use crate::topo::OcEdge;
+    use crate::rs_topo::OcEdge;
 
     fn triangle_wire() -> OcWire {
         let edges = vec![

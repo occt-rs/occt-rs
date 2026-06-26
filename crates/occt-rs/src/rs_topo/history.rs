@@ -14,7 +14,7 @@
 //!
 //! Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_shape.html
 
-use crate::topo::shape::OcShape;
+use crate::rs_topo::shape::OcShape;
 
 /// Implemented by builders that expose post-build shape history.
 ///

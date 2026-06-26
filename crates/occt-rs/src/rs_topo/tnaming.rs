@@ -199,7 +199,7 @@ impl TnamingNamedShape {
 #[test]
 fn tnaming_undo_reverses_modify() {
     use crate::gp::OcPnt;
-    use crate::topo::{OcApplication, OcEdge, OcFace};
+    use crate::rs_topo::{OcApplication, OcEdge, OcFace};
     use occt_sys::ffi::new_tnaming_builder;
 
     let mut app = OcApplication::new();
@@ -212,7 +212,7 @@ fn tnaming_undo_reverses_modify() {
         OcEdge::from_pnts(OcPnt::new(1.0, 1.0, 0.0), OcPnt::new(0.0, 1.0, 0.0)).unwrap(),
         OcEdge::from_pnts(OcPnt::new(0.0, 1.0, 0.0), OcPnt::new(0.0, 0.0, 0.0)).unwrap(),
     ];
-    let wire_a = crate::topo::OcWire::from_edges(&edges).unwrap();
+    let wire_a = crate::rs_topo::OcWire::from_edges(&edges).unwrap();
     let face_a = OcFace::from_wire(&wire_a, true).unwrap();
     let shape_a = face_a.as_shape();
 
@@ -222,7 +222,7 @@ fn tnaming_undo_reverses_modify() {
         OcEdge::from_pnts(OcPnt::new(1.5, 1.0, 0.0), OcPnt::new(0.5, 1.0, 0.0)).unwrap(),
         OcEdge::from_pnts(OcPnt::new(0.5, 1.0, 0.0), OcPnt::new(0.5, 0.0, 0.0)).unwrap(),
     ];
-    let wire_b = crate::topo::OcWire::from_edges(&edges).unwrap();
+    let wire_b = crate::rs_topo::OcWire::from_edges(&edges).unwrap();
     let face_b = OcFace::from_wire(&wire_b, true).unwrap();
     let shape_b = face_b.as_shape();
 
@@ -307,7 +307,7 @@ impl TnamingSelector {
     /// [`Command`]: crate::topo::document::Command
     pub fn select(
         &mut self,
-        _cmd: &crate::topo::document::Command<'_>,
+        _cmd: &crate::rs_topo::document::Command<'_>,
         shape: &OcShape,
         context: &OcShape,
     ) -> bool {

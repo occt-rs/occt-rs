@@ -16,9 +16,9 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::topo::label::LabelPath;
-use crate::topo::label::OcLabel;
-use crate::topo::tnaming::{TnamingBuilder, TnamingSelector};
+use crate::rs_topo::label::LabelPath;
+use crate::rs_topo::label::OcLabel;
+use crate::rs_topo::tnaming::{TnamingBuilder, TnamingSelector};
 
 /// An in-memory OCAF document.
 ///
@@ -201,7 +201,7 @@ impl Drop for Command<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::topo::OcApplication;
+    use crate::rs_topo::OcApplication;
 
     fn new_doc() -> (OcApplication, OcDocument) {
         let mut app = OcApplication::new();

@@ -8,8 +8,8 @@
 
 use crate::error::{OcctError, OcctErrorKind};
 use crate::gp::OcPnt;
-use crate::topo::shape::ShapeKey;
-use crate::topo::{OcShape, OcVertex};
+use crate::rs_topo::shape::ShapeKey;
+use crate::rs_topo::{OcShape, OcVertex};
 use occt_sys::ffi;
 use std::marker::PhantomData;
 

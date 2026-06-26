@@ -15,7 +15,7 @@ use std::str::FromStr;
 
 use occt_sys::ffi;
 
-use crate::topo::document::Command;
+use crate::rs_topo::document::Command;
 
 /// A non-owning reference to a node in a document's label tree.
 ///

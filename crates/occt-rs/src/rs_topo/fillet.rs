@@ -28,7 +28,7 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::topo::{BuiltWithHistory, HistoryProvider, OcEdge, OcShape};
+use crate::rs_topo::{BuiltWithHistory, HistoryProvider, OcEdge, OcShape};
 
 /// Builder for constant-radius fillets on a solid.
 ///
@@ -187,7 +187,7 @@ mod history_tests {
                 any_modified = true;
                 // All returned shapes must be valid (non-null)
                 for m in &mods {
-                    assert_eq!(m.shape_type(), crate::topo::ShapeType::Face);
+                    assert_eq!(m.shape_type(), crate::rs_topo::ShapeType::Face);
                 }
             }
         }

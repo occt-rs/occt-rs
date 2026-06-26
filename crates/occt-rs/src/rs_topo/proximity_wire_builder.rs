@@ -10,7 +10,7 @@
 
 use crate::error::OcctError;
 use crate::gp::OcPnt;
-use crate::topo::{OcEdge, OcVertex, OcWire};
+use crate::rs_topo::{OcEdge, OcVertex, OcWire};
 
 /// Default tolerance matching `Precision::Confusion()` in OCCT.
 pub const PRECISION_CONFUSION: f64 = 1e-7;

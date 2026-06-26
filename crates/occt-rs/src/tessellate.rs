@@ -45,8 +45,8 @@
 //!   `TopExp_Explorer`                 — <https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html>
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::topo::shape::ShapeKey;
-use crate::topo::OcShape;
+use crate::rs_topo::shape::ShapeKey;
+use crate::rs_topo::OcShape;
 use occt_sys::ffi;
 
 // TopAbs_ShapeEnum constants.
@@ -357,9 +357,9 @@ fn try_polygon3d(edge: &ffi::TopodsEdge) -> Option<Vec<[f64; 3]>> {
 mod tests {
     use super::*;
     use crate::gp::{OcPnt, OcVec};
-    use crate::topo::{OcEdge, OcFace, OcWire};
+    use crate::rs_topo::{OcEdge, OcFace, OcWire};
 
-    fn triangle_prism() -> crate::topo::OcSolid {
+    fn triangle_prism() -> crate::rs_topo::OcSolid {
         let edges = vec![
             OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
             OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(0.5, 1.0, 0.0)).unwrap(),

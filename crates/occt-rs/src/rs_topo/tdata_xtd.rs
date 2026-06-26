@@ -39,12 +39,12 @@ use occt_sys::ffi;
 
 use crate::error::OcctError;
 use crate::gp::{OcAx1, OcAx2};
-use crate::topo::attributes::OcReal;
-use crate::topo::document::Command;
-use crate::topo::label::OcLabel;
-use crate::topo::tnaming::TnamingBuilder;
-use crate::topo::tnaming::TnamingNamedShape;
-use crate::topo::{OcEdge, OcFace, OcVertex};
+use crate::rs_topo::attributes::OcReal;
+use crate::rs_topo::document::Command;
+use crate::rs_topo::label::OcLabel;
+use crate::rs_topo::tnaming::TnamingBuilder;
+use crate::rs_topo::tnaming::TnamingNamedShape;
+use crate::rs_topo::{OcEdge, OcFace, OcVertex};
 use crate::{OcPnt, OcShape};
 use occt_sys::ffi::new_tnaming_builder;
 
@@ -951,10 +951,10 @@ impl std::fmt::Debug for OcPlaneAttr {
 mod tests {
     use super::*;
     use crate::gp::OcPnt;
-    use crate::topo::application::OcApplication;
-    use crate::topo::document::OcDocument;
-    use crate::topo::tnaming::TnamingBuilder;
-    use crate::topo::{OcEdge, OcFace, OcWire};
+    use crate::rs_topo::application::OcApplication;
+    use crate::rs_topo::document::OcDocument;
+    use crate::rs_topo::tnaming::TnamingBuilder;
+    use crate::rs_topo::{OcEdge, OcFace, OcWire};
     use crate::OcDir;
     use occt_sys::ffi::new_tnaming_builder;
 
@@ -1254,10 +1254,10 @@ mod tests {
         use crate::OcPnt;
 
         fn new_doc() -> (
-            crate::topo::application::OcApplication,
-            crate::topo::document::OcDocument,
+            crate::rs_topo::application::OcApplication,
+            crate::rs_topo::document::OcDocument,
         ) {
-            let mut app = crate::topo::application::OcApplication::new();
+            let mut app = crate::rs_topo::application::OcApplication::new();
             let doc = app.new_document("BinXCAF").unwrap();
             (app, doc)
         }

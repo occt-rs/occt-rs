@@ -6,7 +6,7 @@
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_vertex.html>
 
 use crate::gp::OcPnt;
-use crate::topo::OcShape;
+use crate::rs_topo::OcShape;
 use occt_sys::ffi;
 use std::marker::PhantomData;
 

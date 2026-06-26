@@ -36,11 +36,11 @@
 #[cfg(test)]
 mod integration_sketch_extrude {
     use occt_rs::gp::{OcAx1, OcAx2, OcDir, OcPnt, OcVec};
-    use occt_rs::topo::application::OcApplication;
-    use occt_rs::topo::document::OcDocument;
-    use occt_rs::topo::tdata_xtd::{OcAxisAttr, OcPlaneAttr, OcPointAttr};
-    use occt_rs::topo::tnaming::{TnamingBuilder, TnamingNamedShape};
-    use occt_rs::topo::{OcEdge, OcFace, OcInteger, OcWire};
+    use occt_rs::rs_topo::application::OcApplication;
+    use occt_rs::rs_topo::document::OcDocument;
+    use occt_rs::rs_topo::tdata_xtd::{OcAxisAttr, OcPlaneAttr, OcPointAttr};
+    use occt_rs::rs_topo::tnaming::{TnamingBuilder, TnamingNamedShape};
+    use occt_rs::rs_topo::{OcEdge, OcFace, OcInteger, OcWire};
     use occt_rs::OcShape;
     use occt_sys::ffi::new_tnaming_builder;
 

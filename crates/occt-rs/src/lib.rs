@@ -1,11 +1,11 @@
 pub mod error;
 pub mod gp;
 pub mod tessellate;
-pub mod topo;
+pub mod rs_topo;
 
 pub use error::{CommonError, FuseError, OcctError, OcctErrorKind};
 pub use gp::{OcAx1, OcAx2, OcDir, OcPnt, OcTrsf, OcVec};
-pub use topo::{
+pub use rs_topo::{
     ChamferBuilder, FilletBuilder, KeyedWireBuilder, OcEdge, OcFace, OcShape, OcVertex, OcWire,
     OffsetShapeBuilder, ProximityWireBuilder, SketchPolylineBuilder, ThickSolidBuilder,
 };
