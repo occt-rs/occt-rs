@@ -68,7 +68,30 @@ impl OcShape {
     pub fn shape_type(&self) -> ShapeType {
         ShapeType::from(occt_sys::ffi::topods_shape_type(self.as_ffi()))
     }
-    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsShape>) -> Self {
+    /// Returns `None` if `inner` is a null `UniquePtr` or the `TopoDS_Shape`
+    /// has a null TShape handle (`IsNull()`).
+    #[allow(dead_code)]
+    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsShape>) -> Option<Self> {
+        if inner.is_null() {
+            return None;
+        }
+        if ffi::topods_shape_is_null(inner.as_ref().unwrap()) {
+            return None;
+        }
+        Some(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Constructs an `OcShape` without null checks.
+    ///
+    /// # Safety
+    ///
+    /// Caller guarantees that `inner` is a non-null `UniquePtr` wrapping a
+    /// `TopoDS_Shape` whose TShape handle is non-null (`!IsNull()`).
+    /// Violation is undefined behaviour through subsequent OCCT method calls.
+    pub(crate) unsafe fn from_ffi_unchecked(inner: cxx::UniquePtr<ffi::TopodsShape>) -> Self {
         Self {
             inner,
             _not_send: PhantomData,
@@ -91,7 +114,10 @@ impl OcShape {
         let mut result = Vec::new();
         let mut exp = ffi::new_shape_explorer(self.as_ffi(), TOP_ABS_FACE);
         while exp.more() {
-            result.push(OcFace::from_ffi(ffi::shape_as_face(exp.current())));
+            // Safety: TopExp_Explorer yields only faces of the requested type
+            // while more() is true; shape_as_face uses make_unique and TopoDS::Face
+            // on a shape already confirmed to be a face — non-null.
+            result.push(unsafe { OcFace::from_ffi_unchecked(ffi::shape_as_face(exp.current())) });
             exp.pin_mut().next();
         }
         result
@@ -109,7 +135,9 @@ impl OcShape {
         let mut result = Vec::new();
         let mut exp = ffi::new_shape_explorer(self.as_ffi(), TOP_ABS_EDGE);
         while exp.more() {
-            result.push(OcEdge::from_ffi(ffi::shape_as_edge(exp.current())));
+            // Safety: TopExp_Explorer yields only edges of the requested type
+            // while more() is true; shape_as_edge uses make_unique — non-null.
+            result.push(unsafe { OcEdge::from_ffi_unchecked(ffi::shape_as_edge(exp.current())) });
             exp.pin_mut().next();
         }
         result
@@ -120,17 +148,11 @@ impl OcShape {
     /// pattern. The builder and its history are not preserved; if Modified/
     /// Generated/IsDeleted are needed in future, promote to an explicit FuseBuilder.
     pub fn oc_fuse(&self, other: &OcShape) -> Result<OcShape, OcctError> {
-        let result = occt_sys::ffi::fuse_shapes(
-            self.inner
-                .as_ref()
-                .expect("OcShape invariant: inner is non-null"),
-            other
-                .inner
-                .as_ref()
-                .expect("OcShape invariant: inner is non-null"),
-        )
-        .map_err(OcctError::from)?;
-        Ok(OcShape::from_ffi(result))
+        let result =
+            occt_sys::ffi::fuse_shapes(self.as_ffi(), other.as_ffi()).map_err(OcctError::from)?;
+        // Safety: fuse_shapes returns Ok(UniquePtr) via make_unique on success;
+        // the Ok branch is never null.
+        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
     }
     /// Subtract `tool` from `self`, returning a new `OcShape`.
     ///
@@ -140,16 +162,10 @@ impl OcShape {
     /// For disjoint inputs, OCCT returns `self` unchanged as a solid — this is
     /// a valid `Ok` result. No compound detection is needed.
     pub fn oc_cut(&self, tool: &OcShape) -> Result<OcShape, OcctError> {
-        let result = occt_sys::ffi::cut_shapes(
-            self.inner
-                .as_ref()
-                .expect("OcShape invariant: inner is non-null"),
-            tool.inner
-                .as_ref()
-                .expect("OcShape invariant: inner is non-null"),
-        )
-        .map_err(OcctError::from)?;
-        Ok(OcShape::from_ffi(result))
+        let result =
+            occt_sys::ffi::cut_shapes(self.as_ffi(), tool.as_ffi()).map_err(OcctError::from)?;
+        // Safety: cut_shapes returns Ok(UniquePtr) via make_unique on success.
+        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
     }
     /// Applies `trsf` to a copy of this shape, returning a new independent `OcShape`.
     ///
@@ -179,7 +195,8 @@ impl OcShape {
             trsf.value(3, 4).unwrap(),
         )
         .map_err(OcctError::from)?;
-        Ok(OcShape::from_ffi(result))
+        // Safety: transform_shape returns Ok(UniquePtr) via make_unique on success.
+        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
     }
 
     /// Intersect `self` with `other`, returning a new `OcShape`.
@@ -191,17 +208,10 @@ impl OcShape {
     /// (`IsDone()==true`); this is returned as `Ok`. Use `shape_type()` and
     /// content queries on the result if the intersection's presence matters.
     pub fn oc_common(&self, other: &OcShape) -> Result<OcShape, OcctError> {
-        let result = occt_sys::ffi::common_shapes(
-            self.inner
-                .as_ref()
-                .expect("OcShape invariant: inner is non-null"),
-            other
-                .inner
-                .as_ref()
-                .expect("OcShape invariant: inner is non-null"),
-        )
-        .map_err(OcctError::from)?;
-        Ok(OcShape::from_ffi(result))
+        let result =
+            occt_sys::ffi::common_shapes(self.as_ffi(), other.as_ffi()).map_err(OcctError::from)?;
+        // Safety: common_shapes returns Ok(UniquePtr) via make_unique on success.
+        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
     }
     /// Applies constant-radius fillets to the given edges and returns the
     /// resulting shape.
@@ -260,10 +270,9 @@ impl OcShape {
 impl Clone for OcShape {
     /// Cheap clone: increments the `TShape` handle reference count.
     fn clone(&self) -> Self {
-        Self {
-            inner: ffi::clone_shape(&self.inner),
-            _not_send: PhantomData,
-        }
+        // Safety: clone_shape is make_unique<TopoDS_Shape>(s) — never null.
+        // self.inner is non-null by construction invariant.
+        unsafe { Self::from_ffi_unchecked(ffi::clone_shape(&self.inner)) }
     }
 }
 

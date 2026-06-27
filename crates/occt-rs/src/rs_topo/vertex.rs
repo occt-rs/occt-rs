@@ -25,7 +25,29 @@ pub struct OcVertex {
 }
 
 impl OcVertex {
-    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsVertex>) -> Self {
+    /// Returns `None` if `inner` is a null `UniquePtr` or the `TopoDS_Vertex`
+    /// has a null TShape handle (`IsNull()`).
+    #[allow(dead_code)]
+    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsVertex>) -> Option<Self> {
+        if inner.is_null() {
+            return None;
+        }
+        if ffi::topods_vertex_is_null(inner.as_ref().unwrap()) {
+            return None;
+        }
+        Some(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Constructs an `OcVertex` without null checks.
+    ///
+    /// # Safety
+    ///
+    /// Caller guarantees that `inner` is a non-null `UniquePtr` wrapping a
+    /// `TopoDS_Vertex` whose TShape handle is non-null (`!IsNull()`).
+    pub(crate) unsafe fn from_ffi_unchecked(inner: cxx::UniquePtr<ffi::TopodsVertex>) -> Self {
         Self {
             inner,
             _not_send: PhantomData,
@@ -34,10 +56,9 @@ impl OcVertex {
 
     /// Constructs a vertex at the given point with the default tolerance.
     pub fn from_pnt(p: &OcPnt) -> Self {
-        Self {
-            inner: ffi::make_vertex(p.x, p.y, p.z),
-            _not_send: PhantomData,
-        }
+        // Safety: BRepBuilderAPI_MakeVertex always produces a valid vertex;
+        // make_vertex shim wraps it in make_unique — non-null.
+        unsafe { Self::from_ffi_unchecked(ffi::make_vertex(p.x, p.y, p.z)) }
     }
 
     /// Returns the 3-D point stored in this vertex.
@@ -55,7 +76,8 @@ impl OcVertex {
     /// The conversion is a cheap TShape handle reference-count increment;
     /// no geometry is copied.
     pub fn as_shape(&self) -> OcShape {
-        OcShape::from_ffi(ffi::clone_shape(ffi::vertex_as_shape(&self.inner)))
+        // Safety: vertex_as_shape is a zero-cost upcast; clone_shape is make_unique — non-null.
+        unsafe { OcShape::from_ffi_unchecked(ffi::clone_shape(ffi::vertex_as_shape(&self.inner))) }
     }
 
     pub(crate) fn as_ffi(&self) -> &ffi::TopodsVertex {
@@ -65,10 +87,8 @@ impl OcVertex {
 
 impl Clone for OcVertex {
     fn clone(&self) -> Self {
-        Self {
-            inner: ffi::clone_vertex(&self.inner),
-            _not_send: PhantomData,
-        }
+        // Safety: clone_vertex is make_unique<TopoDS_Vertex>(v) — non-null.
+        unsafe { Self::from_ffi_unchecked(ffi::clone_vertex(&self.inner)) }
     }
 }
 

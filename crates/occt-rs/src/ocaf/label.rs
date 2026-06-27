@@ -51,16 +51,21 @@ impl OcLabel {
             _not_send: PhantomData,
         }
     }
-    ///  Returns `None` when the inner `TdfLabel` is null.
+    /// Returns `None` if `inner` is a null `UniquePtr` or wraps a null OCCT label node.
     pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TdfLabel>) -> Option<Self> {
-        if ffi::tdf_label_is_null(&inner) {
-            None
-        } else {
-            Some(Self {
-                inner,
-                _not_send: PhantomData,
-            })
+        // UniquePtr-null: shim produced nullptr (e.g. find returning absent).
+        if inner.is_null() {
+            return None;
         }
+        // OCCT-object-null: UniquePtr is valid but the TDF_Label node is null
+        // (e.g. TDF_Label::Father() on the root returns a null label).
+        if ffi::tdf_label_is_null(&inner) {
+            return None;
+        }
+        Some(Self {
+            inner,
+            _not_send: PhantomData,
+        })
     }
 
     /// Returns `true` when this label is the root of the framework.

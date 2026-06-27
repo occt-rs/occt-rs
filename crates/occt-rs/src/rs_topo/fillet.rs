@@ -93,7 +93,9 @@ impl FilletBuilder {
     fn try_build(&mut self) -> Result<OcShape, OcctError> {
         self.inner.pin_mut().build().map_err(OcctError::from)?;
         if self.inner.is_done() {
-            Ok(OcShape::from_ffi(self.inner.pin_mut().shape()))
+            // Safety: MakeFilletBuilder::shape() returns make_unique<TopoDS_Shape>
+            // on a completed builder — non-null.
+            Ok(unsafe { OcShape::from_ffi_unchecked(self.inner.pin_mut().shape()) })
         } else {
             Err(OcctError {
                 kind: OcctErrorKind::ConstructionError,
@@ -107,7 +109,11 @@ impl HistoryProvider for FilletBuilder {
         let s = input.as_ffi();
         let count = self.inner.pin_mut().modified_count(s);
         (0..count)
-            .map(|i| OcShape::from_ffi(self.inner.pin_mut().modified_at(s, i)))
+            .map(|i| {
+                // Safety: modified_at returns make_unique<TopoDS_Shape>(*it) over
+                // a TopTools_ListOfShape populated by OCCT — non-null by OCCT contract.
+                unsafe { OcShape::from_ffi_unchecked(self.inner.pin_mut().modified_at(s, i)) }
+            })
             .collect()
     }
 
@@ -115,7 +121,11 @@ impl HistoryProvider for FilletBuilder {
         let s = input.as_ffi();
         let count = self.inner.pin_mut().generated_count(s);
         (0..count)
-            .map(|i| OcShape::from_ffi(self.inner.pin_mut().generated_at(s, i)))
+            .map(|i| {
+                // Safety: generated_at returns make_unique<TopoDS_Shape>(*it) over
+                // a TopTools_ListOfShape populated by OCCT — non-null by OCCT contract.
+                unsafe { OcShape::from_ffi_unchecked(self.inner.pin_mut().generated_at(s, i)) }
+            })
             .collect()
     }
 

@@ -33,10 +33,33 @@ impl OcSolid {
     /// The conversion is a cheap TShape handle reference-count increment;
     /// no geometry is copied.
     pub fn as_shape(&self) -> OcShape {
-        OcShape::from_ffi(ffi::clone_shape(ffi::solid_as_shape(&self.inner)))
+        // Safety: solid_as_shape is a zero-cost upcast; clone_shape is make_unique — non-null.
+        unsafe { OcShape::from_ffi_unchecked(ffi::clone_shape(ffi::solid_as_shape(&self.inner))) }
     }
 
-    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopdsSolid>) -> Self {
+    /// Returns `None` if `inner` is a null `UniquePtr` or the `TopoDS_Solid`
+    /// has a null TShape handle (`IsNull()`).
+    #[allow(dead_code)]
+    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopdsSolid>) -> Option<Self> {
+        if inner.is_null() {
+            return None;
+        }
+        if ffi::topods_solid_is_null(inner.as_ref().unwrap()) {
+            return None;
+        }
+        Some(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Constructs an `OcSolid` without null checks.
+    ///
+    /// # Safety
+    ///
+    /// Caller guarantees that `inner` is a non-null `UniquePtr` wrapping a
+    /// `TopoDS_Solid` whose TShape handle is non-null (`!IsNull()`).
+    pub(crate) unsafe fn from_ffi_unchecked(inner: cxx::UniquePtr<ffi::TopdsSolid>) -> Self {
         Self {
             inner,
             _not_send: PhantomData,
@@ -50,9 +73,7 @@ impl OcSolid {
 
 impl Clone for OcSolid {
     fn clone(&self) -> Self {
-        Self {
-            inner: ffi::clone_solid(&self.inner),
-            _not_send: PhantomData,
-        }
+        // Safety: clone_solid is make_unique<TopoDS_Solid>(s) — non-null.
+        unsafe { Self::from_ffi_unchecked(ffi::clone_solid(&self.inner)) }
     }
 }

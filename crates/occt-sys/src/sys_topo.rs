@@ -1099,6 +1099,15 @@ pub mod ffi {
         // Not suitable as a unique per-face key — use shape_key() for that.
         fn shape_tshape_ptr(s: &TopodsShape) -> usize;
 
+        // Null predicates
+        // TopoDS_Shape::IsNull() and its per-subtype shims.
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___shape.html
+        fn topods_shape_is_null(s: &TopodsShape) -> bool;
+        fn topods_face_is_null(s: &TopdsFace) -> bool;
+        fn topods_edge_is_null(s: &TopodsEdge) -> bool;
+        fn topods_wire_is_null(s: &TopodsWire) -> bool;
+        fn topods_vertex_is_null(s: &TopodsVertex) -> bool;
+        fn topods_solid_is_null(s: &TopdsSolid) -> bool;
         // Up-casts — zero-cost reference casts; lifetime tied to input.
         fn face_as_shape(f: &TopdsFace) -> &TopodsShape;
         fn solid_as_shape(s: &TopdsSolid) -> &TopodsShape;

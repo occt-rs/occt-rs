@@ -208,7 +208,7 @@ impl<'doc> Command<'doc> {
         Ok(())
     }
     pub fn name_builder<'cmd>(&'cmd self, label: &OcLabel) -> TnamingBuilder<'cmd> {
-        TnamingBuilder::new(&label)
+        TnamingBuilder::new(label)
     }
     /// Creates a [`TnamingSelector`] bound to `label`.
     ///
