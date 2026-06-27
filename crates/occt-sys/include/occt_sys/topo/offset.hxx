@@ -71,6 +71,16 @@ struct MakeOffsetShapeBuilder {
     }
 };
 
+inline std::unique_ptr<ShapeListIter>
+offset_shape_modified_iter(MakeOffsetShapeBuilder& b, const TopoDS_Shape& s) {
+    return shape_list_iter_new(b.inner.Modified(s));
+}
+inline std::unique_ptr<ShapeListIter>
+offset_shape_generated_iter(MakeOffsetShapeBuilder& b, const TopoDS_Shape& s) {
+    return shape_list_iter_new(b.inner.Generated(s));
+}
+
+
 inline std::unique_ptr<MakeOffsetShapeBuilder> new_make_offset_shape_builder() {
     return std::make_unique<MakeOffsetShapeBuilder>();
 }
@@ -132,6 +142,15 @@ struct MakeThickSolidBuilder {
         return inner.IsDeleted(s) == Standard_True;
     }
 };
+inline std::unique_ptr<ShapeListIter>
+thick_solid_modified_iter(MakeThickSolidBuilder& b, const TopoDS_Shape& s) {
+    return shape_list_iter_new(b.inner.Modified(s));
+}
+inline std::unique_ptr<ShapeListIter>
+thick_solid_generated_iter(MakeThickSolidBuilder& b, const TopoDS_Shape& s) {
+    return shape_list_iter_new(b.inner.Generated(s));
+}
+
 
 inline std::unique_ptr<MakeThickSolidBuilder> new_make_thick_solid_builder() {
     return std::make_unique<MakeThickSolidBuilder>();

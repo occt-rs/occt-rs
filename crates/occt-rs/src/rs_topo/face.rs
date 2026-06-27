@@ -231,7 +231,7 @@ mod tests {
         let wire = triangle_wire();
         let face = OcFace::from_wire(&wire, true).unwrap();
         let outer = face.outer_wire().unwrap();
-        assert_eq!(outer.edges().len(), 3);
+        assert_eq!(outer.edges().collect::<Vec<_>>().len(), 3);
     }
 
     #[test]
@@ -239,8 +239,19 @@ mod tests {
         let wire = triangle_wire();
         let face = OcFace::from_wire(&wire, true).unwrap();
         let cloned = face.clone();
-        assert_eq!(face.outer_wire().unwrap().edges().len(), 3);
-        assert_eq!(cloned.outer_wire().unwrap().edges().len(), 3);
+        assert_eq!(
+            face.outer_wire().unwrap().edges().collect::<Vec<_>>().len(),
+            3
+        );
+        assert_eq!(
+            cloned
+                .outer_wire()
+                .unwrap()
+                .edges()
+                .collect::<Vec<_>>()
+                .len(),
+            3
+        );
     }
 
     #[test]
@@ -288,7 +299,10 @@ mod tests {
         let origin = OcPnt::new(0.0, 0.0, 0.0);
         let normal = OcDir::new(0.0, 0.0, 1.0).unwrap();
         let face = OcFace::from_wire_on_plane(origin, normal, &wire).unwrap();
-        assert_eq!(face.outer_wire().unwrap().edges().len(), 3);
+        assert_eq!(
+            face.outer_wire().unwrap().edges().collect::<Vec<_>>().len(),
+            3
+        );
     }
 
     #[test]

@@ -14,6 +14,7 @@
 //! [`current_open_wire`]: SketchPolylineBuilder::current_open_wire
 //! [`possible_closing_face`]: SketchPolylineBuilder::possible_closing_face
 
+use crate::error::OcctError;
 use crate::gp::OcPnt;
 use crate::rs_topo::{OcEdge, OcFace, OcVertex, OcWire};
 
@@ -70,16 +71,13 @@ impl SketchPolylineBuilder {
 
     /// The open-polyline edges in insertion order.
     ///
-    /// Returns edges for consecutive vertex pairs up to but not including the
-    /// first coincident pair.  Returns an empty `Vec` when fewer than 2 points
-    /// have been added.
-    pub fn edges(&self) -> Vec<OcEdge> {
+    /// Returns an iterator of edges for consecutive vertex pairs.  Each edge is
+    /// `Ok` on success or `Err` if the two vertices are coincident.  Returns an
+    /// empty iterator when fewer than 2 points have been added.
+    pub fn edges(&self) -> impl Iterator<Item = Result<OcEdge, OcctError>> + '_ {
         self.vertices
             .windows(2)
             .map(|w| OcEdge::from_vertices(&w[0], &w[1]))
-            .take_while(|r| r.is_ok())
-            .map(|r| r.unwrap())
-            .collect()
     }
 
     /// Snapshots the current in-progress polyline as an open [`OcWire`].
@@ -157,7 +155,7 @@ mod tests {
     fn empty_builder_has_no_edges_or_wire() {
         let b = SketchPolylineBuilder::new();
         assert_eq!(b.point_count(), 0);
-        assert!(b.edges().is_empty());
+        assert!(b.edges().collect::<Vec<_>>().is_empty());
         assert!(b.current_open_wire().is_none());
         assert!(b.possible_closing_face().is_none());
     }
@@ -167,7 +165,7 @@ mod tests {
         let mut b = SketchPolylineBuilder::new();
         b.add_point(OcPnt::new(0.0, 0.0, 0.0));
         assert_eq!(b.point_count(), 1);
-        assert!(b.edges().is_empty());
+        assert!(b.edges().collect::<Vec<_>>().is_empty());
         assert!(b.current_open_wire().is_none());
         assert!(b.possible_closing_face().is_none());
     }
@@ -177,7 +175,7 @@ mod tests {
         let mut b = SketchPolylineBuilder::new();
         b.add_point(OcPnt::new(0.0, 0.0, 0.0));
         b.add_point(OcPnt::new(1.0, 0.0, 0.0));
-        assert_eq!(b.edges().len(), 1);
+        assert_eq!(b.edges().collect::<Vec<_>>().len(), 1);
         assert!(b.current_open_wire().is_some());
         // Two points cannot form a face.
         assert!(b.possible_closing_face().is_none());
@@ -190,7 +188,7 @@ mod tests {
         for p in &pts {
             b.add_point(*p);
         }
-        assert_eq!(b.edges().len(), 2);
+        assert_eq!(b.edges().collect::<Vec<_>>().len(), 2);
         assert!(b.current_open_wire().is_some());
         assert!(b.possible_closing_face().is_some());
     }
@@ -205,7 +203,7 @@ mod tests {
         }
         let _ = b.possible_closing_face();
         assert_eq!(b.point_count(), 3);
-        assert_eq!(b.edges().len(), 2);
+        assert_eq!(b.edges().collect::<Vec<_>>().len(), 2);
     }
 
     #[test]
@@ -236,7 +234,7 @@ mod tests {
         b.add_point(OcPnt::new(1.0, 0.0, 0.0));
         b.add_point(OcPnt::new(1.0, 1.0, 0.0));
         b.add_point(OcPnt::new(0.0, 1.0, 0.0));
-        assert_eq!(b.edges().len(), 3);
+        assert_eq!(b.edges().collect::<Vec<_>>().len(), 3);
         assert!(b.possible_closing_face().is_some());
     }
 
@@ -250,5 +248,18 @@ mod tests {
         let face = b.possible_closing_face().unwrap();
         let solid = face.extrude(crate::gp::OcVec::new(0.0, 0.0, 1.0));
         assert!(solid.is_ok());
+    }
+    #[test]
+    fn coincident_vertices_yield_err() {
+        let mut b = SketchPolylineBuilder::new();
+        b.add_point(OcPnt::new(0.0, 0.0, 0.0));
+        b.add_point(OcPnt::new(1.0, 0.0, 0.0));
+        b.add_point(OcPnt::new(1.0, 0.0, 0.0)); // coincident with previous
+        b.add_point(OcPnt::new(2.0, 0.0, 0.0));
+        let results: Vec<_> = b.edges().collect();
+        assert_eq!(results.len(), 3);
+        assert!(results[0].is_ok());
+        assert!(results[1].is_err()); // coincident pair
+        assert!(results[2].is_ok()); // continues past the error
     }
 }

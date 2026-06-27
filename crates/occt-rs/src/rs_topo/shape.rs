@@ -15,6 +15,7 @@ use occt_sys::ffi;
 
 use crate::error::OcctError;
 use crate::rs_topo::offset::{OffsetShapeBuilder, ThickSolidBuilder};
+use crate::rs_topo::shape_explorer_iter::{ShapeEdgeIter, ShapeFaceIter};
 use crate::rs_topo::{chamfer::ChamferBuilder, face::OcFace, fillet::FilletBuilder};
 use crate::rs_topo::{OcEdge, ShapeType};
 
@@ -110,17 +111,8 @@ impl OcShape {
     /// [`ShapeKey`] if unique faces are required.
     ///
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html>
-    pub fn faces(&self) -> Vec<OcFace> {
-        let mut result = Vec::new();
-        let mut exp = ffi::new_shape_explorer(self.as_ffi(), TOP_ABS_FACE);
-        while exp.more() {
-            // Safety: TopExp_Explorer yields only faces of the requested type
-            // while more() is true; shape_as_face uses make_unique and TopoDS::Face
-            // on a shape already confirmed to be a face — non-null.
-            result.push(unsafe { OcFace::from_ffi_unchecked(ffi::shape_as_face(exp.current())) });
-            exp.pin_mut().next();
-        }
-        result
+    pub fn faces(&self) -> impl Iterator<Item = OcFace> {
+        ShapeFaceIter::new(ffi::new_shape_explorer(self.as_ffi(), TOP_ABS_FACE))
     }
 
     /// Returns all `TopoDS_Edge` sub-shapes of this shape as typed wrappers.
@@ -131,16 +123,8 @@ impl OcShape {
     /// edges are required.
     ///
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html>
-    pub fn edges(&self) -> Vec<OcEdge> {
-        let mut result = Vec::new();
-        let mut exp = ffi::new_shape_explorer(self.as_ffi(), TOP_ABS_EDGE);
-        while exp.more() {
-            // Safety: TopExp_Explorer yields only edges of the requested type
-            // while more() is true; shape_as_edge uses make_unique — non-null.
-            result.push(unsafe { OcEdge::from_ffi_unchecked(ffi::shape_as_edge(exp.current())) });
-            exp.pin_mut().next();
-        }
-        result
+    pub fn edges(&self) -> impl Iterator<Item = OcEdge> {
+        ShapeEdgeIter::new(ffi::new_shape_explorer(self.as_ffi(), TOP_ABS_EDGE))
     }
     /// Fuse (union) this shape with `other`, returning a new `OcShape`.
     ///
@@ -314,7 +298,7 @@ mod tests {
         let face = OcFace::from_wire(&wire, true).unwrap();
         let solid = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
         let shape = solid.as_shape();
-        assert_eq!(shape.faces().len(), 5);
+        assert_eq!(shape.faces().collect::<Vec<_>>().len(), 5);
     }
 
     #[test]
@@ -326,7 +310,7 @@ mod tests {
         ];
         let wire = OcWire::from_edges(&edges).unwrap();
         let face = OcFace::from_wire(&wire, true).unwrap();
-        assert_eq!(face.as_shape().faces().len(), 1);
+        assert_eq!(face.as_shape().faces().collect::<Vec<_>>().len(), 1);
     }
     #[test]
     fn edges_of_prism() {
@@ -342,7 +326,7 @@ mod tests {
         let solid = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
         // TopExp_Explorer visits each edge once per adjacent face, so a prism's
         // 9 edges appear 18 times (each edge bounds exactly 2 faces).
-        assert_eq!(solid.as_shape().edges().len(), 18);
+        assert_eq!(solid.as_shape().edges().collect::<Vec<_>>().len(), 18);
     }
     // A 1×1 square face in the XY plane, offset by `x_offset` on X,
     // extruded 1 unit along Z to produce a unit box.
@@ -583,11 +567,8 @@ mod tests {
         let edges = s.edges();
         // Deduplicate by ShapeKey — edges() returns each edge once per adjacent face.
         let mut seen = std::collections::HashSet::new();
-        let unique_edges: Vec<_> = edges
-            .iter()
-            .filter(|e| seen.insert(e.shape_key()))
-            .collect();
-        let result = s.fillet(&unique_edges.iter().map(|e| (0.05, *e)).collect::<Vec<_>>());
+        let unique_edges: Vec<_> = edges.filter(|e| seen.insert(e.shape_key())).collect();
+        let result = s.fillet(&unique_edges.iter().map(|e| (0.05, e)).collect::<Vec<_>>());
         assert!(result.is_ok(), "fillet should succeed: {:?}", result.err());
     }
 
@@ -597,10 +578,7 @@ mod tests {
         let s = box_solid(0.0).as_shape();
         let edges = s.edges();
         let mut seen = std::collections::HashSet::new();
-        let unique_edges: Vec<_> = edges
-            .iter()
-            .filter(|e| seen.insert(e.shape_key()))
-            .collect();
+        let unique_edges: Vec<_> = edges.filter(|e| seen.insert(e.shape_key())).collect();
         let mut builder = FilletBuilder::new(&s).unwrap();
         for e in &unique_edges {
             builder.add_edge(0.05, e).unwrap();
@@ -614,12 +592,9 @@ mod tests {
         let s = box_solid(0.0).as_shape();
         let edges = s.edges();
         let mut seen = std::collections::HashSet::new();
-        let unique_edges: Vec<_> = edges
-            .iter()
-            .filter(|e| seen.insert(e.shape_key()))
-            .collect();
+        let unique_edges: Vec<_> = edges.filter(|e| seen.insert(e.shape_key())).collect();
         let filleted = s
-            .fillet(&unique_edges.iter().map(|e| (0.05, *e)).collect::<Vec<_>>())
+            .fillet(&unique_edges.iter().map(|e| (0.05, e)).collect::<Vec<_>>())
             .unwrap();
         let tess = crate::tessellate::compute(&filleted, 0.05, 0.5).unwrap();
         assert!(!tess.faces.is_empty());

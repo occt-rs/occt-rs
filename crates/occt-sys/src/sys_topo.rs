@@ -244,6 +244,103 @@ pub mod ffi {
         fn tdatastd_booleanlist_at(h: &TDataStdBooleanListHandle, index: i32) -> bool;
         fn tdatastd_booleanlist_append(h: &TDataStdBooleanListHandle, value: bool);
 
+        // ── List attribute cursor iterators ───────────────────────────────────
+        // Cursor-based O(n) iteration over NCollection_List<T> attribute storage.
+        // Each iter type owns a begin/end iterator pair initialised from List().
+        // more() = cursor != end; next() = ++cursor; value() = *cursor.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_n_collection___list.html
+
+        // OcIntegerListIter
+        type OcIntegerListIter;
+        fn tdatastd_integerlist_iter_new(
+            h: &TDataStdIntegerListHandle,
+        ) -> UniquePtr<OcIntegerListIter>;
+        fn tdatastd_integerlist_iter_more(it: &OcIntegerListIter) -> bool;
+        fn tdatastd_integerlist_iter_next(it: Pin<&mut OcIntegerListIter>);
+        fn tdatastd_integerlist_iter_value(it: &OcIntegerListIter) -> i32;
+
+        // OcRealListIter
+        type OcRealListIter;
+        fn tdatastd_reallist_iter_new(h: &TDataStdRealListHandle) -> UniquePtr<OcRealListIter>;
+        fn tdatastd_reallist_iter_more(it: &OcRealListIter) -> bool;
+        fn tdatastd_reallist_iter_next(it: Pin<&mut OcRealListIter>);
+        fn tdatastd_reallist_iter_value(it: &OcRealListIter) -> f64;
+
+        // OcExtStringListIter
+        type OcExtStringListIter;
+        fn tdatastd_extstringlist_iter_new(
+            h: &TDataStdExtStringListHandle,
+        ) -> UniquePtr<OcExtStringListIter>;
+        fn tdatastd_extstringlist_iter_more(it: &OcExtStringListIter) -> bool;
+        fn tdatastd_extstringlist_iter_next(it: Pin<&mut OcExtStringListIter>);
+        fn tdatastd_extstringlist_iter_value(it: &OcExtStringListIter) -> String;
+
+        // OcBooleanListIter
+        type OcBooleanListIter;
+        fn tdatastd_booleanlist_iter_new(
+            h: &TDataStdBooleanListHandle,
+        ) -> UniquePtr<OcBooleanListIter>;
+        fn tdatastd_booleanlist_iter_more(it: &OcBooleanListIter) -> bool;
+        fn tdatastd_booleanlist_iter_next(it: Pin<&mut OcBooleanListIter>);
+        fn tdatastd_booleanlist_iter_value(it: &OcBooleanListIter) -> bool;
+
+        // OcReferenceListIter
+        type OcReferenceListIter;
+        fn tdatastd_referencelist_iter_new(
+            h: &TDataStdReferenceListHandle,
+        ) -> UniquePtr<OcReferenceListIter>;
+        fn tdatastd_referencelist_iter_more(it: &OcReferenceListIter) -> bool;
+        fn tdatastd_referencelist_iter_next(it: Pin<&mut OcReferenceListIter>);
+        fn tdatastd_referencelist_iter_value(it: &OcReferenceListIter) -> UniquePtr<TdfLabel>;
+        // ── ShapeListIter ─────────────────────────────────────────────────────────
+        // Cursor over a TopTools_ListOfShape snapshot from Modified()/Generated().
+        // Snapshots the list at construction; subsequent calls do not touch the builder.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_top_tools___list_of_shape.html
+        type ShapeListIter;
+
+        fn shape_list_iter_more(it: &ShapeListIter) -> bool;
+        fn shape_list_iter_next(it: Pin<&mut ShapeListIter>);
+        fn shape_list_iter_value(it: &ShapeListIter) -> UniquePtr<TopodsShape>;
+
+        // modified_iter / generated_iter — one pair per builder
+        fn fillet_modified_iter(
+            b: Pin<&mut MakeFilletBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+        fn fillet_generated_iter(
+            b: Pin<&mut MakeFilletBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+
+        fn chamfer_modified_iter(
+            b: Pin<&mut MakeChamferBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+        fn chamfer_generated_iter(
+            b: Pin<&mut MakeChamferBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+
+        fn offset_shape_modified_iter(
+            b: Pin<&mut MakeOffsetShapeBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+        fn offset_shape_generated_iter(
+            b: Pin<&mut MakeOffsetShapeBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+
+        fn thick_solid_modified_iter(
+            b: Pin<&mut MakeThickSolidBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+        fn thick_solid_generated_iter(
+            b: Pin<&mut MakeThickSolidBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+
         // ── TDataStd_UAttribute ────────────────────────────────────────────────────────
         // Presence-only marker attribute, keyed by a caller-supplied GUID rather than
         // a fixed per-type GetID(). No value to retrieve.
@@ -1135,6 +1232,7 @@ pub mod ffi {
         fn next(self: Pin<&mut ShapeExplorer>);
         // Returned reference borrows self; valid until next() or drop.
         fn current(self: &ShapeExplorer) -> &TopodsShape;
+        fn current_owned(self: &ShapeExplorer) -> UniquePtr<TopodsShape>;
 
         // ── IncrementalMeshBuilder ────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_mesh___incremental_mesh.html

@@ -94,6 +94,15 @@ struct MakeChamferBuilder {
     }
 };
 
+inline std::unique_ptr<ShapeListIter>
+chamfer_modified_iter(MakeChamferBuilder& b, const TopoDS_Shape& s) {
+    return shape_list_iter_new(b.inner.Modified(s));
+}
+inline std::unique_ptr<ShapeListIter>
+chamfer_generated_iter(MakeChamferBuilder& b, const TopoDS_Shape& s) {
+    return shape_list_iter_new(b.inner.Generated(s));
+}
+
 inline std::unique_ptr<MakeChamferBuilder> new_make_chamfer_builder(
     const TopoDS_Shape& shape)
 {

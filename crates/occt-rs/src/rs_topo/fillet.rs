@@ -28,6 +28,7 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::{OcctError, OcctErrorKind};
+use crate::rs_topo::shape_history_iter::ShapeListIter;
 use crate::rs_topo::{BuiltWithHistory, HistoryProvider, OcEdge, OcShape};
 
 /// Builder for constant-radius fillets on a solid.
@@ -105,30 +106,18 @@ impl FilletBuilder {
     }
 }
 impl HistoryProvider for FilletBuilder {
-    fn modified_shapes(&mut self, input: &OcShape) -> Vec<OcShape> {
-        let s = input.as_ffi();
-        let count = self.inner.pin_mut().modified_count(s);
-        (0..count)
-            .map(|i| {
-                // Safety: modified_at returns make_unique<TopoDS_Shape>(*it) over
-                // a TopTools_ListOfShape populated by OCCT — non-null by OCCT contract.
-                unsafe { OcShape::from_ffi_unchecked(self.inner.pin_mut().modified_at(s, i)) }
-            })
-            .collect()
+    fn modified_shapes(&mut self, input: &OcShape) -> impl Iterator<Item = OcShape> + '_ {
+        ShapeListIter::new(ffi::fillet_modified_iter(
+            self.inner.pin_mut(),
+            input.as_ffi(),
+        ))
     }
-
-    fn generated_shapes(&mut self, input: &OcShape) -> Vec<OcShape> {
-        let s = input.as_ffi();
-        let count = self.inner.pin_mut().generated_count(s);
-        (0..count)
-            .map(|i| {
-                // Safety: generated_at returns make_unique<TopoDS_Shape>(*it) over
-                // a TopTools_ListOfShape populated by OCCT — non-null by OCCT contract.
-                unsafe { OcShape::from_ffi_unchecked(self.inner.pin_mut().generated_at(s, i)) }
-            })
-            .collect()
+    fn generated_shapes(&mut self, input: &OcShape) -> impl Iterator<Item = OcShape> + '_ {
+        ShapeListIter::new(ffi::fillet_generated_iter(
+            self.inner.pin_mut(),
+            input.as_ffi(),
+        ))
     }
-
     fn is_shape_deleted(&mut self, input: &OcShape) -> bool {
         self.inner.pin_mut().is_deleted(input.as_ffi())
     }
@@ -193,13 +182,11 @@ mod history_tests {
         // must not panic and must return shapes belonging to the output.
         let mut any_modified = false;
         for face in &pre_faces {
-            let mods = built.modified(&face.as_shape());
-            if !mods.is_empty() {
+            let fshape = &face.as_shape();
+            let mods = built.modified(fshape);
+            for m in mods {
                 any_modified = true;
-                // All returned shapes must be valid (non-null)
-                for m in &mods {
-                    assert_eq!(m.shape_type(), crate::rs_topo::ShapeType::Face);
-                }
+                assert_eq!(m.shape_type(), crate::rs_topo::ShapeType::Face);
             }
         }
         assert!(
@@ -210,8 +197,7 @@ mod history_tests {
         // Filleted edges generate faces (the fillet surface faces)
         let mut any_generated = false;
         for edge in &pre_edges {
-            let gens = built.generated(&edge.as_shape());
-            if !gens.is_empty() {
+            if built.generated(&edge.as_shape()).next().is_some() {
                 any_generated = true;
             }
         }

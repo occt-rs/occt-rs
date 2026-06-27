@@ -3,6 +3,7 @@
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_wire.html>
 
 use crate::error::{OcctError, OcctErrorKind};
+use crate::rs_topo::shape_explorer_iter::WireEdgeIter;
 use crate::rs_topo::{OcEdge, OcShape};
 use occt_sys::ffi;
 use std::marker::PhantomData;
@@ -13,17 +14,8 @@ pub struct OcWire {
 }
 
 impl OcWire {
-    pub fn edges(&self) -> Vec<OcEdge> {
-        let mut explorer = ffi::new_wire_edge_explorer(&self.inner);
-        let mut result = Vec::new();
-        while explorer.more() {
-            // Safety: BRepTools_WireExplorer::Current() yields a valid edge
-            // while More() is true; current_edge() wraps it in make_unique — non-null.
-            result.push(unsafe { OcEdge::from_ffi_unchecked(explorer.current_edge()) });
-
-            explorer.pin_mut().next();
-        }
-        result
+    pub fn edges(&self) -> impl Iterator<Item = OcEdge> {
+        WireEdgeIter::new(ffi::new_wire_edge_explorer(&self.inner))
     }
 
     pub fn from_edges(edges: &[OcEdge]) -> Result<Self, OcctError> {
@@ -128,7 +120,7 @@ mod tests {
             .map(|(a, b)| OcEdge::from_pnts(*a, *b).unwrap())
             .collect();
         let wire = OcWire::from_edges(&edges).unwrap();
-        assert_eq!(wire.edges().len(), 3);
+        assert_eq!(wire.edges().collect::<Vec<_>>().len(), 3);
     }
 
     #[test]
