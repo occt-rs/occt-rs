@@ -809,6 +809,11 @@ pub mod ffi {
         fn document_undo(doc: Pin<&mut DocumentHandle>) -> Result<bool>;
         fn document_redo(doc: Pin<&mut DocumentHandle>) -> Result<bool>;
         fn document_set_undo_limit(doc: Pin<&mut DocumentHandle>, n: i32);
+        // Non-const: severs both ownership edges. Guarded by IsOpened(); safe to call
+        // on a never-opened or already-closed document.
+        fn document_close(doc: Pin<&mut DocumentHandle>) -> Result<()>;
+        // Const: IsOpened() == !myApplication.IsNull().
+        fn document_is_opened(doc: &DocumentHandle) -> bool;
 
         // ── ApplicationHandle ─────────────────────────────────────────────────────
         // Shim holding Handle(TDocStd_Application) by value.
@@ -822,6 +827,8 @@ pub mod ffi {
             app: Pin<&mut ApplicationHandle>,
             format: &str,
         ) -> Result<UniquePtr<DocumentHandle>>;
+        // Const: NbDocuments() — number of documents registered with this application.
+        fn application_nb_documents(app: &ApplicationHandle) -> i32;
 
         // ── MakeOffsetShapeBuilder ────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_offset_a_p_i___make_offset_shape.html

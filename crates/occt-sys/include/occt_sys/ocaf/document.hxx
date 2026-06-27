@@ -18,6 +18,7 @@
 #include <memory>
 
 #include <TDocStd_Document.hxx>
+#include <TDocStd_Application.hxx>
 
 #include "label.hxx"
 #include "../exception.hxx"
@@ -109,4 +110,31 @@ inline void document_set_undo_limit(DocumentHandle& doc, int n) {
 // Reference: https://dev.opencascade.org/doc/refman/html/class_t_doc_std___document.html
 inline bool document_has_open_command(const DocumentHandle& doc) {
     return doc.inner->HasOpenCommand() == Standard_True;
+}
+
+// document_close: severs both OCAF ownership edges (app→doc and doc→app)
+// by calling TDocStd_Application::Close(doc) through the document's own
+// Application() back-pointer.  Guarded by IsOpened() so a second call
+// (or a never-opened document) is a no-op.
+// Non-const: Close() mutates both the application registry and the document.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_doc_std___application.html
+// Reference: https://dev.opencascade.org/doc/refman/html/class_c_d_m___document.html
+inline void document_close(DocumentHandle& doc) {
+    try {
+        if (doc.inner->IsOpened()) {
+            Handle(TDocStd_Application) app =
+                Handle(TDocStd_Application)::DownCast(doc.inner->Application());
+            if (!app.IsNull()) {
+                app->Close(doc.inner);
+            }
+        }
+    } catch (const std::runtime_error&) { throw; }
+    catch (...) { rethrow_occt_as_runtime_error(); }
+}
+
+// document_is_opened: IsOpened() == !myApplication.IsNull().
+// Const, cannot throw.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_c_d_m___document.html
+inline bool document_is_opened(const DocumentHandle& doc) {
+    return doc.inner->IsOpened() == Standard_True;
 }

@@ -22,8 +22,12 @@ use crate::ocaf::tnaming::{TnamingBuilder, TnamingSelector};
 
 /// An in-memory OCAF document.
 ///
-/// Wraps `Handle(TDocStd_Document)`.  The Handle keeps the document alive
-/// independently of the [`OcApplication`] that created it.
+/// Wraps `Handle(TDocStd_Document)`.  On drop, the document closes itself
+/// through its application back-pointer, severing the OCAF ownership cycle
+/// (`app→doc` and `doc→app`).  Use [`close`] for an explicit consuming close
+/// that propagates errors.
+///
+/// [`close`]: OcDocument::close
 ///
 /// # Thread safety
 ///
@@ -125,6 +129,37 @@ impl OcDocument {
     }
     pub fn has_open_command(&self) -> bool {
         ffi::document_has_open_command(&self.inner)
+    }
+
+    /// Returns `true` if the document is open (registered with its application).
+    ///
+    /// `IsOpened()` is `false` after [`close`] or [`Drop`] runs.
+    ///
+    /// [`close`]: OcDocument::close
+    pub fn is_opened(&self) -> bool {
+        ffi::document_is_opened(&self.inner)
+    }
+
+    /// Closes the document, deregistering it from its application.
+    ///
+    /// Severs both OCAF ownership edges (`app→doc` and `doc→app`).  After
+    /// this the document is no longer usable.  Idempotent at the OCCT level:
+    /// a subsequent drop calls `document_close` again, which is a no-op
+    /// because `IsOpened()` is already `false`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if OCCT raises during `Close`.
+    pub fn close(mut self) -> Result<(), OcctError> {
+        ffi::document_close(self.inner.pin_mut()).map_err(OcctError::from)
+        // self drops here; Drop's document_close is a no-op because IsOpened() is false.
+    }
+}
+impl Drop for OcDocument {
+    fn drop(&mut self) {
+        // Severs the OCAF ownership cycle (app→doc and doc→app).
+        // Errors cannot propagate from Drop; discard, as Command::drop already does.
+        let _ = ffi::document_close(self.inner.pin_mut());
     }
 }
 
