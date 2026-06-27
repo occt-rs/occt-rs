@@ -5,6 +5,8 @@ pub mod fillet;
 pub mod history;
 pub mod offset;
 pub mod shape;
+pub mod shape_explorer_iter;
+pub mod shape_history_iter;
 pub mod shape_type;
 pub mod solid;
 pub mod vertex;

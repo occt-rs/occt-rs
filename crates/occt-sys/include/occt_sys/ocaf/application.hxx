@@ -62,3 +62,10 @@ inline std::unique_ptr<DocumentHandle> application_new_document(
     } catch (const std::runtime_error&) { throw; }
     catch (...) { rethrow_occt_as_runtime_error(); }
 }
+// application_nb_documents: NbDocuments() — number of documents currently
+// registered with this application.
+// Const: does not modify application state.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_c_d_f___application.html
+inline int application_nb_documents(const ApplicationHandle& app) {
+    return app.inner->NbDocuments();
+}

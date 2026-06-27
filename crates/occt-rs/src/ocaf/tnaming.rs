@@ -29,22 +29,26 @@ pub enum TnamingEvolution {
     Modify,
     /// Ancestor was deleted by this operation.
     Delete,
+    #[deprecated(note = "Seems to be retained in OCCT for legacy reasons")]
+    Replace,
     /// Sub-shape selection in context — used by DOC-4 / TNaming_Selector.
     Selected,
 }
 
 impl TnamingEvolution {
-    fn from_raw(v: i32) -> Self {
+    fn try_from_raw(v: i32) -> Option<Self> {
         // TNaming_Evolution enum constants — verify ordinal values against
         // https://dev.opencascade.org/doc/refman/html/group__enum__t_naming.html
         // if undo behaviour is unexpected.
         match v {
-            0 => Self::Primitive,
-            1 => Self::Generated,
-            2 => Self::Modify,
-            3 => Self::Delete,
-            4 => Self::Selected,
-            _ => panic!("Unknown TNaming_Evolution value: {v}"),
+            0 => Some(Self::Primitive),
+            1 => Some(Self::Generated),
+            2 => Some(Self::Modify),
+            3 => Some(Self::Delete),
+            #[allow(deprecated)]
+            4 => Some(Self::Replace),
+            5 => Some(Self::Selected),
+            _ => None,
         }
     }
 }
@@ -69,9 +73,7 @@ impl<'cmd> TnamingBuilder<'cmd> {
     /// Use this for shapes produced by constructors (`BRepPrimAPI_MakeBox`,
     /// `OcFace::from_wire`, etc.) that have no prior shape in the document.
     pub fn generated_fresh(&mut self, shape: &OcShape) {
-        self.inner
-            .pin_mut()
-            .generated_fresh(shape.inner.as_ref().unwrap());
+        self.inner.pin_mut().generated_fresh(shape.as_ffi());
     }
 
     /// Records `generated` as produced from `old`.
@@ -79,10 +81,9 @@ impl<'cmd> TnamingBuilder<'cmd> {
     /// Use this when an operation creates a new sub-shape from an ancestor
     /// sub-shape (e.g. extrusion generates a lateral face from a wire edge).
     pub fn generated_from(&mut self, old: &OcShape, generated: &OcShape) {
-        self.inner.pin_mut().generated_from(
-            old.inner.as_ref().unwrap(),
-            generated.inner.as_ref().unwrap(),
-        );
+        self.inner
+            .pin_mut()
+            .generated_from(old.as_ffi(), generated.as_ffi());
     }
 
     /// Records `modified` as a modification of `old`.
@@ -91,26 +92,20 @@ impl<'cmd> TnamingBuilder<'cmd> {
     /// (e.g. fillet rounds a face — the original face becomes the `old` arg,
     /// the rounded replacement is `modified`).
     pub fn modify(&mut self, old: &OcShape, modified: &OcShape) {
-        self.inner.pin_mut().modify(
-            old.inner.as_ref().unwrap(),
-            modified.inner.as_ref().unwrap(),
-        );
+        self.inner.pin_mut().modify(old.as_ffi(), modified.as_ffi());
     }
 
     /// Records `old` as deleted by this operation — it has no successor.
     pub fn delete(&mut self, old: &OcShape) {
-        self.inner
-            .pin_mut()
-            .delete_shape(old.inner.as_ref().unwrap());
+        self.inner.pin_mut().delete_shape(old.as_ffi());
     }
 
     /// Records a sub-shape selection in context. Reserved for DOC-4 /
     /// `TNaming_Selector` workflows.
     pub fn select(&mut self, shape: &OcShape, in_shape: &OcShape) {
-        self.inner.pin_mut().select(
-            shape.inner.as_ref().unwrap(),
-            in_shape.inner.as_ref().unwrap(),
-        );
+        self.inner
+            .pin_mut()
+            .select(shape.as_ffi(), in_shape.as_ffi());
     }
 
     /// Returns a handle to the `TNaming_NamedShape` attribute written on the
@@ -172,24 +167,20 @@ impl TnamingNamedShape {
 
     /// Current shape as recorded on the label. After undo, returns the
     /// pre-operation shape.
-    pub fn get(&self) -> OcShape {
-        OcShape {
-            inner: ffi::tnaming_named_shape_get(self.inner.as_ref().unwrap()),
-            _not_send: PhantomData,
-        }
+    pub fn get(&self) -> Option<OcShape> {
+        OcShape::from_ffi(ffi::tnaming_named_shape_get(self.inner.as_ref().unwrap()))
     }
 
     /// The original shape — before any evolution was recorded on this label.
-    pub fn original_shape(&self) -> OcShape {
-        OcShape {
-            inner: ffi::tnaming_tool_original_shape(self.inner.as_ref().unwrap()),
-            _not_send: PhantomData,
-        }
+    pub fn original_shape(&self) -> Option<OcShape> {
+        OcShape::from_ffi(ffi::tnaming_tool_original_shape(
+            self.inner.as_ref().unwrap(),
+        ))
     }
 
     /// The provenance kind recorded when this shape was written.
-    pub fn evolution(&self) -> TnamingEvolution {
-        TnamingEvolution::from_raw(ffi::tnaming_named_shape_evolution(
+    pub fn evolution(&self) -> Option<TnamingEvolution> {
+        TnamingEvolution::try_from_raw(ffi::tnaming_named_shape_evolution(
             self.inner.as_ref().unwrap(),
         ))
     }
@@ -252,11 +243,7 @@ impl TnamingSelector {
         shape: &OcShape,
         context: &OcShape,
     ) -> bool {
-        ffi::tnaming_selector_select(
-            self.inner.pin_mut(),
-            shape.inner.as_ref().unwrap(),
-            context.inner.as_ref().unwrap(),
-        )
+        ffi::tnaming_selector_select(self.inner.pin_mut(), shape.as_ffi(), context.as_ffi())
     }
 
     /// Re-evaluates the stored selection description against the current model.

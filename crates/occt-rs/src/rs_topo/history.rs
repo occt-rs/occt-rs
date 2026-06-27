@@ -23,10 +23,10 @@ use crate::rs_topo::shape::OcShape;
 /// calling these methods directly.
 pub trait HistoryProvider {
     /// Shapes in the output that are modifications of `input`.
-    fn modified_shapes(&mut self, input: &OcShape) -> Vec<OcShape>;
+    fn modified_shapes(&mut self, input: &OcShape) -> impl Iterator<Item = OcShape> + '_;
 
     /// Shapes in the output that were generated from `input`.
-    fn generated_shapes(&mut self, input: &OcShape) -> Vec<OcShape>;
+    fn generated_shapes(&mut self, input: &OcShape) -> impl Iterator<Item = OcShape> + '_;
 
     /// True if `input` does not appear in the output in any form.
     fn is_shape_deleted(&mut self, input: &OcShape) -> bool;
@@ -74,12 +74,12 @@ impl<B: HistoryProvider> BuiltWithHistory<B> {
     ///
     /// An empty `Vec` means `input` was not modified (it may have been deleted
     /// or left unchanged; check [`is_deleted`][Self::is_deleted]).
-    pub fn modified(&mut self, input: &OcShape) -> Vec<OcShape> {
+    pub fn modified<'a>(&'a mut self, input: &'a OcShape) -> impl Iterator<Item = OcShape> + 'a {
         self.builder.modified_shapes(input)
     }
 
     /// Shapes in the output generated from `input`.
-    pub fn generated(&mut self, input: &OcShape) -> Vec<OcShape> {
+    pub fn generated<'a>(&'a mut self, input: &'a OcShape) -> impl Iterator<Item = OcShape> + 'a {
         self.builder.generated_shapes(input)
     }
 

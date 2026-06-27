@@ -626,8 +626,11 @@ impl OcPointAttr {
     ) -> Result<TnamingNamedShape, OcctError> {
         let vertex =
             ffi::tdataxtd_make_vertex_shape(pos.x, pos.y, pos.z).map_err(OcctError::from)?;
-        let shape = OcShape::from_ffi(ffi::clone_shape(ffi::vertex_as_shape(&vertex)));
-        let mut builder = TnamingBuilder::new(&label);
+        // Safety: vertex_as_shape is a zero-cost upcast; clone_shape is
+        // make_unique<TopoDS_Shape> — non-null.
+        let shape =
+            unsafe { OcShape::from_ffi_unchecked(ffi::clone_shape(ffi::vertex_as_shape(&vertex))) };
+        let mut builder = TnamingBuilder::new(label);
         builder.generated_fresh(&shape);
         Ok(builder.named_shape())
     }
@@ -647,6 +650,7 @@ impl OcPointAttr {
             _not_send: PhantomData,
         })
     }
+
     /// Returns the position of the vertex on `label`.
     ///
     /// Uses [`OcGeometryAttr::type_on_label`] to verify the shape is a point,
@@ -668,9 +672,15 @@ impl OcPointAttr {
                 })
             }
         }
-        let ns = TnamingNamedShape::find(label)
-            .expect("NamedShape must be present: type_on_label succeeded");
-        let shape = OcShape::from_ffi(ffi::tnaming_named_shape_get(ns.inner()));
+        let ns = TnamingNamedShape::find(label).ok_or_else(|| OcctError {
+            kind: crate::error::OcctErrorKind::DomainError,
+            message: "OcPointAttr::get: TNaming_NamedShape absent despite type_on_label succeeding"
+                .to_owned(),
+        })?;
+        // Safety: tnaming_named_shape_get wraps TNaming_NamedShape::Get() via
+        // make_unique; the named shape is present (find succeeded above) — non-null.
+        let shape =
+            unsafe { OcShape::from_ffi_unchecked(ffi::tnaming_named_shape_get(ns.inner())) };
         let vertex = ffi::shape_as_vertex(shape.as_ffi());
         Ok(Some(OcPnt::new(
             ffi::vertex_pnt_x(&vertex),
@@ -766,7 +776,10 @@ impl OcAxisAttr {
             dir.z(),
         )
         .map_err(OcctError::from)?;
-        let shape = OcShape::from_ffi(ffi::clone_shape(ffi::edge_as_shape(&edge)));
+        // Safety: edge_as_shape is a zero-cost upcast; clone_shape is
+        // make_unique<TopoDS_Shape> — non-null.
+        let shape =
+            unsafe { OcShape::from_ffi_unchecked(ffi::clone_shape(ffi::edge_as_shape(&edge))) };
         let mut builder = TnamingBuilder::new(label);
         builder.generated_fresh(&shape);
         Ok(builder.named_shape())
@@ -893,8 +906,11 @@ impl OcPlaneAttr {
             x.z(),
         )
         .map_err(OcctError::from)?;
-        let shape = OcShape::from_ffi(ffi::clone_shape(ffi::face_as_shape(&face)));
-        let mut builder = TnamingBuilder::new(&label);
+        // Safety: face_as_shape is a zero-cost upcast; clone_shape is
+        // make_unique<TopoDS_Shape> — non-null.
+        let shape =
+            unsafe { OcShape::from_ffi_unchecked(ffi::clone_shape(ffi::face_as_shape(&face))) };
+        let mut builder = TnamingBuilder::new(label);
         builder.generated_fresh(&shape);
         Ok(builder.named_shape())
     }

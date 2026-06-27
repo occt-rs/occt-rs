@@ -22,8 +22,12 @@ use crate::ocaf::tnaming::{TnamingBuilder, TnamingSelector};
 
 /// An in-memory OCAF document.
 ///
-/// Wraps `Handle(TDocStd_Document)`.  The Handle keeps the document alive
-/// independently of the [`OcApplication`] that created it.
+/// Wraps `Handle(TDocStd_Document)`.  On drop, the document closes itself
+/// through its application back-pointer, severing the OCAF ownership cycle
+/// (`app→doc` and `doc→app`).  Use [`close`] for an explicit consuming close
+/// that propagates errors.
+///
+/// [`close`]: OcDocument::close
 ///
 /// # Thread safety
 ///
@@ -49,7 +53,7 @@ impl OcDocument {
     /// All application-level label trees are rooted here.  The returned
     /// label's lifetime is tied to `self`.
     pub fn main(&self) -> OcLabel {
-        OcLabel::from_ffi(ffi::document_main(&self.inner))
+        unsafe { OcLabel::from_ffi_unchecked(ffi::document_main(&self.inner)) }
     }
     /// Resolves a [`LabelPath`] to a label, starting from the document root.
     ///
@@ -126,6 +130,37 @@ impl OcDocument {
     pub fn has_open_command(&self) -> bool {
         ffi::document_has_open_command(&self.inner)
     }
+
+    /// Returns `true` if the document is open (registered with its application).
+    ///
+    /// `IsOpened()` is `false` after [`close`] or [`Drop`] runs.
+    ///
+    /// [`close`]: OcDocument::close
+    pub fn is_opened(&self) -> bool {
+        ffi::document_is_opened(&self.inner)
+    }
+
+    /// Closes the document, deregistering it from its application.
+    ///
+    /// Severs both OCAF ownership edges (`app→doc` and `doc→app`).  After
+    /// this the document is no longer usable.  Idempotent at the OCCT level:
+    /// a subsequent drop calls `document_close` again, which is a no-op
+    /// because `IsOpened()` is already `false`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if OCCT raises during `Close`.
+    pub fn close(mut self) -> Result<(), OcctError> {
+        ffi::document_close(self.inner.pin_mut()).map_err(OcctError::from)
+        // self drops here; Drop's document_close is a no-op because IsOpened() is false.
+    }
+}
+impl Drop for OcDocument {
+    fn drop(&mut self) {
+        // Severs the OCAF ownership cycle (app→doc and doc→app).
+        // Errors cannot propagate from Drop; discard, as Command::drop already does.
+        let _ = ffi::document_close(self.inner.pin_mut());
+    }
 }
 
 impl std::fmt::Debug for OcDocument {
@@ -173,7 +208,7 @@ impl<'doc> Command<'doc> {
         Ok(())
     }
     pub fn name_builder<'cmd>(&'cmd self, label: &OcLabel) -> TnamingBuilder<'cmd> {
-        TnamingBuilder::new(&label)
+        TnamingBuilder::new(label)
     }
     /// Creates a [`TnamingSelector`] bound to `label`.
     ///
@@ -214,7 +249,7 @@ mod tests {
     fn document_main_is_not_null() {
         let (_app, doc) = new_doc();
         let root = doc.main();
-        assert!(!root.is_null());
+        assert_eq!(root.tag(), 1);
     }
 
     #[test]
@@ -225,7 +260,7 @@ mod tests {
         assert!(!main.is_root());
         assert_eq!(main.tag(), 1);
         // Its parent is the root.
-        assert!(main.father().is_root());
+        assert!(main.father().unwrap().is_root());
     }
 
     #[test]
@@ -254,7 +289,7 @@ mod tests {
         }
         // Document should still be usable.
         let root = doc.main();
-        assert!(!root.is_null());
+        assert_eq!(root.tag(), 1);
     }
 
     #[test]
@@ -263,7 +298,7 @@ mod tests {
         let cmd = doc.begin_command().unwrap();
         cmd.abort().unwrap();
         // Document should still be usable after abort.
-        assert!(!doc.main().is_null());
+        assert_eq!(doc.main().tag(), 1);
     }
 
     #[test]

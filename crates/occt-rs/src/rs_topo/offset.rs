@@ -23,6 +23,7 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::{OcctError, OcctErrorKind};
+use crate::rs_topo::shape_history_iter::ShapeListIter;
 use crate::rs_topo::{BuiltWithHistory, HistoryProvider, OcFace, OcShape};
 
 // ── OffsetShapeBuilder ────────────────────────────────────────────────────────
@@ -50,7 +51,9 @@ impl OffsetShapeBuilder {
             .perform(shape.as_ffi(), offset)
             .map_err(OcctError::from)?;
         if self.inner.is_done() {
-            Ok(OcShape::from_ffi(self.inner.pin_mut().shape()))
+            // Safety: MakeOffsetShapeBuilder::shape() returns make_unique<TopoDS_Shape>
+            // on a completed builder — non-null.
+            Ok(unsafe { OcShape::from_ffi_unchecked(self.inner.pin_mut().shape()) })
         } else {
             Err(OcctError {
                 kind: OcctErrorKind::ConstructionError,
@@ -75,22 +78,18 @@ impl Default for OffsetShapeBuilder {
 }
 
 impl HistoryProvider for OffsetShapeBuilder {
-    fn modified_shapes(&mut self, input: &OcShape) -> Vec<OcShape> {
-        let s = input.as_ffi();
-        let count = self.inner.pin_mut().modified_count(s);
-        (0..count)
-            .map(|i| OcShape::from_ffi(self.inner.pin_mut().modified_at(s, i)))
-            .collect()
+    fn modified_shapes(&mut self, input: &OcShape) -> impl Iterator<Item = OcShape> + '_ {
+        ShapeListIter::new(ffi::offset_shape_modified_iter(
+            self.inner.pin_mut(),
+            input.as_ffi(),
+        ))
     }
-
-    fn generated_shapes(&mut self, input: &OcShape) -> Vec<OcShape> {
-        let s = input.as_ffi();
-        let count = self.inner.pin_mut().generated_count(s);
-        (0..count)
-            .map(|i| OcShape::from_ffi(self.inner.pin_mut().generated_at(s, i)))
-            .collect()
+    fn generated_shapes(&mut self, input: &OcShape) -> impl Iterator<Item = OcShape> + '_ {
+        ShapeListIter::new(ffi::offset_shape_generated_iter(
+            self.inner.pin_mut(),
+            input.as_ffi(),
+        ))
     }
-
     fn is_shape_deleted(&mut self, input: &OcShape) -> bool {
         self.inner.pin_mut().is_deleted(input.as_ffi())
     }
@@ -156,7 +155,9 @@ impl ThickSolidBuilder {
             .build(shape.as_ffi(), offset, tolerance)
             .map_err(OcctError::from)?;
         if self.inner.is_done() {
-            Ok(OcShape::from_ffi(self.inner.pin_mut().shape()))
+            // Safety: MakeThickSolidBuilder::shape() returns make_unique<TopoDS_Shape>
+            // on a completed builder — non-null.
+            Ok(unsafe { OcShape::from_ffi_unchecked(self.inner.pin_mut().shape()) })
         } else {
             Err(OcctError {
                 kind: OcctErrorKind::ConstructionError,
@@ -173,22 +174,18 @@ impl Default for ThickSolidBuilder {
 }
 
 impl HistoryProvider for ThickSolidBuilder {
-    fn modified_shapes(&mut self, input: &OcShape) -> Vec<OcShape> {
-        let s = input.as_ffi();
-        let count = self.inner.pin_mut().modified_count(s);
-        (0..count)
-            .map(|i| OcShape::from_ffi(self.inner.pin_mut().modified_at(s, i)))
-            .collect()
+    fn modified_shapes(&mut self, input: &OcShape) -> impl Iterator<Item = OcShape> + '_ {
+        ShapeListIter::new(ffi::thick_solid_modified_iter(
+            self.inner.pin_mut(),
+            input.as_ffi(),
+        ))
     }
-
-    fn generated_shapes(&mut self, input: &OcShape) -> Vec<OcShape> {
-        let s = input.as_ffi();
-        let count = self.inner.pin_mut().generated_count(s);
-        (0..count)
-            .map(|i| OcShape::from_ffi(self.inner.pin_mut().generated_at(s, i)))
-            .collect()
+    fn generated_shapes(&mut self, input: &OcShape) -> impl Iterator<Item = OcShape> + '_ {
+        ShapeListIter::new(ffi::thick_solid_generated_iter(
+            self.inner.pin_mut(),
+            input.as_ffi(),
+        ))
     }
-
     fn is_shape_deleted(&mut self, input: &OcShape) -> bool {
         self.inner.pin_mut().is_deleted(input.as_ffi())
     }

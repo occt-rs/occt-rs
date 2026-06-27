@@ -3,6 +3,7 @@
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_wire.html>
 
 use crate::error::{OcctError, OcctErrorKind};
+use crate::rs_topo::shape_explorer_iter::WireEdgeIter;
 use crate::rs_topo::{OcEdge, OcShape};
 use occt_sys::ffi;
 use std::marker::PhantomData;
@@ -13,14 +14,8 @@ pub struct OcWire {
 }
 
 impl OcWire {
-    pub fn edges(&self) -> Vec<OcEdge> {
-        let mut explorer = ffi::new_wire_edge_explorer(&self.inner);
-        let mut result = Vec::new();
-        while explorer.more() {
-            result.push(OcEdge::from_ffi(explorer.current_edge()));
-            explorer.pin_mut().next();
-        }
-        result
+    pub fn edges(&self) -> impl Iterator<Item = OcEdge> {
+        WireEdgeIter::new(ffi::new_wire_edge_explorer(&self.inner))
     }
 
     pub fn from_edges(edges: &[OcEdge]) -> Result<Self, OcctError> {
@@ -34,10 +29,9 @@ impl OcWire {
                 });
             }
         }
-        Ok(Self {
-            inner: builder.pin_mut().wire(),
-            _not_send: PhantomData,
-        })
+        // Safety: MakeWireBuilder::wire() returns make_unique<TopoDS_Wire>
+        // on a completed (IsDone()) builder — non-null.
+        Ok(unsafe { Self::from_ffi_unchecked(builder.pin_mut().wire()) })
     }
 
     /// Widens this wire to a general [`OcShape`] for use with shape-level
@@ -46,14 +40,36 @@ impl OcWire {
     /// The conversion is a cheap TShape handle reference-count increment;
     /// no geometry is copied.
     pub fn as_shape(&self) -> OcShape {
-        OcShape::from_ffi(ffi::clone_shape(ffi::wire_as_shape(&self.inner)))
+        // Safety: wire_as_shape is a zero-cost upcast; clone_shape is make_unique — non-null.
+        unsafe { OcShape::from_ffi_unchecked(ffi::clone_shape(ffi::wire_as_shape(&self.inner))) }
     }
 
     pub(crate) fn as_ffi(&self) -> &ffi::TopodsWire {
         &self.inner
     }
 
-    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsWire>) -> Self {
+    /// Returns `None` if `inner` is a null `UniquePtr` or the `TopoDS_Wire`
+    /// has a null TShape handle (`IsNull()`).
+    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsWire>) -> Option<Self> {
+        if inner.is_null() {
+            return None;
+        }
+        if ffi::topods_wire_is_null(inner.as_ref().unwrap()) {
+            return None;
+        }
+        Some(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Constructs an `OcWire` without null checks.
+    ///
+    /// # Safety
+    ///
+    /// Caller guarantees that `inner` is a non-null `UniquePtr` wrapping a
+    /// `TopoDS_Wire` whose TShape handle is non-null (`!IsNull()`).
+    pub(crate) unsafe fn from_ffi_unchecked(inner: cxx::UniquePtr<ffi::TopodsWire>) -> Self {
         Self {
             inner,
             _not_send: PhantomData,
@@ -63,10 +79,8 @@ impl OcWire {
 
 impl Clone for OcWire {
     fn clone(&self) -> Self {
-        Self {
-            inner: ffi::clone_wire(&self.inner),
-            _not_send: PhantomData,
-        }
+        // Safety: clone_wire is make_unique<TopoDS_Wire>(w) — non-null.
+        unsafe { Self::from_ffi_unchecked(ffi::clone_wire(&self.inner)) }
     }
 }
 
@@ -106,7 +120,7 @@ mod tests {
             .map(|(a, b)| OcEdge::from_pnts(*a, *b).unwrap())
             .collect();
         let wire = OcWire::from_edges(&edges).unwrap();
-        assert_eq!(wire.edges().len(), 3);
+        assert_eq!(wire.edges().collect::<Vec<_>>().len(), 3);
     }
 
     #[test]

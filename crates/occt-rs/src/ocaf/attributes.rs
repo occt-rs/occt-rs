@@ -35,9 +35,8 @@
 //! ownership of the attribute (it doesn't; several handles to the same one can
 //! coexist).
 
-use std::marker::PhantomData;
-
 use occt_sys::ffi;
+use std::marker::PhantomData;
 
 use crate::error::{OcctError, OcctErrorKind};
 use crate::ocaf::document::Command;
@@ -422,9 +421,13 @@ impl OcReferenceList {
     /// # Panics
     ///
     /// Panics if `index` is out of bounds (`>= extent()`).
-    pub fn at(&self, index: i32) -> OcLabel {
-        assert!(index >= 0 && index < self.extent(), "index out of bounds");
-        OcLabel::from_ffi(ffi::tdatastd_referencelist_at(&self.inner, index))
+    pub fn at(&self, index: u32) -> Option<OcLabel> {
+        if index as i32 >= self.extent() {
+            return None;
+        }
+        Some(unsafe {
+            OcLabel::from_ffi_unchecked(ffi::tdatastd_referencelist_at(&self.inner, index as i32))
+        })
     }
 
     /// Appends `value` to the end of this list.
@@ -434,12 +437,15 @@ impl OcReferenceList {
         ffi::tdatastd_referencelist_append(&self.inner, &value.inner);
     }
 
-    /// Collects all label references into a `Vec`, in order.
-    pub fn to_vec(&self) -> Vec<OcLabel> {
-        let n = self.extent();
-        (0..n)
-            .map(|i| OcLabel::from_ffi(ffi::tdatastd_referencelist_at(&self.inner, i)))
-            .collect()
+    /// Returns an iterator over the elements of this list, in order.
+    ///
+    /// Iteration is O(n) total — the underlying OCCT list cursor advances
+    /// one step per element, unlike [`at`] which walks from the head each time.
+    pub fn iter(&self) -> OcReferenceListIter {
+        OcReferenceListIter {
+            inner: ffi::tdatastd_referencelist_iter_new(&self.inner),
+            _not_send: PhantomData,
+        }
     }
 }
 
@@ -448,6 +454,26 @@ impl std::fmt::Debug for OcReferenceList {
         f.debug_struct("OcReferenceList")
             .field("extent", &self.extent())
             .finish()
+    }
+}
+pub struct OcReferenceListIter {
+    inner: cxx::UniquePtr<ffi::OcReferenceListIter>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl Iterator for OcReferenceListIter {
+    type Item = OcLabel;
+    fn next(&mut self) -> Option<OcLabel> {
+        if !ffi::tdatastd_referencelist_iter_more(&self.inner) {
+            return None;
+        }
+        // Safety: iter_value returns make_unique<LabelWrapper>(it.inner.Value())
+        // while More() is true — the label is live in TDF_Data by OCCT contract.
+        let label = unsafe {
+            OcLabel::from_ffi_unchecked(ffi::tdatastd_referencelist_iter_value(&self.inner))
+        };
+        ffi::tdatastd_referencelist_iter_next(self.inner.pin_mut());
+        Some(label)
     }
 }
 
@@ -529,9 +555,20 @@ impl OcIntegerList {
         ffi::tdatastd_integerlist_append(&self.inner, value);
     }
 
+    /// Returns an iterator over the elements of this list, in order.
+    ///
+    /// Iteration is O(n) total — the underlying OCCT list cursor advances
+    /// one step per element, unlike [`at`] which walks from the head each time.
+    pub fn iter(&self) -> OcIntegerListIter {
+        OcIntegerListIter {
+            inner: ffi::tdatastd_integerlist_iter_new(&self.inner),
+            _not_send: PhantomData,
+        }
+    }
+
     /// Collects all elements into a `Vec`, in order.
     pub fn to_vec(&self) -> Vec<i32> {
-        (0..self.extent()).map(|i| self.at(i)).collect()
+        self.iter().collect()
     }
 }
 
@@ -540,6 +577,23 @@ impl std::fmt::Debug for OcIntegerList {
         f.debug_struct("OcIntegerList")
             .field("extent", &self.extent())
             .finish()
+    }
+}
+
+pub struct OcIntegerListIter {
+    inner: cxx::UniquePtr<ffi::OcIntegerListIter>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl Iterator for OcIntegerListIter {
+    type Item = i32;
+    fn next(&mut self) -> Option<Self::Item> {
+        if !ffi::tdatastd_integerlist_iter_more(&self.inner) {
+            return None;
+        }
+        let v = ffi::tdatastd_integerlist_iter_value(&self.inner);
+        ffi::tdatastd_integerlist_iter_next(self.inner.pin_mut());
+        Some(v)
     }
 }
 
@@ -619,9 +673,15 @@ impl OcRealList {
         ffi::tdatastd_reallist_append(&self.inner, value);
     }
 
-    /// Collects all elements into a `Vec`, in order.
-    pub fn to_vec(&self) -> Vec<f64> {
-        (0..self.extent()).map(|i| self.at(i)).collect()
+    /// Returns an iterator over the elements of this list, in order.
+    ///
+    /// Iteration is O(n) total — the underlying OCCT list cursor advances
+    /// one step per element, unlike [`at`] which walks from the head each time.
+    pub fn iter(&self) -> OcRealListIter {
+        OcRealListIter {
+            inner: ffi::tdatastd_reallist_iter_new(&self.inner),
+            _not_send: PhantomData,
+        }
     }
 }
 
@@ -630,6 +690,22 @@ impl std::fmt::Debug for OcRealList {
         f.debug_struct("OcRealList")
             .field("extent", &self.extent())
             .finish()
+    }
+}
+pub struct OcRealListIter {
+    inner: cxx::UniquePtr<ffi::OcRealListIter>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl Iterator for OcRealListIter {
+    type Item = f64;
+    fn next(&mut self) -> Option<Self::Item> {
+        if !ffi::tdatastd_reallist_iter_more(&self.inner) {
+            return None;
+        }
+        let v = ffi::tdatastd_reallist_iter_value(&self.inner);
+        ffi::tdatastd_reallist_iter_next(self.inner.pin_mut());
+        Some(v)
     }
 }
 
@@ -713,9 +789,15 @@ impl OcExtStringList {
         ffi::tdatastd_extstringlist_append(&self.inner, value);
     }
 
-    /// Collects all elements into a `Vec`, in order.
-    pub fn to_vec(&self) -> Vec<String> {
-        (0..self.extent()).map(|i| self.at(i)).collect()
+    /// Returns an iterator over the elements of this list, in order.
+    ///
+    /// Iteration is O(n) total — the underlying OCCT list cursor advances
+    /// one step per element, unlike [`at`] which walks from the head each time.
+    pub fn iter(&self) -> OcStringListIter {
+        OcStringListIter {
+            inner: ffi::tdatastd_extstringlist_iter_new(&self.inner),
+            _not_send: PhantomData,
+        }
     }
 }
 
@@ -724,6 +806,23 @@ impl std::fmt::Debug for OcExtStringList {
         f.debug_struct("OcExtStringList")
             .field("extent", &self.extent())
             .finish()
+    }
+}
+
+pub struct OcStringListIter {
+    inner: cxx::UniquePtr<ffi::OcExtStringListIter>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl Iterator for OcStringListIter {
+    type Item = String;
+    fn next(&mut self) -> Option<Self::Item> {
+        if !ffi::tdatastd_extstringlist_iter_more(&self.inner) {
+            return None;
+        }
+        let v = ffi::tdatastd_extstringlist_iter_value(&self.inner);
+        ffi::tdatastd_extstringlist_iter_next(self.inner.pin_mut());
+        Some(v)
     }
 }
 
@@ -808,9 +907,15 @@ impl OcBooleanList {
         ffi::tdatastd_booleanlist_append(&self.inner, value);
     }
 
-    /// Collects all elements into a `Vec`, in order.
-    pub fn to_vec(&self) -> Vec<bool> {
-        (0..self.extent()).map(|i| self.at(i)).collect()
+    /// Returns an iterator over the elements of this list, in order.
+    ///
+    /// Iteration is O(n) total — the underlying OCCT list cursor advances
+    /// one step per element, unlike [`at`] which walks from the head each time.
+    pub fn iter(&self) -> OcBooleanListIter {
+        OcBooleanListIter {
+            inner: ffi::tdatastd_booleanlist_iter_new(&self.inner),
+            _not_send: PhantomData,
+        }
     }
 }
 
@@ -819,6 +924,22 @@ impl std::fmt::Debug for OcBooleanList {
         f.debug_struct("OcBooleanList")
             .field("extent", &self.extent())
             .finish()
+    }
+}
+pub struct OcBooleanListIter {
+    inner: cxx::UniquePtr<ffi::OcBooleanListIter>,
+    _not_send: PhantomData<*mut ()>,
+}
+
+impl Iterator for OcBooleanListIter {
+    type Item = bool;
+    fn next(&mut self) -> Option<Self::Item> {
+        if !ffi::tdatastd_booleanlist_iter_more(&self.inner) {
+            return None;
+        }
+        let v = ffi::tdatastd_booleanlist_iter_value(&self.inner);
+        ffi::tdatastd_booleanlist_iter_next(self.inner.pin_mut());
+        Some(v)
     }
 }
 
@@ -1242,7 +1363,7 @@ impl OcReferenceArray {
     pub fn value(&self, index: i32) -> Result<OcLabel, OcctError> {
         let inner =
             ffi::tdatastd_referencearray_value(&self.inner, index).map_err(OcctError::from)?;
-        Ok(OcLabel::from_ffi(inner))
+        Ok(unsafe { OcLabel::from_ffi_unchecked(inner) })
     }
 
     /// Sets the label at `index` (0-based).
@@ -1262,14 +1383,8 @@ impl OcReferenceArray {
             .map_err(OcctError::from)
     }
 
-    /// Collects all elements into a `Vec`, in index order.
-    pub fn to_vec(&self) -> Vec<OcLabel> {
-        (0..self.len())
-            .map(|i| {
-                self.value(i)
-                    .expect("index in [0, len()) is in bounds by construction")
-            })
-            .collect()
+    pub fn iter(&self) -> impl Iterator<Item = Result<OcLabel, OcctError>> + '_ {
+        (0..self.len()).map(|i| self.value(i))
     }
 }
 
@@ -1371,14 +1486,8 @@ impl OcRealArray {
         ffi::tdatastd_realarray_set_value(&self.inner, index, value).map_err(OcctError::from)
     }
 
-    /// Collects all elements into a `Vec`, in index order.
-    pub fn to_vec(&self) -> Vec<f64> {
-        (0..self.len())
-            .map(|i| {
-                self.value(i)
-                    .expect("index in [0, len()) is in bounds by construction")
-            })
-            .collect()
+    pub fn iter(&self) -> impl Iterator<Item = Result<f64, OcctError>> + '_ {
+        (0..self.len()).map(|i| self.value(i))
     }
 }
 
@@ -1477,15 +1586,8 @@ impl OcIntegerArray {
     pub fn set_value(&self, _cmd: &Command<'_>, index: i32, value: i32) -> Result<(), OcctError> {
         ffi::tdatastd_integerarray_set_value(&self.inner, index, value).map_err(OcctError::from)
     }
-
-    /// Collects all elements into a `Vec`, in index order.
-    pub fn to_vec(&self) -> Vec<i32> {
-        (0..self.len())
-            .map(|i| {
-                self.value(i)
-                    .expect("index in [0, len()) is in bounds by construction")
-            })
-            .collect()
+    pub fn iter(&self) -> impl Iterator<Item = Result<i32, OcctError>> + '_ {
+        (0..self.len()).map(|i| self.value(i))
     }
 }
 
@@ -1717,14 +1819,8 @@ impl OcByteArray {
         ffi::tdatastd_bytearray_set_value(&self.inner, index, value).map_err(OcctError::from)
     }
 
-    /// Collects all elements into a `Vec`, in index order.
-    pub fn to_vec(&self) -> Vec<u8> {
-        (0..self.len())
-            .map(|i| {
-                self.value(i)
-                    .expect("index in [0, len()) is in bounds by construction")
-            })
-            .collect()
+    pub fn iter(&self) -> impl Iterator<Item = Result<u8, OcctError>> + '_ {
+        (0..self.len()).map(|i| self.value(i))
     }
 }
 
@@ -1829,14 +1925,8 @@ impl OcExtStringArray {
         ffi::tdatastd_extstringarray_set_value(&self.inner, index, value).map_err(OcctError::from)
     }
 
-    /// Collects all elements into a `Vec`, in index order.
-    pub fn to_vec(&self) -> Vec<String> {
-        (0..self.len())
-            .map(|i| {
-                self.value(i)
-                    .expect("index in [0, len()) is in bounds by construction")
-            })
-            .collect()
+    pub fn iter(&self) -> impl Iterator<Item = Result<String, OcctError>> + '_ {
+        (0..self.len()).map(|i| self.value(i))
     }
 }
 
@@ -2290,7 +2380,7 @@ mod tests {
             cmd.commit().unwrap();
         }
         assert_eq!(list.extent(), 3);
-        let got: Vec<i32> = list.to_vec().iter().map(|l| l.tag()).collect();
+        let got: Vec<i32> = list.iter().map(|l| l.tag()).collect();
         assert_eq!(got, tags);
     }
 
@@ -2319,7 +2409,7 @@ mod tests {
         assert_eq!(list.extent(), 2);
         doc.undo().unwrap();
         assert_eq!(list.extent(), 1);
-        assert_eq!(list.at(0).tag(), a_tag);
+        assert_eq!(list.at(0).unwrap().tag(), a_tag);
     }
     // ── OcReferenceArray ─────────────────────────────────────────────────────
 
@@ -2385,7 +2475,7 @@ mod tests {
             arr.set_value(&cmd, 1, &b).unwrap();
             cmd.commit().unwrap();
         }
-        let got: Vec<i32> = arr.to_vec().iter().map(|l| l.tag()).collect();
+        let got: Vec<_> = arr.iter().map(|l| l.unwrap().tag()).collect();
         assert_eq!(got, tags);
     }
 
@@ -2502,7 +2592,7 @@ mod tests {
             arr.set_value(&cmd, 1, -2.25).unwrap();
             cmd.commit().unwrap();
         }
-        let got = arr.to_vec();
+        let got = arr.iter().collect::<Result<Vec<_>, _>>().unwrap();
         assert!((got[0] - 1.5).abs() < 1e-12);
         assert!((got[1] - (-2.25)).abs() < 1e-12);
     }
@@ -2613,7 +2703,10 @@ mod tests {
             arr.set_value(&cmd, 1, -3).unwrap();
             cmd.commit().unwrap();
         }
-        assert_eq!(arr.to_vec(), vec![7, -3]);
+        assert_eq!(
+            arr.iter().collect::<Result<Vec<_>, _>>().unwrap(),
+            vec![7, -3]
+        );
     }
 
     #[test]
@@ -2850,7 +2943,10 @@ mod tests {
             arr.set_value(&cmd, 1, 255).unwrap();
             cmd.commit().unwrap();
         }
-        assert_eq!(arr.to_vec(), vec![0u8, 255u8]);
+        assert_eq!(
+            arr.iter().collect::<Result<Vec<_>, _>>().unwrap(),
+            vec![0u8, 255u8]
+        );
     }
 
     #[test]
@@ -2960,7 +3056,7 @@ mod tests {
             cmd.commit().unwrap();
         }
         assert_eq!(
-            arr.to_vec(),
+            arr.iter().collect::<Result<Vec<_>, _>>().unwrap(),
             vec!["first".to_string(), "second".to_string()]
         );
     }
@@ -3173,9 +3269,10 @@ mod tests {
             list.append(&cmd, -2.25);
             cmd.commit().unwrap();
         }
-        let got = list.to_vec();
-        assert!((got[0] - 1.5).abs() < 1e-12);
-        assert!((got[1] - (-2.25)).abs() < 1e-12);
+        let mut got = list.iter();
+        assert!((got.next().unwrap() - 1.5).abs() < 1e-12);
+        assert!((got.next().unwrap() - (-2.25)).abs() < 1e-12);
+        assert!(got.next().is_none());
     }
 
     #[test]
@@ -3262,7 +3359,7 @@ mod tests {
             cmd.commit().unwrap();
         }
         assert_eq!(
-            list.to_vec(),
+            list.iter().collect::<Vec<_>>(),
             vec!["first".to_string(), "second".to_string()]
         );
     }
@@ -3301,7 +3398,7 @@ mod tests {
         }
         assert_eq!(list.extent(), 2);
         doc.undo().unwrap();
-        assert_eq!(list.to_vec(), vec!["before".to_string()]);
+        assert_eq!(list.iter().collect::<Vec<_>>(), vec!["before".to_string()]);
     }
 
     // ── OcBooleanList ────────────────────────────────────────────────────────
@@ -3366,7 +3463,7 @@ mod tests {
             list.append(&cmd, true);
             cmd.commit().unwrap();
         }
-        assert_eq!(list.to_vec(), vec![true, false, true]);
+        assert_eq!(list.iter().collect::<Vec<_>>(), vec![true, false, true]);
     }
 
     #[test]
@@ -3388,7 +3485,7 @@ mod tests {
         }
         assert_eq!(list.extent(), 2);
         doc.undo().unwrap();
-        assert_eq!(list.to_vec(), vec![true]);
+        assert_eq!(list.iter().collect::<Vec<_>>(), vec![true]);
     }
     // ── OcGuid ───────────────────────────────────────────────────────────────
 
@@ -3694,5 +3791,40 @@ mod tests {
         assert_eq!(nd.get_integer("count"), 2);
         doc.undo().unwrap();
         assert_eq!(nd.get_integer("count"), 1);
+    }
+    #[test]
+    fn referencelist_to_vec_length_matches_extent() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let list_label = main.get_or_create_child(&cmd, 1);
+            let a = main.get_or_create_child(&cmd, 2);
+            let b = main.get_or_create_child(&cmd, 3);
+            list = OcReferenceList::set(&cmd, &list_label).unwrap();
+            list.append(&cmd, &a);
+            list.append(&cmd, &b);
+            cmd.commit().unwrap();
+        }
+        let v = list.iter().collect::<Vec<_>>();
+        assert_eq!(
+            v.len(),
+            list.extent() as usize,
+            "to_vec() length must equal extent() — a mismatch indicates silent null-omission"
+        );
+    }
+    #[test]
+    fn referencelist_at_out_of_bounds_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let list_label = main.get_or_create_child(&cmd, 1);
+            list = OcReferenceList::set(&cmd, &list_label).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert!(list.at(0).is_none(), "at(0) on empty list should be None");
     }
 }

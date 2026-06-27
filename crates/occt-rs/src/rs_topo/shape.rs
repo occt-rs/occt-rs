@@ -15,11 +15,9 @@ use occt_sys::ffi;
 
 use crate::error::OcctError;
 use crate::rs_topo::offset::{OffsetShapeBuilder, ThickSolidBuilder};
+use crate::rs_topo::shape_explorer_iter::{ShapeEdgeIter, ShapeFaceIter};
+use crate::rs_topo::{chamfer::ChamferBuilder, face::OcFace, fillet::FilletBuilder};
 use crate::rs_topo::{OcEdge, ShapeType};
-use crate::{
-    error::{CommonError, FuseError},
-    rs_topo::{chamfer::ChamferBuilder, face::OcFace, fillet::FilletBuilder},
-};
 
 /// TopAbs_ShapeEnum::TopAbs_FACE.
 /// Reference: https://dev.opencascade.org/doc/refman/html/namespace_top_abs.html
@@ -71,7 +69,30 @@ impl OcShape {
     pub fn shape_type(&self) -> ShapeType {
         ShapeType::from(occt_sys::ffi::topods_shape_type(self.as_ffi()))
     }
-    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsShape>) -> Self {
+    /// Returns `None` if `inner` is a null `UniquePtr` or the `TopoDS_Shape`
+    /// has a null TShape handle (`IsNull()`).
+    #[allow(dead_code)]
+    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsShape>) -> Option<Self> {
+        if inner.is_null() {
+            return None;
+        }
+        if ffi::topods_shape_is_null(inner.as_ref().unwrap()) {
+            return None;
+        }
+        Some(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Constructs an `OcShape` without null checks.
+    ///
+    /// # Safety
+    ///
+    /// Caller guarantees that `inner` is a non-null `UniquePtr` wrapping a
+    /// `TopoDS_Shape` whose TShape handle is non-null (`!IsNull()`).
+    /// Violation is undefined behaviour through subsequent OCCT method calls.
+    pub(crate) unsafe fn from_ffi_unchecked(inner: cxx::UniquePtr<ffi::TopodsShape>) -> Self {
         Self {
             inner,
             _not_send: PhantomData,
@@ -90,14 +111,8 @@ impl OcShape {
     /// [`ShapeKey`] if unique faces are required.
     ///
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html>
-    pub fn faces(&self) -> Vec<OcFace> {
-        let mut result = Vec::new();
-        let mut exp = ffi::new_shape_explorer(self.as_ffi(), TOP_ABS_FACE);
-        while exp.more() {
-            result.push(OcFace::from_ffi(ffi::shape_as_face(exp.current())));
-            exp.pin_mut().next();
-        }
-        result
+    pub fn faces(&self) -> impl Iterator<Item = OcFace> {
+        ShapeFaceIter::new(ffi::new_shape_explorer(self.as_ffi(), TOP_ABS_FACE))
     }
 
     /// Returns all `TopoDS_Edge` sub-shapes of this shape as typed wrappers.
@@ -108,38 +123,20 @@ impl OcShape {
     /// edges are required.
     ///
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html>
-    pub fn edges(&self) -> Vec<OcEdge> {
-        let mut result = Vec::new();
-        let mut exp = ffi::new_shape_explorer(self.as_ffi(), TOP_ABS_EDGE);
-        while exp.more() {
-            result.push(OcEdge::from_ffi(ffi::shape_as_edge(exp.current())));
-            exp.pin_mut().next();
-        }
-        result
+    pub fn edges(&self) -> impl Iterator<Item = OcEdge> {
+        ShapeEdgeIter::new(ffi::new_shape_explorer(self.as_ffi(), TOP_ABS_EDGE))
     }
     /// Fuse (union) this shape with `other`, returning a new `OcShape`.
     ///
     /// Wraps `BRepAlgoAPI_Fuse` via the preferred SetArguments/SetTools/Build
     /// pattern. The builder and its history are not preserved; if Modified/
     /// Generated/IsDeleted are needed in future, promote to an explicit FuseBuilder.
-    pub fn oc_fuse(&self, other: &OcShape) -> Result<OcShape, FuseError> {
-        let result = occt_sys::ffi::fuse_shapes(
-            self.inner
-                .as_ref()
-                .expect("OcShape invariant: inner is non-null"),
-            other
-                .inner
-                .as_ref()
-                .expect("OcShape invariant: inner is non-null"),
-        )
-        .map_err(|e| FuseError::Occt(e.into()))?;
-        let result = OcShape::from_ffi(result);
-        if result.shape_type() == ShapeType::Compound
-            && occt_sys::ffi::topods_compound_child_count(result.as_ffi()) > 1
-        {
-            return Err(FuseError::DisjointInputs(result));
-        }
-        Ok(result)
+    pub fn oc_fuse(&self, other: &OcShape) -> Result<OcShape, OcctError> {
+        let result =
+            occt_sys::ffi::fuse_shapes(self.as_ffi(), other.as_ffi()).map_err(OcctError::from)?;
+        // Safety: fuse_shapes returns Ok(UniquePtr) via make_unique on success;
+        // the Ok branch is never null.
+        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
     }
     /// Subtract `tool` from `self`, returning a new `OcShape`.
     ///
@@ -149,16 +146,10 @@ impl OcShape {
     /// For disjoint inputs, OCCT returns `self` unchanged as a solid — this is
     /// a valid `Ok` result. No compound detection is needed.
     pub fn oc_cut(&self, tool: &OcShape) -> Result<OcShape, OcctError> {
-        let result = occt_sys::ffi::cut_shapes(
-            self.inner
-                .as_ref()
-                .expect("OcShape invariant: inner is non-null"),
-            tool.inner
-                .as_ref()
-                .expect("OcShape invariant: inner is non-null"),
-        )
-        .map_err(OcctError::from)?;
-        Ok(OcShape::from_ffi(result))
+        let result =
+            occt_sys::ffi::cut_shapes(self.as_ffi(), tool.as_ffi()).map_err(OcctError::from)?;
+        // Safety: cut_shapes returns Ok(UniquePtr) via make_unique on success.
+        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
     }
     /// Applies `trsf` to a copy of this shape, returning a new independent `OcShape`.
     ///
@@ -174,21 +165,22 @@ impl OcShape {
     pub fn transformed(&self, trsf: &crate::gp::OcTrsf) -> Result<OcShape, OcctError> {
         let result = occt_sys::ffi::transform_shape(
             self.as_ffi(),
-            trsf.value(1, 1),
-            trsf.value(1, 2),
-            trsf.value(1, 3),
-            trsf.value(1, 4),
-            trsf.value(2, 1),
-            trsf.value(2, 2),
-            trsf.value(2, 3),
-            trsf.value(2, 4),
-            trsf.value(3, 1),
-            trsf.value(3, 2),
-            trsf.value(3, 3),
-            trsf.value(3, 4),
+            trsf.value(1, 1).unwrap(),
+            trsf.value(1, 2).unwrap(),
+            trsf.value(1, 3).unwrap(),
+            trsf.value(1, 4).unwrap(),
+            trsf.value(2, 1).unwrap(),
+            trsf.value(2, 2).unwrap(),
+            trsf.value(2, 3).unwrap(),
+            trsf.value(2, 4).unwrap(),
+            trsf.value(3, 1).unwrap(),
+            trsf.value(3, 2).unwrap(),
+            trsf.value(3, 3).unwrap(),
+            trsf.value(3, 4).unwrap(),
         )
         .map_err(OcctError::from)?;
-        Ok(OcShape::from_ffi(result))
+        // Safety: transform_shape returns Ok(UniquePtr) via make_unique on success.
+        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
     }
 
     /// Intersect `self` with `other`, returning a new `OcShape`.
@@ -196,25 +188,14 @@ impl OcShape {
     /// Wraps `BRepAlgoAPI_Common` via the preferred SetArguments/SetTools/Build
     /// pattern.
     ///
-    /// Returns `Err(CommonError::NoIntersection)` when the inputs are disjoint —
-    /// OCCT returns an empty `TopoDS_Compound` in this case (`IsDone()==true`).
-    /// The empty compound is not forwarded to the caller.
-    pub fn oc_common(&self, other: &OcShape) -> Result<OcShape, CommonError> {
-        let result = occt_sys::ffi::common_shapes(
-            self.inner
-                .as_ref()
-                .expect("OcShape invariant: inner is non-null"),
-            other
-                .inner
-                .as_ref()
-                .expect("OcShape invariant: inner is non-null"),
-        )
-        .map_err(|e| CommonError::Occt(e.into()))?;
-        let result = OcShape::from_ffi(result);
-        if occt_sys::ffi::topods_compound_child_count(result.as_ffi()) == 0 {
-            return Err(CommonError::NoIntersection);
-        }
-        Ok(result)
+    /// For non-intersecting inputs, OCCT returns an empty `TopoDS_Compound`
+    /// (`IsDone()==true`); this is returned as `Ok`. Use `shape_type()` and
+    /// content queries on the result if the intersection's presence matters.
+    pub fn oc_common(&self, other: &OcShape) -> Result<OcShape, OcctError> {
+        let result =
+            occt_sys::ffi::common_shapes(self.as_ffi(), other.as_ffi()).map_err(OcctError::from)?;
+        // Safety: common_shapes returns Ok(UniquePtr) via make_unique on success.
+        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
     }
     /// Applies constant-radius fillets to the given edges and returns the
     /// resulting shape.
@@ -273,10 +254,9 @@ impl OcShape {
 impl Clone for OcShape {
     /// Cheap clone: increments the `TShape` handle reference count.
     fn clone(&self) -> Self {
-        Self {
-            inner: ffi::clone_shape(&self.inner),
-            _not_send: PhantomData,
-        }
+        // Safety: clone_shape is make_unique<TopoDS_Shape>(s) — never null.
+        // self.inner is non-null by construction invariant.
+        unsafe { Self::from_ffi_unchecked(ffi::clone_shape(&self.inner)) }
     }
 }
 
@@ -318,7 +298,7 @@ mod tests {
         let face = OcFace::from_wire(&wire, true).unwrap();
         let solid = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
         let shape = solid.as_shape();
-        assert_eq!(shape.faces().len(), 5);
+        assert_eq!(shape.faces().collect::<Vec<_>>().len(), 5);
     }
 
     #[test]
@@ -330,7 +310,7 @@ mod tests {
         ];
         let wire = OcWire::from_edges(&edges).unwrap();
         let face = OcFace::from_wire(&wire, true).unwrap();
-        assert_eq!(face.as_shape().faces().len(), 1);
+        assert_eq!(face.as_shape().faces().collect::<Vec<_>>().len(), 1);
     }
     #[test]
     fn edges_of_prism() {
@@ -346,7 +326,7 @@ mod tests {
         let solid = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
         // TopExp_Explorer visits each edge once per adjacent face, so a prism's
         // 9 edges appear 18 times (each edge bounds exactly 2 faces).
-        assert_eq!(solid.as_shape().edges().len(), 18);
+        assert_eq!(solid.as_shape().edges().collect::<Vec<_>>().len(), 18);
     }
     // A 1×1 square face in the XY plane, offset by `x_offset` on X,
     // extruded 1 unit along Z to produce a unit box.
@@ -521,9 +501,14 @@ mod tests {
         let b = box_solid(10.0).as_shape();
         let result = a.oc_common(&b);
         assert!(
-            matches!(result, Err(CommonError::NoIntersection)),
-            "common of disjoint solids should return NoIntersection, got: {:?}",
-            result.ok().map(|_| "Ok")
+            result.is_ok(),
+            "common of disjoint solids should return Ok empty compound, got: {:?}",
+            result.err()
+        );
+        assert_eq!(
+            result.unwrap().shape_type(),
+            ShapeType::Compound,
+            "disjoint common result should be a Compound"
         );
     }
     #[test]
@@ -582,11 +567,8 @@ mod tests {
         let edges = s.edges();
         // Deduplicate by ShapeKey — edges() returns each edge once per adjacent face.
         let mut seen = std::collections::HashSet::new();
-        let unique_edges: Vec<_> = edges
-            .iter()
-            .filter(|e| seen.insert(e.shape_key()))
-            .collect();
-        let result = s.fillet(&unique_edges.iter().map(|e| (0.05, *e)).collect::<Vec<_>>());
+        let unique_edges: Vec<_> = edges.filter(|e| seen.insert(e.shape_key())).collect();
+        let result = s.fillet(&unique_edges.iter().map(|e| (0.05, e)).collect::<Vec<_>>());
         assert!(result.is_ok(), "fillet should succeed: {:?}", result.err());
     }
 
@@ -596,10 +578,7 @@ mod tests {
         let s = box_solid(0.0).as_shape();
         let edges = s.edges();
         let mut seen = std::collections::HashSet::new();
-        let unique_edges: Vec<_> = edges
-            .iter()
-            .filter(|e| seen.insert(e.shape_key()))
-            .collect();
+        let unique_edges: Vec<_> = edges.filter(|e| seen.insert(e.shape_key())).collect();
         let mut builder = FilletBuilder::new(&s).unwrap();
         for e in &unique_edges {
             builder.add_edge(0.05, e).unwrap();
@@ -613,12 +592,9 @@ mod tests {
         let s = box_solid(0.0).as_shape();
         let edges = s.edges();
         let mut seen = std::collections::HashSet::new();
-        let unique_edges: Vec<_> = edges
-            .iter()
-            .filter(|e| seen.insert(e.shape_key()))
-            .collect();
+        let unique_edges: Vec<_> = edges.filter(|e| seen.insert(e.shape_key())).collect();
         let filleted = s
-            .fillet(&unique_edges.iter().map(|e| (0.05, *e)).collect::<Vec<_>>())
+            .fillet(&unique_edges.iter().map(|e| (0.05, e)).collect::<Vec<_>>())
             .unwrap();
         let tess = crate::tessellate::compute(&filleted, 0.05, 0.5).unwrap();
         assert!(!tess.faces.is_empty());
@@ -731,5 +707,23 @@ mod tests {
         let hollowed = s.thick_solid(&[&top_face], -0.1, 1e-3).unwrap();
         let tess = crate::tessellate::compute(&hollowed, 0.05, 0.5).unwrap();
         assert!(!tess.faces.is_empty());
+    }
+    #[test]
+    fn fuse_disjoint_solids_returns_ok_compound() {
+        // Box A: x 0..1, Box B: x 10..11 — disjoint.
+        // OCCT returns a Compound containing both; this must be Ok, not Err.
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(10.0).as_shape();
+        let result = a.oc_fuse(&b);
+        assert!(
+            result.is_ok(),
+            "fuse of disjoint solids should return Ok compound, got: {:?}",
+            result.err()
+        );
+        assert_eq!(
+            result.unwrap().shape_type(),
+            ShapeType::Compound,
+            "disjoint fuse result should be a Compound"
+        );
     }
 }

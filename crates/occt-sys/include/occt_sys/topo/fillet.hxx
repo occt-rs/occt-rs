@@ -86,6 +86,15 @@ struct MakeFilletBuilder {
     }
 };
 
+inline std::unique_ptr<ShapeListIter>
+fillet_modified_iter(MakeFilletBuilder& b, const TopoDS_Shape& s) {
+    return shape_list_iter_new(b.inner.Modified(s));
+}
+inline std::unique_ptr<ShapeListIter>
+fillet_generated_iter(MakeFilletBuilder& b, const TopoDS_Shape& s) {
+    return shape_list_iter_new(b.inner.Generated(s));
+}
+
 inline std::unique_ptr<MakeFilletBuilder> new_make_fillet_builder(
     const TopoDS_Shape& shape)
 {
