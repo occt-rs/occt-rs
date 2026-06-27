@@ -13,11 +13,12 @@ use std::marker::PhantomData;
 
 use occt_sys::ffi;
 
-use crate::topo::offset::{OffsetShapeBuilder, ThickSolidBuilder};
+use crate::error::OcctError;
+use crate::rs_topo::offset::{OffsetShapeBuilder, ThickSolidBuilder};
+use crate::rs_topo::{OcEdge, ShapeType};
 use crate::{
     error::{CommonError, FuseError},
-    topo::{chamfer::ChamferBuilder, face::OcFace, fillet::FilletBuilder, ShapeType},
-    OcEdge, OcctError,
+    rs_topo::{chamfer::ChamferBuilder, face::OcFace, fillet::FilletBuilder},
 };
 
 /// TopAbs_ShapeEnum::TopAbs_FACE.
@@ -282,9 +283,8 @@ impl Clone for OcShape {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gp::OcPnt;
-    use crate::topo::{OcEdge, OcFace, OcWire};
-    use crate::OcVec;
+    use crate::gp::{OcPnt, OcVec};
+    use crate::rs_topo::{OcEdge, OcFace, OcWire};
 
     fn triangle_face() -> OcFace {
         let edges = vec![
@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn faces_of_prism() {
         use crate::gp::{OcPnt, OcVec};
-        use crate::topo::{OcEdge, OcWire};
+        use crate::rs_topo::{OcEdge, OcWire};
         let edges = vec![
             OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
             OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(0.5, 1.0, 0.0)).unwrap(),
@@ -335,7 +335,7 @@ mod tests {
     #[test]
     fn edges_of_prism() {
         use crate::gp::{OcPnt, OcVec};
-        use crate::topo::{OcEdge, OcWire};
+        use crate::rs_topo::{OcEdge, OcWire};
         let edges = vec![
             OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
             OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(0.5, 1.0, 0.0)).unwrap(),
@@ -350,7 +350,7 @@ mod tests {
     }
     // A 1×1 square face in the XY plane, offset by `x_offset` on X,
     // extruded 1 unit along Z to produce a unit box.
-    fn box_solid(x_offset: f64) -> crate::topo::OcSolid {
+    fn box_solid(x_offset: f64) -> crate::rs_topo::OcSolid {
         let x0 = x_offset;
         let x1 = x_offset + 1.0;
         let edges = vec![
@@ -592,7 +592,7 @@ mod tests {
 
     #[test]
     fn fillet_builder_add_then_build() {
-        use crate::topo::FilletBuilder;
+        use crate::rs_topo::FilletBuilder;
         let s = box_solid(0.0).as_shape();
         let edges = s.edges();
         let mut seen = std::collections::HashSet::new();
@@ -642,7 +642,7 @@ mod tests {
 
     #[test]
     fn chamfer_builder_symmetric() {
-        use crate::topo::ChamferBuilder;
+        use crate::rs_topo::ChamferBuilder;
         let s = box_solid(0.0).as_shape();
         let edges = unique_edges(&s);
         let mut builder = ChamferBuilder::new(&s).unwrap();

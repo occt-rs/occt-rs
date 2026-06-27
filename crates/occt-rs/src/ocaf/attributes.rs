@@ -40,8 +40,8 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::topo::document::Command;
-use crate::topo::label::OcLabel;
+use crate::ocaf::document::Command;
+use crate::ocaf::label::OcLabel;
 
 // ── OcName ────────────────────────────────────────────────────────────────────
 
@@ -1853,7 +1853,7 @@ impl std::fmt::Debug for OcExtStringArray {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::topo::{OcApplication, OcDocument, OcGeometryAttr};
+    use crate::ocaf::{OcApplication, OcDocument};
 
     fn new_doc() -> (OcApplication, OcDocument) {
         let mut app = OcApplication::new();

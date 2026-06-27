@@ -2,7 +2,7 @@
 //!
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_topo_d_s___solid.html>
 
-use crate::topo::OcShape;
+use crate::rs_topo::OcShape;
 use occt_sys::ffi;
 use std::marker::PhantomData;
 

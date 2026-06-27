@@ -12,7 +12,7 @@
 //! See DEVELOPMENT.md for the IP hygiene policy.
 
 pub mod gp;
-pub mod topo;
+pub mod sys_topo;
 
 /// Unified FFI namespace.
 ///
@@ -20,5 +20,5 @@ pub mod topo;
 /// have no overlapping names, so glob re-export is unambiguous.
 pub mod ffi {
     pub use crate::gp::ffi::*;
-    pub use crate::topo::ffi::*;
+    pub use crate::sys_topo::ffi::*;
 }

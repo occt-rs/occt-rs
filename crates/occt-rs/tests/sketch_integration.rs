@@ -35,14 +35,13 @@
 /// TNaming, and the undo/redo attribute stack only.
 #[cfg(test)]
 mod integration_sketch_extrude {
-    use occt_rs::gp::{OcAx1, OcAx2, OcDir, OcPnt, OcVec};
-    use occt_rs::topo::application::OcApplication;
-    use occt_rs::topo::document::OcDocument;
-    use occt_rs::topo::tdata_xtd::{OcAxisAttr, OcPlaneAttr, OcPointAttr};
-    use occt_rs::topo::tnaming::{TnamingBuilder, TnamingNamedShape};
-    use occt_rs::topo::{OcEdge, OcFace, OcInteger, OcWire};
-    use occt_rs::OcShape;
-    use occt_sys::ffi::new_tnaming_builder;
+    use occt_rs::gp::{OcAx2, OcDir, OcPnt, OcVec};
+    use occt_rs::ocaf::application::OcApplication;
+    use occt_rs::ocaf::document::OcDocument;
+    use occt_rs::ocaf::tdata_xtd::{OcPlaneAttr, OcPointAttr};
+    use occt_rs::ocaf::tnaming::{TnamingBuilder, TnamingNamedShape};
+    use occt_rs::ocaf::OcInteger;
+    use occt_rs::rs_topo::{OcEdge, OcFace, OcWire};
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -189,7 +188,7 @@ mod integration_sketch_extrude {
         //   A (0,1,0)   B (0,0,0)   C (1,0,0)   D (1,1,0)
         // Tags: sketch/1=A, sketch/2=B, sketch/3=C, sketch/4=D, sketch/5=face
 
-        let (sketch_label, pt_a_label, pt_b_label, pt_c_label, pt_d_label, face_label) = {
+        let (_sketch_label, pt_a_label, pt_b_label, pt_c_label, pt_d_label, face_label) = {
             let cmd = doc.begin_command().unwrap();
             let sketch = main.get_or_create_child(&cmd, 2);
 

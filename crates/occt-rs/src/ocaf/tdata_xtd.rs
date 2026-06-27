@@ -10,9 +10,9 @@
 //!
 //! - [`OcConstraintAttr`] — records a constraint between 1–4 geometry
 //!   participants.  Each participant is referenced by its
-//!   [`TnamingNamedShape`](crate::topo::tnaming::TnamingNamedShape) handle —
+//!   [`TnamingNamedShape`](crate::ocaf::tnaming::TnamingNamedShape) handle —
 //!   the topology record — not by an [`OcGeometryAttr`] handle.  Dimensional
-//!   constraints additionally carry an [`OcReal`](crate::topo::attributes::OcReal)
+//!   constraints additionally carry an [`OcReal`](crate::ocaf::attributes::OcReal)
 //!   value attached via a sub-label.
 //!
 //! ## Constraint kind
@@ -22,7 +22,7 @@
 //! that set should be managed at the application layer using a GCS of your
 //! choice.  This binding exposes the enum as [`ConstraintKind`] but you are
 //! free to ignore it and store application constraint kinds via
-//! [`OcInteger`](crate::topo::attributes::OcInteger) on a sub-label.
+//! [`OcInteger`](crate::ocaf::attributes::OcInteger) on a sub-label.
 //!
 //! ## Sourcing
 //!
@@ -38,15 +38,13 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::OcctError;
-use crate::gp::{OcAx1, OcAx2};
-use crate::topo::attributes::OcReal;
-use crate::topo::document::Command;
-use crate::topo::label::OcLabel;
-use crate::topo::tnaming::TnamingBuilder;
-use crate::topo::tnaming::TnamingNamedShape;
-use crate::topo::{OcEdge, OcFace, OcVertex};
-use crate::{OcPnt, OcShape};
-use occt_sys::ffi::new_tnaming_builder;
+use crate::gp::{OcAx1, OcAx2, OcPnt};
+use crate::ocaf::attributes::OcReal;
+use crate::ocaf::document::Command;
+use crate::ocaf::label::OcLabel;
+use crate::ocaf::tnaming::TnamingBuilder;
+use crate::ocaf::tnaming::TnamingNamedShape;
+use crate::rs_topo::OcShape;
 
 // ── GeometryKind ─────────────────────────────────────────────────────────────
 
@@ -600,6 +598,16 @@ pub struct OcPointAttr {
 }
 
 impl OcPointAttr {
+    pub fn from_ffi(inner: cxx::UniquePtr<ffi::TDataXtdPointHandle>) -> Self {
+        Self {
+            inner,
+            _not_send: PhantomData,
+        }
+    }
+    pub fn as_ffi(self) -> cxx::UniquePtr<ffi::TDataXtdPointHandle> {
+        self.inner
+    }
+
     /// Records a vertex at `pos` as a generated shape on `label` via
     /// `TNaming_Builder`.
     ///
@@ -723,6 +731,16 @@ pub struct OcAxisAttr {
 }
 
 impl OcAxisAttr {
+    pub fn from_ffi(inner: cxx::UniquePtr<ffi::TDataXtdAxisHandle>) -> Self {
+        Self {
+            inner,
+            _not_send: PhantomData,
+        }
+    }
+    pub fn as_ffi(self) -> cxx::UniquePtr<ffi::TDataXtdAxisHandle> {
+        self.inner
+    }
+
     /// Records an infinite linear edge defined by `axis` as a generated shape
     /// on `label` via `TNaming_Builder`.
     ///
@@ -764,10 +782,7 @@ impl OcAxisAttr {
     /// [`record_shape`]: Self::record_shape
     pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdataxtd_axis_set(&label.inner).map_err(OcctError::from)?;
-        Ok(Self {
-            inner,
-            _not_send: PhantomData,
-        })
+        Ok(Self::from_ffi(inner))
     }
 
     /// Returns the geometry kind and named shape of the axis on `label`.
@@ -845,6 +860,10 @@ pub struct OcPlaneAttr {
 }
 
 impl OcPlaneAttr {
+    pub fn as_ffi(self) -> cxx::UniquePtr<ffi::TDataXtdPlaneHandle> {
+        self.inner
+    }
+
     /// Records an infinite planar face defined by `frame` as a generated shape
     /// on `label` via `TNaming_Builder`.
     ///
@@ -890,10 +909,7 @@ impl OcPlaneAttr {
     /// [`record_shape`]: Self::record_shape
     pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdataxtd_plane_set(&label.inner).map_err(OcctError::from)?;
-        Ok(Self {
-            inner,
-            _not_send: PhantomData,
-        })
+        Ok(Self::from_ffi(inner))
     }
 
     /// Returns the geometry kind and named shape of the plane on `label`.
@@ -922,10 +938,7 @@ impl OcPlaneAttr {
         if inner.is_null() {
             None
         } else {
-            Some(Self {
-                inner,
-                _not_send: PhantomData,
-            })
+            Some(Self::from_ffi(inner))
         }
     }
 
@@ -936,6 +949,13 @@ impl OcPlaneAttr {
     /// Must be called inside an open [`Command`] scope.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdataxtd_plane_forget(&label.inner)
+    }
+
+    fn from_ffi(inner: cxx::UniquePtr<ffi::TDataXtdPlaneHandle>) -> Self {
+        Self {
+            inner,
+            _not_send: PhantomData,
+        }
     }
 }
 
@@ -950,13 +970,11 @@ impl std::fmt::Debug for OcPlaneAttr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gp::OcPnt;
-    use crate::topo::application::OcApplication;
-    use crate::topo::document::OcDocument;
-    use crate::topo::tnaming::TnamingBuilder;
-    use crate::topo::{OcEdge, OcFace, OcWire};
-    use crate::OcDir;
-    use occt_sys::ffi::new_tnaming_builder;
+    use crate::gp::{OcDir, OcPnt};
+    use crate::ocaf::application::OcApplication;
+    use crate::ocaf::document::OcDocument;
+    use crate::ocaf::tnaming::TnamingBuilder;
+    use crate::rs_topo::{OcEdge, OcFace, OcWire};
 
     fn new_doc() -> (OcApplication, OcDocument) {
         let mut app = OcApplication::new();
@@ -967,7 +985,7 @@ mod tests {
     /// Build a unit square face and record it as a primitive named shape on
     /// `label` using the already-open `cmd`.  Returns the `TnamingNamedShape`
     /// handle.  Does not open or close any command.
-    fn record_named_shape(cmd: &Command<'_>, label: &OcLabel) -> TnamingNamedShape {
+    fn record_named_shape(_cmd: &Command<'_>, label: &OcLabel) -> TnamingNamedShape {
         let edges = [
             OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
             OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(1.0, 1.0, 0.0)).unwrap(),
@@ -1231,7 +1249,7 @@ mod tests {
         // Label and named shape created in cmd1; constraint set in cmd2.
         // Undo of cmd2 removes the constraint while the label survives.
         let (_app, mut doc) = new_doc();
-        let (l1, c_label, ns) = {
+        let (_l1, c_label, ns) = {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let l1 = main.get_or_create_child(&cmd, 1);
@@ -1251,13 +1269,12 @@ mod tests {
     }
     mod position_tests {
         use super::*;
-        use crate::OcPnt;
 
         fn new_doc() -> (
-            crate::topo::application::OcApplication,
-            crate::topo::document::OcDocument,
+            crate::ocaf::application::OcApplication,
+            crate::ocaf::document::OcDocument,
         ) {
-            let mut app = crate::topo::application::OcApplication::new();
+            let mut app = crate::ocaf::application::OcApplication::new();
             let doc = app.new_document("BinXCAF").unwrap();
             (app, doc)
         }
@@ -1568,7 +1585,7 @@ mod tests {
     #[test]
     fn plane_record_shape_usable_as_constraint_plane() {
         // The returned NamedShape can be used as the plane of a 2D constraint.
-        let (_app, mut doc) = new_doc();
+        let (_app, mut _doc) = new_doc();
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();

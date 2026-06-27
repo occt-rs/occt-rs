@@ -9,7 +9,9 @@ use std::marker::PhantomData;
 use cxx::UniquePtr;
 use occt_sys::ffi::{self, new_tnaming_builder};
 
-use super::{label::OcLabel, shape::OcShape};
+use crate::rs_topo::OcShape;
+
+use super::label::OcLabel;
 
 // ---------------------------------------------------------------------------
 // TnamingEvolution
@@ -196,67 +198,6 @@ impl TnamingNamedShape {
         &self.inner
     }
 }
-#[test]
-fn tnaming_undo_reverses_modify() {
-    use crate::gp::OcPnt;
-    use crate::topo::{OcApplication, OcEdge, OcFace};
-    use occt_sys::ffi::new_tnaming_builder;
-
-    let mut app = OcApplication::new();
-    let mut doc = app.new_document("BinXCAF").unwrap();
-
-    // Two distinct shapes
-    let edges = vec![
-        OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
-        OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(1.0, 1.0, 0.0)).unwrap(),
-        OcEdge::from_pnts(OcPnt::new(1.0, 1.0, 0.0), OcPnt::new(0.0, 1.0, 0.0)).unwrap(),
-        OcEdge::from_pnts(OcPnt::new(0.0, 1.0, 0.0), OcPnt::new(0.0, 0.0, 0.0)).unwrap(),
-    ];
-    let wire_a = crate::topo::OcWire::from_edges(&edges).unwrap();
-    let face_a = OcFace::from_wire(&wire_a, true).unwrap();
-    let shape_a = face_a.as_shape();
-
-    let edges = vec![
-        OcEdge::from_pnts(OcPnt::new(0.5, 0.0, 0.0), OcPnt::new(1.5, 0.0, 0.0)).unwrap(),
-        OcEdge::from_pnts(OcPnt::new(1.5, 0.0, 0.0), OcPnt::new(1.5, 1.0, 0.0)).unwrap(),
-        OcEdge::from_pnts(OcPnt::new(1.5, 1.0, 0.0), OcPnt::new(0.5, 1.0, 0.0)).unwrap(),
-        OcEdge::from_pnts(OcPnt::new(0.5, 1.0, 0.0), OcPnt::new(0.5, 0.0, 0.0)).unwrap(),
-    ];
-    let wire_b = crate::topo::OcWire::from_edges(&edges).unwrap();
-    let face_b = OcFace::from_wire(&wire_b, true).unwrap();
-    let shape_b = face_b.as_shape();
-
-    let root = doc.main();
-
-    // Command 1: create the label and record shape_a as primitive
-    let (label, named_shape) = {
-        let cmd = doc.begin_command().unwrap();
-        let label = root.get_or_create_child(&cmd, 1);
-        let mut b = TnamingBuilder::new(&label);
-        b.generated_fresh(&shape_a);
-        let ns = b.named_shape();
-        cmd.commit().unwrap();
-        (label, ns)
-    };
-
-    // Command 2: modify to shape_b
-    {
-        let cmd = doc.begin_command().unwrap();
-        let mut b = TnamingBuilder::new(&label);
-        b.modify(&shape_a, &shape_b);
-        cmd.commit().unwrap();
-    }
-
-    // After command 2, get() should return shape_b
-    // (compare via some observable property — bounding box, vertex count, etc.)
-
-    doc.undo().unwrap();
-
-    // After undo, get() should return shape_a
-    // This is the verification the milestone requires before proceeding.
-    let _ = named_shape.get();
-    // Assert shape identity here
-}
 // ---------------------------------------------------------------------------
 // TnamingSelector
 // Reference: https://dev.opencascade.org/doc/refman/html/class_t_naming___selector.html
@@ -283,7 +224,7 @@ fn tnaming_undo_reverses_modify() {
 ///
 /// [`select`]: TnamingSelector::select
 /// [`solve`]: TnamingSelector::solve
-/// [`Command`]: crate::topo::document::Command
+/// [`Command`]: crate::ocaf::document::Command
 pub struct TnamingSelector {
     pub(crate) inner: UniquePtr<ffi::TnamingSelectorShim>,
     _not_send: PhantomData<*mut ()>,
@@ -304,10 +245,10 @@ impl TnamingSelector {
     /// The `_cmd` parameter is a compile-time proof that a [`Command`] is
     /// open; it is not used at runtime.
     ///
-    /// [`Command`]: crate::topo::document::Command
+    /// [`Command`]: crate::ocaf::document::Command
     pub fn select(
         &mut self,
-        _cmd: &crate::topo::document::Command<'_>,
+        _cmd: &crate::ocaf::document::Command<'_>,
         shape: &OcShape,
         context: &OcShape,
     ) -> bool {
@@ -337,5 +278,70 @@ impl TnamingSelector {
             inner: out,
             _not_send: PhantomData,
         })
+    }
+}
+#[cfg(test)]
+mod test {
+    use crate::ocaf::{OcApplication, TnamingBuilder};
+
+    #[test]
+    fn tnaming_undo_reverses_modify() {
+        use crate::gp::OcPnt;
+        use crate::rs_topo::{OcEdge, OcFace};
+
+        let mut app = OcApplication::new();
+        let mut doc = app.new_document("BinXCAF").unwrap();
+
+        // Two distinct shapes
+        let edges = vec![
+            OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
+            OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(1.0, 1.0, 0.0)).unwrap(),
+            OcEdge::from_pnts(OcPnt::new(1.0, 1.0, 0.0), OcPnt::new(0.0, 1.0, 0.0)).unwrap(),
+            OcEdge::from_pnts(OcPnt::new(0.0, 1.0, 0.0), OcPnt::new(0.0, 0.0, 0.0)).unwrap(),
+        ];
+        let wire_a = crate::rs_topo::OcWire::from_edges(&edges).unwrap();
+        let face_a = OcFace::from_wire(&wire_a, true).unwrap();
+        let shape_a = face_a.as_shape();
+
+        let edges = vec![
+            OcEdge::from_pnts(OcPnt::new(0.5, 0.0, 0.0), OcPnt::new(1.5, 0.0, 0.0)).unwrap(),
+            OcEdge::from_pnts(OcPnt::new(1.5, 0.0, 0.0), OcPnt::new(1.5, 1.0, 0.0)).unwrap(),
+            OcEdge::from_pnts(OcPnt::new(1.5, 1.0, 0.0), OcPnt::new(0.5, 1.0, 0.0)).unwrap(),
+            OcEdge::from_pnts(OcPnt::new(0.5, 1.0, 0.0), OcPnt::new(0.5, 0.0, 0.0)).unwrap(),
+        ];
+        let wire_b = crate::rs_topo::OcWire::from_edges(&edges).unwrap();
+        let face_b = OcFace::from_wire(&wire_b, true).unwrap();
+        let shape_b = face_b.as_shape();
+
+        let root = doc.main();
+
+        // Command 1: create the label and record shape_a as primitive
+        let (label, named_shape) = {
+            let cmd = doc.begin_command().unwrap();
+            let label = root.get_or_create_child(&cmd, 1);
+            let mut b = TnamingBuilder::new(&label);
+            b.generated_fresh(&shape_a);
+            let ns = b.named_shape();
+            cmd.commit().unwrap();
+            (label, ns)
+        };
+
+        // Command 2: modify to shape_b
+        {
+            let cmd = doc.begin_command().unwrap();
+            let mut b = TnamingBuilder::new(&label);
+            b.modify(&shape_a, &shape_b);
+            cmd.commit().unwrap();
+        }
+
+        // After command 2, get() should return shape_b
+        // (compare via some observable property — bounding box, vertex count, etc.)
+
+        doc.undo().unwrap();
+
+        // After undo, get() should return shape_a
+        // This is the verification the milestone requires before proceeding.
+        let _ = named_shape.get();
+        // Assert shape identity here
     }
 }

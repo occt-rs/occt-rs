@@ -1,4 +1,4 @@
-use crate::OcctError;
+use crate::error::OcctError;
 
 /// Error returned by [`OcShape::oc_common`].
 #[derive(Debug)]

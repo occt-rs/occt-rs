@@ -15,7 +15,7 @@
 //! [`possible_closing_face`]: SketchPolylineBuilder::possible_closing_face
 
 use crate::gp::OcPnt;
-use crate::topo::{OcEdge, OcFace, OcVertex, OcWire};
+use crate::rs_topo::{OcEdge, OcFace, OcVertex, OcWire};
 
 /// Accumulates a polyline as a sequence of topologically connected edges.
 ///

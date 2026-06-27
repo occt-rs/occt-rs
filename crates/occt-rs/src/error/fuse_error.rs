@@ -1,4 +1,4 @@
-use crate::OcctError;
+use crate::error::OcctError;
 
 /// Error returned by [`OcShape::fuse`].
 #[derive(Debug)]
@@ -6,7 +6,7 @@ pub enum FuseError {
     /// The two input shapes are disjoint — OCCT performed the operation successfully
     /// but the result is a `TopoDS_Compound` containing both inputs unchanged.
     /// The compound is returned so the caller can opt in to using it.
-    DisjointInputs(crate::topo::OcShape),
+    DisjointInputs(crate::rs_topo::OcShape),
     /// An OCCT exception was raised during the fuse operation.
     Occt(OcctError),
 }

@@ -20,7 +20,7 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::topo::{BuiltWithHistory, HistoryProvider, OcEdge, OcFace, OcShape};
+use crate::rs_topo::{BuiltWithHistory, HistoryProvider, OcEdge, OcFace, OcShape};
 
 /// Builder for chamfer operations on a solid.
 pub struct ChamferBuilder {

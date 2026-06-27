@@ -3,7 +3,7 @@
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_wire.html>
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::topo::{OcEdge, OcShape};
+use crate::rs_topo::{OcEdge, OcShape};
 use occt_sys::ffi;
 use std::marker::PhantomData;
 

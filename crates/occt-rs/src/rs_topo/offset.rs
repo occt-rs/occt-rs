@@ -23,7 +23,7 @@ use std::marker::PhantomData;
 use occt_sys::ffi;
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::topo::{BuiltWithHistory, HistoryProvider, OcFace, OcShape};
+use crate::rs_topo::{BuiltWithHistory, HistoryProvider, OcFace, OcShape};
 
 // ── OffsetShapeBuilder ────────────────────────────────────────────────────────
 
