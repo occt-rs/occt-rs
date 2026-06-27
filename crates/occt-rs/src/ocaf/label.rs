@@ -29,13 +29,12 @@ use crate::ocaf::document::Command;
 /// command is live. That a label must not be used after its document is
 /// dropped is therefore a *caller obligation*, not a compile-time guarantee.
 ///
-/// A null label (returned by [`find_child`] when the child is absent) has
-/// [`is_null()`] returning `true`.  Calling any
-/// structural method on a null label is undefined at the OCCT level; always
-/// check [`is_null()`] when `create = false`.
+/// Null is not a representable state: every constructed `OcLabel` wraps a
+/// non-null node. Absence is expressed as `Option<OcLabel>` at the API
+/// boundary (e.g. [`find_child`], [`father`]).
 ///
 /// [`find_child`]: OcLabel::find_child
-/// [`is_null()`]: OcLabel::is_null
+/// [`father`]: OcLabel::father
 pub struct OcLabel {
     // Fixme: audit how to construct a TnamingBuilder. Currently: `TnamingBuilder::new(new_tnaming_builder(&label.inner))`
     pub(crate) inner: cxx::UniquePtr<ffi::TdfLabel>,
@@ -46,19 +45,22 @@ pub struct OcLabel {
 }
 
 impl OcLabel {
-    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TdfLabel>) -> Self {
+    pub(crate) unsafe fn from_ffi_unchecked(inner: cxx::UniquePtr<ffi::TdfLabel>) -> Self {
         Self {
             inner,
             _not_send: PhantomData,
         }
     }
-
-    /// Returns `true` when this label has no associated node.
-    ///
-    /// A null label results from [`find_child`](Self::find_child) when the
-    /// requested child does not exist.
-    pub fn is_null(&self) -> bool {
-        ffi::tdf_label_is_null(&self.inner)
+    ///  Returns `None` when the inner `TdfLabel` is null.
+    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TdfLabel>) -> Option<Self> {
+        if ffi::tdf_label_is_null(&inner) {
+            None
+        } else {
+            Some(Self {
+                inner,
+                _not_send: PhantomData,
+            })
+        }
     }
 
     /// Returns `true` when this label is the root of the framework.
@@ -72,7 +74,7 @@ impl OcLabel {
     }
 
     /// The parent label.  Returns a null label when called on the root.
-    pub fn father(&self) -> OcLabel {
+    pub fn father(&self) -> Option<OcLabel> {
         OcLabel::from_ffi(ffi::tdf_label_father(&self.inner))
     }
 
@@ -80,13 +82,7 @@ impl OcLabel {
     ///
     /// Returns `None` if no child with this tag exists. Never creates.
     pub fn find_child(&self, tag: i32) -> Option<OcLabel> {
-        let inner = ffi::tdf_label_find_child(&self.inner, tag, false);
-        let label = OcLabel::from_ffi(inner);
-        if label.is_null() {
-            None
-        } else {
-            Some(label)
-        }
+        OcLabel::from_ffi(ffi::tdf_label_find_child(&self.inner, tag, false))
     }
 
     /// Finds or creates a direct child label with the given `tag`.
@@ -95,7 +91,9 @@ impl OcLabel {
     /// captured by OCAF's Backup/Delta mechanism, so this requires an open
     /// [`Command`].
     pub fn get_or_create_child(&self, _cmd: &Command<'_>, tag: i32) -> OcLabel {
-        OcLabel::from_ffi(ffi::tdf_label_find_child(&self.inner, tag, true))
+        // safe: The assumed pre-condition is self.inner is non-null. At time of writing this
+        // comment, this is not bullet-proofed, but that's the direction we are heading
+        unsafe { OcLabel::from_ffi_unchecked(ffi::tdf_label_find_child(&self.inner, tag, true)) }
     }
 
     /// Returns `true` when at least one attribute is attached to this label.
@@ -131,7 +129,9 @@ impl OcLabel {
     /// Same shim pattern as [`father`](Self::father); no `Handle(TDF_Data)`
     /// involved.
     pub fn root(&self) -> OcLabel {
-        OcLabel::from_ffi(ffi::tdf_label_root(&self.inner))
+        // safe: The assumed pre-condition is self.inner is non-null. At time of writing this
+        // comment, this is not bullet-proofed, but that's the direction we are heading
+        unsafe { OcLabel::from_ffi_unchecked(ffi::tdf_label_root(&self.inner)) }
     }
 
     /// Forgets all attributes on this label, and on every descendant if
@@ -154,7 +154,8 @@ impl OcLabel {
         let mut current = self.clone();
         while !current.is_root() {
             tags.push(current.tag());
-            current = current.father();
+            // the !current.is_root() creates an "always has a father" invariant
+            current = current.father().unwrap();
         }
         tags.reverse();
         LabelPath(tags)
@@ -177,23 +178,16 @@ impl OcLabel {
 impl Clone for OcLabel {
     /// Cheap clone: increments the Handle(TDF_LabelNode) ref-count.
     fn clone(&self) -> Self {
-        Self {
-            inner: ffi::clone_tdf_label(&self.inner),
-            _not_send: PhantomData,
-        }
+        unsafe { Self::from_ffi_unchecked(ffi::clone_tdf_label(&self.inner)) }
     }
 }
 
 impl std::fmt::Debug for OcLabel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.is_null() {
-            f.write_str("OcLabel(null)")
-        } else {
-            f.debug_struct("OcLabel")
-                .field("entry", &self.entry())
-                .field("tag", &self.tag())
-                .finish()
-        }
+        f.debug_struct("OcLabel")
+            .field("entry", &self.entry())
+            .field("tag", &self.tag())
+            .finish()
     }
 }
 
@@ -220,7 +214,7 @@ impl<'doc> Iterator for OcChildIterator<'doc> {
         let inner = self.inner.value();
         // next() is non-const — advances the iterator.
         self.inner.pin_mut().next();
-        Some(OcLabel::from_ffi(inner))
+        OcLabel::from_ffi(inner)
     }
 }
 // ── LabelPath ───────────────────────────────────────────────────────────────
@@ -274,5 +268,30 @@ impl FromStr for LabelPath {
             })
             .collect::<Result<Vec<_>, _>>()
             .map(LabelPath)
+    }
+}
+#[cfg(test)]
+mod tests {
+
+    // These tests require a live document. If the test harness for OCAF
+    // types lives in an integration test, move these there.
+    // Shown here as the canonical form.
+
+    #[test]
+    fn root_father_is_none() {
+        // Requires a document; sketch the structure — implement against
+        // whatever test-document helper exists in the codebase.
+        // OcLabel::root().father() must be None.
+        let mut app = crate::ocaf::OcApplication::new();
+        let doc = app.new_document("BinXCAF").unwrap();
+        let root = doc.main().root();
+        assert!(root.father().is_none());
+    }
+
+    #[test]
+    fn find_child_absent_is_none() {
+        let mut app = crate::ocaf::OcApplication::new();
+        let doc = app.new_document("BinXCAF").unwrap();
+        assert!(doc.main().find_child(999).is_none());
     }
 }

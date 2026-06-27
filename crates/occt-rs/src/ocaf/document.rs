@@ -49,7 +49,7 @@ impl OcDocument {
     /// All application-level label trees are rooted here.  The returned
     /// label's lifetime is tied to `self`.
     pub fn main(&self) -> OcLabel {
-        OcLabel::from_ffi(ffi::document_main(&self.inner))
+        unsafe { OcLabel::from_ffi_unchecked(ffi::document_main(&self.inner)) }
     }
     /// Resolves a [`LabelPath`] to a label, starting from the document root.
     ///
@@ -214,7 +214,7 @@ mod tests {
     fn document_main_is_not_null() {
         let (_app, doc) = new_doc();
         let root = doc.main();
-        assert!(!root.is_null());
+        assert_eq!(root.tag(), 1);
     }
 
     #[test]
@@ -225,7 +225,7 @@ mod tests {
         assert!(!main.is_root());
         assert_eq!(main.tag(), 1);
         // Its parent is the root.
-        assert!(main.father().is_root());
+        assert!(main.father().unwrap().is_root());
     }
 
     #[test]
@@ -254,7 +254,7 @@ mod tests {
         }
         // Document should still be usable.
         let root = doc.main();
-        assert!(!root.is_null());
+        assert_eq!(root.tag(), 1);
     }
 
     #[test]
@@ -263,7 +263,7 @@ mod tests {
         let cmd = doc.begin_command().unwrap();
         cmd.abort().unwrap();
         // Document should still be usable after abort.
-        assert!(!doc.main().is_null());
+        assert_eq!(doc.main().tag(), 1);
     }
 
     #[test]

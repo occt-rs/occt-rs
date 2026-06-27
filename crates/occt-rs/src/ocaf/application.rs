@@ -85,8 +85,8 @@ mod tests {
         let doc_a = app.new_document("BinXCAF").unwrap();
         let doc_b = app.new_document("BinXCAF").unwrap();
         // Both documents have valid (non-null) main labels.
-        assert!(!doc_a.main().is_null());
-        assert!(!doc_b.main().is_null());
+        assert!(!doc_a.main().inner.is_null());
+        assert!(!doc_b.main().inner.is_null());
     }
 
     #[test]
@@ -97,6 +97,6 @@ mod tests {
             let mut app = OcApplication::new();
             app.new_document("BinXCAF").unwrap()
         };
-        assert!(!doc.main().is_null());
+        assert!(!doc.main().inner.is_null());
     }
 }

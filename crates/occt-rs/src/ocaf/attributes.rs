@@ -35,9 +35,8 @@
 //! ownership of the attribute (it doesn't; several handles to the same one can
 //! coexist).
 
-use std::marker::PhantomData;
-
 use occt_sys::ffi;
+use std::marker::PhantomData;
 
 use crate::error::{OcctError, OcctErrorKind};
 use crate::ocaf::document::Command;
@@ -422,9 +421,13 @@ impl OcReferenceList {
     /// # Panics
     ///
     /// Panics if `index` is out of bounds (`>= extent()`).
-    pub fn at(&self, index: i32) -> OcLabel {
-        assert!(index >= 0 && index < self.extent(), "index out of bounds");
-        OcLabel::from_ffi(ffi::tdatastd_referencelist_at(&self.inner, index))
+    pub fn at(&self, index: u32) -> Option<OcLabel> {
+        if index as i32 >= self.extent() {
+            return None;
+        }
+        Some(unsafe {
+            OcLabel::from_ffi_unchecked(ffi::tdatastd_referencelist_at(&self.inner, index as i32))
+        })
     }
 
     /// Appends `value` to the end of this list.
@@ -438,7 +441,9 @@ impl OcReferenceList {
     pub fn to_vec(&self) -> Vec<OcLabel> {
         let n = self.extent();
         (0..n)
-            .map(|i| OcLabel::from_ffi(ffi::tdatastd_referencelist_at(&self.inner, i)))
+            .map(|i| unsafe {
+                OcLabel::from_ffi_unchecked(ffi::tdatastd_referencelist_at(&self.inner, i))
+            })
             .collect()
     }
 }
@@ -1242,7 +1247,7 @@ impl OcReferenceArray {
     pub fn value(&self, index: i32) -> Result<OcLabel, OcctError> {
         let inner =
             ffi::tdatastd_referencearray_value(&self.inner, index).map_err(OcctError::from)?;
-        Ok(OcLabel::from_ffi(inner))
+        Ok(unsafe { OcLabel::from_ffi_unchecked(inner) })
     }
 
     /// Sets the label at `index` (0-based).
@@ -2319,7 +2324,7 @@ mod tests {
         assert_eq!(list.extent(), 2);
         doc.undo().unwrap();
         assert_eq!(list.extent(), 1);
-        assert_eq!(list.at(0).tag(), a_tag);
+        assert_eq!(list.at(0).unwrap().tag(), a_tag);
     }
     // ── OcReferenceArray ─────────────────────────────────────────────────────
 
@@ -3694,5 +3699,40 @@ mod tests {
         assert_eq!(nd.get_integer("count"), 2);
         doc.undo().unwrap();
         assert_eq!(nd.get_integer("count"), 1);
+    }
+    #[test]
+    fn referencelist_to_vec_length_matches_extent() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let list_label = main.get_or_create_child(&cmd, 1);
+            let a = main.get_or_create_child(&cmd, 2);
+            let b = main.get_or_create_child(&cmd, 3);
+            list = OcReferenceList::set(&cmd, &list_label).unwrap();
+            list.append(&cmd, &a);
+            list.append(&cmd, &b);
+            cmd.commit().unwrap();
+        }
+        let v = list.to_vec();
+        assert_eq!(
+            v.len(),
+            list.extent() as usize,
+            "to_vec() length must equal extent() — a mismatch indicates silent null-omission"
+        );
+    }
+    #[test]
+    fn referencelist_at_out_of_bounds_returns_none() {
+        let (_app, mut doc) = new_doc();
+        let list;
+        {
+            let main = doc.main();
+            let cmd = doc.begin_command().unwrap();
+            let list_label = main.get_or_create_child(&cmd, 1);
+            list = OcReferenceList::set(&cmd, &list_label).unwrap();
+            cmd.commit().unwrap();
+        }
+        assert!(list.at(0).is_none(), "at(0) on empty list should be None");
     }
 }
