@@ -15,11 +15,8 @@ use occt_sys::ffi;
 
 use crate::error::OcctError;
 use crate::rs_topo::offset::{OffsetShapeBuilder, ThickSolidBuilder};
+use crate::rs_topo::{chamfer::ChamferBuilder, face::OcFace, fillet::FilletBuilder};
 use crate::rs_topo::{OcEdge, ShapeType};
-use crate::{
-    error::{CommonError, FuseError},
-    rs_topo::{chamfer::ChamferBuilder, face::OcFace, fillet::FilletBuilder},
-};
 
 /// TopAbs_ShapeEnum::TopAbs_FACE.
 /// Reference: https://dev.opencascade.org/doc/refman/html/namespace_top_abs.html
@@ -122,7 +119,7 @@ impl OcShape {
     /// Wraps `BRepAlgoAPI_Fuse` via the preferred SetArguments/SetTools/Build
     /// pattern. The builder and its history are not preserved; if Modified/
     /// Generated/IsDeleted are needed in future, promote to an explicit FuseBuilder.
-    pub fn oc_fuse(&self, other: &OcShape) -> Result<OcShape, FuseError> {
+    pub fn oc_fuse(&self, other: &OcShape) -> Result<OcShape, OcctError> {
         let result = occt_sys::ffi::fuse_shapes(
             self.inner
                 .as_ref()
@@ -132,14 +129,8 @@ impl OcShape {
                 .as_ref()
                 .expect("OcShape invariant: inner is non-null"),
         )
-        .map_err(|e| FuseError::Occt(e.into()))?;
-        let result = OcShape::from_ffi(result);
-        if result.shape_type() == ShapeType::Compound
-            && occt_sys::ffi::topods_compound_child_count(result.as_ffi()) > 1
-        {
-            return Err(FuseError::DisjointInputs(result));
-        }
-        Ok(result)
+        .map_err(OcctError::from)?;
+        Ok(OcShape::from_ffi(result))
     }
     /// Subtract `tool` from `self`, returning a new `OcShape`.
     ///
@@ -196,10 +187,10 @@ impl OcShape {
     /// Wraps `BRepAlgoAPI_Common` via the preferred SetArguments/SetTools/Build
     /// pattern.
     ///
-    /// Returns `Err(CommonError::NoIntersection)` when the inputs are disjoint —
-    /// OCCT returns an empty `TopoDS_Compound` in this case (`IsDone()==true`).
-    /// The empty compound is not forwarded to the caller.
-    pub fn oc_common(&self, other: &OcShape) -> Result<OcShape, CommonError> {
+    /// For non-intersecting inputs, OCCT returns an empty `TopoDS_Compound`
+    /// (`IsDone()==true`); this is returned as `Ok`. Use `shape_type()` and
+    /// content queries on the result if the intersection's presence matters.
+    pub fn oc_common(&self, other: &OcShape) -> Result<OcShape, OcctError> {
         let result = occt_sys::ffi::common_shapes(
             self.inner
                 .as_ref()
@@ -209,12 +200,8 @@ impl OcShape {
                 .as_ref()
                 .expect("OcShape invariant: inner is non-null"),
         )
-        .map_err(|e| CommonError::Occt(e.into()))?;
-        let result = OcShape::from_ffi(result);
-        if occt_sys::ffi::topods_compound_child_count(result.as_ffi()) == 0 {
-            return Err(CommonError::NoIntersection);
-        }
-        Ok(result)
+        .map_err(OcctError::from)?;
+        Ok(OcShape::from_ffi(result))
     }
     /// Applies constant-radius fillets to the given edges and returns the
     /// resulting shape.
@@ -521,9 +508,14 @@ mod tests {
         let b = box_solid(10.0).as_shape();
         let result = a.oc_common(&b);
         assert!(
-            matches!(result, Err(CommonError::NoIntersection)),
-            "common of disjoint solids should return NoIntersection, got: {:?}",
-            result.ok().map(|_| "Ok")
+            result.is_ok(),
+            "common of disjoint solids should return Ok empty compound, got: {:?}",
+            result.err()
+        );
+        assert_eq!(
+            result.unwrap().shape_type(),
+            ShapeType::Compound,
+            "disjoint common result should be a Compound"
         );
     }
     #[test]
@@ -731,5 +723,23 @@ mod tests {
         let hollowed = s.thick_solid(&[&top_face], -0.1, 1e-3).unwrap();
         let tess = crate::tessellate::compute(&hollowed, 0.05, 0.5).unwrap();
         assert!(!tess.faces.is_empty());
+    }
+    #[test]
+    fn fuse_disjoint_solids_returns_ok_compound() {
+        // Box A: x 0..1, Box B: x 10..11 — disjoint.
+        // OCCT returns a Compound containing both; this must be Ok, not Err.
+        let a = box_solid(0.0).as_shape();
+        let b = box_solid(10.0).as_shape();
+        let result = a.oc_fuse(&b);
+        assert!(
+            result.is_ok(),
+            "fuse of disjoint solids should return Ok compound, got: {:?}",
+            result.err()
+        );
+        assert_eq!(
+            result.unwrap().shape_type(),
+            ShapeType::Compound,
+            "disjoint fuse result should be a Compound"
+        );
     }
 }
