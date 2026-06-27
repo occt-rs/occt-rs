@@ -917,7 +917,8 @@ impl std::fmt::Debug for OcTrsf {
         let mut dbg = f.debug_struct("OcTrsf");
         for row in 1..=3i32 {
             for col in 1..=4i32 {
-                dbg.field(&format!("m{row}{col}"), &self.value(row, col));
+                // Indices are in-range by construction; unwrap cannot panic.
+                dbg.field(&format!("m{row}{col}"), &self.value(row, col).unwrap());
             }
         }
         dbg.finish()
@@ -1039,8 +1040,16 @@ impl OcTrsf {
     ///
     /// The 4th row is the implicit `[0, 0, 0, 1]` of the homogeneous matrix
     /// and is not accessible via this method.
-    pub fn value(&self, row: i32, col: i32) -> f64 {
-        self.inner.value(row, col)
+    ///
+    /// Returns `None` if `row` is not in `1..=3` or `col` is not in `1..=4`.
+    /// The bad index never crosses the FFI boundary: `gp_Trsf::Value` raises
+    /// `Standard_OutOfRange` for out-of-range indices, which would terminate
+    /// the process through the non-`Result` bridge.
+    pub fn value(&self, row: i32, col: i32) -> Option<f64> {
+        if !(1..=3).contains(&row) || !(1..=4).contains(&col) {
+            return None;
+        }
+        Some(self.inner.value(row, col))
     }
 
     /// Returns `true` when the vectorial part has a negative determinant —
@@ -1084,9 +1093,9 @@ mod trsf_tests {
             for col in 1..=4i32 {
                 let expected = if row == col { 1.0 } else { 0.0 };
                 assert!(
-                    (t.value(row, col) - expected).abs() < 1e-12,
+                    (t.value(row, col).unwrap() - expected).abs() < 1e-12,
                     "identity[{row},{col}] = {} (expected {expected})",
-                    t.value(row, col)
+                    t.value(row, col).unwrap()
                 );
             }
         }
@@ -1096,12 +1105,12 @@ mod trsf_tests {
     fn translation_encodes_vector() {
         let t = OcTrsf::from_translation(OcVec::new(3.0, 5.0, 7.0));
         // Column 4 (translation part) should be [3, 5, 7].
-        assert!((t.value(1, 4) - 3.0).abs() < 1e-12);
-        assert!((t.value(2, 4) - 5.0).abs() < 1e-12);
-        assert!((t.value(3, 4) - 7.0).abs() < 1e-12);
+        assert!((t.value(1, 4).unwrap() - 3.0).abs() < 1e-12);
+        assert!((t.value(2, 4).unwrap() - 5.0).abs() < 1e-12);
+        assert!((t.value(3, 4).unwrap() - 7.0).abs() < 1e-12);
         // Diagonal entries should still be 1 (pure translation).
         for row in 1..=3i32 {
-            assert!((t.value(row, row) - 1.0).abs() < 1e-12);
+            assert!((t.value(row, row).unwrap() - 1.0).abs() < 1e-12);
         }
     }
 
@@ -1111,8 +1120,14 @@ mod trsf_tests {
         let t = OcTrsf::from_rotation(&axis, FRAC_PI_2);
         // Rotating X-axis by 90° around Z should give Y-axis.
         // The (1,1) entry is cos(90°) ≈ 0; (2,1) is sin(90°) ≈ 1.
-        assert!((t.value(1, 1)).abs() < 1e-12, "cos(90°) should be ~0");
-        assert!((t.value(2, 1) - 1.0).abs() < 1e-12, "sin(90°) should be ~1");
+        assert!(
+            (t.value(1, 1).unwrap()).abs() < 1e-12,
+            "cos(90°) should be ~0"
+        );
+        assert!(
+            (t.value(2, 1).unwrap() - 1.0).abs() < 1e-12,
+            "sin(90°) should be ~1"
+        );
     }
 
     #[test]
@@ -1132,7 +1147,7 @@ mod trsf_tests {
         assert!(t.is_negative());
         // m[3][3] should be -1 (Z component inverted).
         assert!(
-            (t.value(3, 3) + 1.0).abs() < 1e-12,
+            (t.value(3, 3).unwrap() + 1.0).abs() < 1e-12,
             "Z diagonal should be -1"
         );
     }
@@ -1141,9 +1156,9 @@ mod trsf_tests {
     fn scale_encodes_factor() {
         let t = OcTrsf::from_scale(OcPnt::origin(), 2.0);
         // Diagonal entries of the vectorial part should be 2.
-        assert!((t.value(1, 1) - 2.0).abs() < 1e-12);
-        assert!((t.value(2, 2) - 2.0).abs() < 1e-12);
-        assert!((t.value(3, 3) - 2.0).abs() < 1e-12);
+        assert!((t.value(1, 1).unwrap() - 2.0).abs() < 1e-12);
+        assert!((t.value(2, 2).unwrap() - 2.0).abs() < 1e-12);
+        assert!((t.value(3, 3).unwrap() - 2.0).abs() < 1e-12);
     }
 
     #[test]
@@ -1151,7 +1166,7 @@ mod trsf_tests {
         let t = OcTrsf::from_translation(OcVec::new(3.0, 0.0, 0.0));
         let inv = t.inverted().unwrap();
         assert!(
-            (inv.value(1, 4) + 3.0).abs() < 1e-12,
+            (inv.value(1, 4).unwrap() + 3.0).abs() < 1e-12,
             "inverse translation should be -3"
         );
     }
@@ -1169,11 +1184,11 @@ mod trsf_tests {
         let composed = &t_rot * &t_trans; // t_rot(t_trans(P))
                                           // Apply to origin: translation col is the image of the origin.
         assert!(
-            (composed.value(1, 4)).abs() < 1e-12,
+            (composed.value(1, 4).unwrap()).abs() < 1e-12,
             "x-translation after rot should be ~0"
         );
         assert!(
-            (composed.value(2, 4) - 1.0).abs() < 1e-12,
+            (composed.value(2, 4).unwrap() - 1.0).abs() < 1e-12,
             "y-translation after rot should be ~1"
         );
     }
@@ -1182,8 +1197,8 @@ mod trsf_tests {
     fn clone_is_independent() {
         let t = OcTrsf::from_translation(OcVec::new(1.0, 2.0, 3.0));
         let c = t.clone();
-        assert!((c.value(1, 4) - 1.0).abs() < 1e-12);
-        assert!((c.value(2, 4) - 2.0).abs() < 1e-12);
+        assert!((c.value(1, 4).unwrap() - 1.0).abs() < 1e-12);
+        assert!((c.value(2, 4).unwrap() - 2.0).abs() < 1e-12);
     }
 
     #[test]
@@ -1195,7 +1210,10 @@ mod trsf_tests {
         let via_op = &t1 * &t2;
         for row in 1..=3i32 {
             for col in 1..=4i32 {
-                assert!((via_method.value(row, col) - via_op.value(row, col)).abs() < 1e-15);
+                assert!(
+                    (via_method.value(row, col).unwrap() - via_op.value(row, col).unwrap()).abs()
+                        < 1e-15
+                );
             }
         }
     }
@@ -1572,5 +1590,28 @@ mod tests {
             let dist = point_to_axis_distance(&p, &o, &d);
             assert!((dist - 1.0).abs() < 1e-12);
         }
+    }
+    #[test]
+    fn value_valid_indices_return_some() {
+        let t = OcTrsf::identity();
+        for row in 1..=3i32 {
+            for col in 1..=4i32 {
+                assert!(
+                    t.value(row, col).is_some(),
+                    "value({row},{col}) should be Some for in-range indices"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn value_out_of_range_returns_none() {
+        let t = OcTrsf::identity();
+        // row boundaries
+        assert!(t.value(0, 1).is_none(), "row 0 should be None");
+        assert!(t.value(4, 1).is_none(), "row 4 should be None");
+        // col boundaries
+        assert!(t.value(1, 0).is_none(), "col 0 should be None");
+        assert!(t.value(1, 5).is_none(), "col 5 should be None");
     }
 }

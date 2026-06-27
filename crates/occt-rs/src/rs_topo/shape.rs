@@ -174,18 +174,18 @@ impl OcShape {
     pub fn transformed(&self, trsf: &crate::gp::OcTrsf) -> Result<OcShape, OcctError> {
         let result = occt_sys::ffi::transform_shape(
             self.as_ffi(),
-            trsf.value(1, 1),
-            trsf.value(1, 2),
-            trsf.value(1, 3),
-            trsf.value(1, 4),
-            trsf.value(2, 1),
-            trsf.value(2, 2),
-            trsf.value(2, 3),
-            trsf.value(2, 4),
-            trsf.value(3, 1),
-            trsf.value(3, 2),
-            trsf.value(3, 3),
-            trsf.value(3, 4),
+            trsf.value(1, 1).unwrap(),
+            trsf.value(1, 2).unwrap(),
+            trsf.value(1, 3).unwrap(),
+            trsf.value(1, 4).unwrap(),
+            trsf.value(2, 1).unwrap(),
+            trsf.value(2, 2).unwrap(),
+            trsf.value(2, 3).unwrap(),
+            trsf.value(2, 4).unwrap(),
+            trsf.value(3, 1).unwrap(),
+            trsf.value(3, 2).unwrap(),
+            trsf.value(3, 3).unwrap(),
+            trsf.value(3, 4).unwrap(),
         )
         .map_err(OcctError::from)?;
         Ok(OcShape::from_ffi(result))
