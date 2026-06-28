@@ -1,4 +1,4 @@
-//! Standard data-types entered as attributes.
+//! Standard data-types entered onto a labal as an attribute.
 //!
 //!
 //! There are three primary groupings:
@@ -1209,10 +1209,7 @@ pub struct OcReferenceArray {
 }
 
 impl OcReferenceArray {
-    /// Finds, or creates, a `TDataStd_ReferenceArray` attribute on `label`
-    /// with `len` elements (0-based indices `0..len`).
-    ///
-    /// Must be called inside an open [`Command`] scope.
+    /// [`Command`]-scoped upsert-get on `label`
     pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: i32) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_referencearray_set(&label.inner, len).map_err(OcctError::from)?;
         Ok(Self {
@@ -1307,14 +1304,7 @@ pub struct OcRealArray {
 }
 
 impl OcRealArray {
-    /// Finds, or creates, a `TDataStd_RealArray` attribute on `label` with
-    /// `len` elements (0-based indices `0..len`).
-    ///
-    /// Must be called inside an open [`Command`] scope.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err` if `len < 1`.
+    /// [`Command`]-scoped upsert-get on `label`
     pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
         let inner =
             ffi::tdatastd_realarray_set(&label.inner, len.into()).map_err(OcctError::from)?;
@@ -1402,14 +1392,7 @@ pub struct OcIntegerArray {
 }
 
 impl OcIntegerArray {
-    /// Finds, or creates, a `TDataStd_IntegerArray` attribute on `label` with
-    /// `len` elements (0-based indices `0..len`).
-    ///
-    /// Must be called inside an open [`Command`] scope.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err` if `len < 1`.
+    /// [`Command`]-scoped upsert-get on `label`
     pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
         let inner =
             ffi::tdatastd_integerarray_set(&label.inner, len.into()).map_err(OcctError::from)?;
@@ -1496,14 +1479,7 @@ pub struct OcBooleanArray {
 }
 
 impl OcBooleanArray {
-    /// Finds, or creates, a `TDataStd_BooleanArray` attribute on `label` with
-    /// `len` elements (0-based indices `0..len`).
-    ///
-    /// Must be called inside an open [`Command`] scope.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err` if `len < 1`.
+    /// [`Command`]-scoped upsert-get on `label`
     pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
         let inner =
             ffi::tdatastd_booleanarray_set(&label.inner, len.into()).map_err(OcctError::from)?;
@@ -1623,14 +1599,7 @@ pub struct OcByteArray {
 }
 
 impl OcByteArray {
-    /// Finds, or creates, a `TDataStd_ByteArray` attribute on `label` with
-    /// `len` elements (0-based indices `0..len`).
-    ///
-    /// Must be called inside an open [`Command`] scope.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err` if `len < 1`.
+    /// [`Command`]-scoped upsert-get on `label`
     pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
         let inner =
             ffi::tdatastd_bytearray_set(&label.inner, len.into()).map_err(OcctError::from)?;
@@ -1718,14 +1687,7 @@ pub struct OcExtStringArray {
 }
 
 impl OcExtStringArray {
-    /// Finds, or creates, a `TDataStd_ExtStringArray` attribute on `label`
-    /// with `len` elements (0-based indices `0..len`).
-    ///
-    /// Must be called inside an open [`Command`] scope.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err` if `len < 1`.
+    /// [`Command`]-scoped upsert-get on `label`
     pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
         let inner =
             ffi::tdatastd_extstringarray_set(&label.inner, len.into()).map_err(OcctError::from)?;
@@ -1761,8 +1723,9 @@ impl OcExtStringArray {
     /// `is_empty` — it would be a constant `false` and read as a live check
     /// that can never fire.
     #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self) -> i32 {
-        ffi::tdatastd_extstringarray_length(&self.inner)
+    pub fn len(&self) -> NonZeroI32 {
+        NonZeroI32::new(ffi::tdatastd_extstringarray_length(&self.inner))
+            .expect("ffi provided undocumented 0 value")
     }
 
     /// Returns the string at `index` (0-based).
@@ -1786,7 +1749,7 @@ impl OcExtStringArray {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = Result<String, OcctError>> + '_ {
-        (0..self.len()).map(|i| self.value(i))
+        (0..self.len().into()).map(|i| self.value(i))
     }
 }
 
@@ -2826,11 +2789,11 @@ mod tests {
             let cmd = doc.begin_command().unwrap();
             label = main.get_or_create_child(&cmd, 1);
             let arr = OcExtStringArray::set(&cmd, &label, NonZeroI32::new(3).unwrap()).unwrap();
-            assert_eq!(arr.len(), 3);
+            assert_eq!(arr.len(), NonZeroI32::new(3).unwrap());
             cmd.commit().unwrap();
         }
         let found = OcExtStringArray::find(&label).expect("ext string array should be present");
-        assert_eq!(found.len(), 3);
+        assert_eq!(found.len(), NonZeroI32::new(3).unwrap());
     }
 
     #[test]

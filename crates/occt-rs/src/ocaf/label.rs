@@ -1,13 +1,6 @@
-//! TDF label wrapper.
+//! [`OcLabel`] is a non-owning reference into a `TDF_Data` tree node.
 //!
-//! `OcLabel` is a non-owning reference into a `TDF_Data` tree.  The lifetime
-//! parameter `'doc` enforces at compile time that no label outlives the
-//! [`OcDocument`] that owns the tree.
-//!
-//! Labels are cheap to clone (the underlying OCCT type holds a Handle to the
-//! label node, which is ref-counted).
-//!
-//! [`OcDocument`]: crate::ocaf::OcDocument
+//! Here, you will find utilities for working directly with a document node
 
 use std::fmt;
 use std::marker::PhantomData;
@@ -17,10 +10,9 @@ use occt_sys::ffi;
 
 use crate::ocaf::document::Command;
 
-/// A non-owning reference to a node in a document's label tree.
+/// A non-owning ref-counted node in an [`OcDocument`] label tree.
 ///
-/// Wraps `TDF_Label`, a non-owning reference into the `TDF_Data` tree owned
-/// by an [`super::OcDocument`].
+/// Binds OCCTs `TDF_Label`
 ///
 /// **The document tie is not tracked by the type system.** `OcLabel` carries
 /// no `'doc` parameter — deliberately: parameterising it conflicts with
@@ -29,14 +21,14 @@ use crate::ocaf::document::Command;
 /// command is live. That a label must not be used after its document is
 /// dropped is therefore a *caller obligation*, not a compile-time guarantee.
 ///
-/// Null is not a representable state: every constructed `OcLabel` wraps a
-/// non-null node. Absence is expressed as `Option<OcLabel>` at the API
-/// boundary (e.g. [`find_child`], [`father`]).
+/// TODO: i.e.: invalid state (label use after doc-drop) gets past the compiler.
+///       and needs to be fixed
 ///
 /// [`find_child`]: OcLabel::find_child
 /// [`father`]: OcLabel::father
+/// [`OcDocument`]: crate::ocaf::OcDocument
 pub struct OcLabel {
-    // Fixme: audit how to construct a TnamingBuilder. Currently: `TnamingBuilder::new(new_tnaming_builder(&label.inner))`
+    // Fixme: audit how to construct a TopoNamingBuilder. Currently: `TopoNamingBuilder::new(new_tnaming_builder(&label.inner))`
     pub(crate) inner: cxx::UniquePtr<ffi::TdfLabel>,
     /// `!Send` / `!Sync` marker only. Does **not** tie the label to any
     /// document lifetime (`*mut ()` carries no lifetime); see the type-level
@@ -92,9 +84,9 @@ impl OcLabel {
 
     /// Finds or creates a direct child label with the given `tag`.
     ///
-    /// Always succeeds. Label creation via `FindChild(tag, true)` is
-    /// captured by OCAF's Backup/Delta mechanism, so this requires an open
-    /// [`Command`].
+    /// Always succeeds.
+    ///
+    /// Label creation must occur within a [`Command`].
     pub fn get_or_create_child(&self, _cmd: &Command<'_>, tag: i32) -> OcLabel {
         // safe: The assumed pre-condition is self.inner is non-null. At time of writing this
         // comment, this is not bullet-proofed, but that's the direction we are heading
@@ -130,9 +122,6 @@ impl OcLabel {
         }
     }
     /// The root label of the data framework (depth 0).
-    ///
-    /// Same shim pattern as [`father`](Self::father); no `Handle(TDF_Data)`
-    /// involved.
     pub fn root(&self) -> OcLabel {
         // safe: The assumed pre-condition is self.inner is non-null. At time of writing this
         // comment, this is not bullet-proofed, but that's the direction we are heading
@@ -148,29 +137,8 @@ impl OcLabel {
         ffi::tdf_label_forget_all_attributes(&self.inner, clear_children);
     }
 
-    /// This label's path from the document root, as a sequence of child tags.
-    ///
-    /// Pure Rust: walks [`father`](Self::father)/[`is_root`](Self::is_root)
-    /// up to (but not including) the framework root. [`LabelPath`]'s
-    /// `Display` produces the same colon-joined form as
-    /// [`entry`](Self::entry).
-    pub fn path(&self) -> LabelPath {
-        let mut tags = Vec::new();
-        let mut current = self.clone();
-        while !current.is_root() {
-            tags.push(current.tag());
-            // the !current.is_root() creates an "always has a father" invariant
-            current = current.father().unwrap();
-        }
-        tags.reverse();
-        LabelPath(tags)
-    }
     /// Resolves `path` relative to `self`, creating any missing descendant
     /// labels along the way. Always succeeds.
-    ///
-    /// Requires an open [`Command`]. Obtain `self` (e.g. `doc.main().root()`)
-    /// before opening the command — see the borrow note on
-    /// [`get_or_create_child`](Self::get_or_create_child).
     pub fn get_or_create_descendant(&self, cmd: &Command<'_>, path: &LabelPath) -> OcLabel {
         let mut current = self.clone();
         for &tag in &path.0 {
@@ -198,10 +166,9 @@ impl std::fmt::Debug for OcLabel {
 
 // ── OcChildIterator ───────────────────────────────────────────────────────────
 
-/// A Rust [`Iterator`] over the children (or descendants) of an [`OcLabel`].
+/// Iterates over the children (or descendants) of an [`OcLabel`].
 ///
-/// Constructed via [`OcLabel::children`].  Each `Item` is an [`OcLabel`]
-/// with the same document lifetime as the label it was created from.
+/// Constructed via [`OcLabel::children`].
 pub struct OcChildIterator<'doc> {
     inner: cxx::UniquePtr<ffi::TdfChildIteratorShim>,
     _phantom: PhantomData<&'doc ()>,
@@ -226,10 +193,16 @@ impl<'doc> Iterator for OcChildIterator<'doc> {
 
 /// A label's location as a sequence of child tags from the document root.
 ///
-/// `Display` produces the colon-joined form `"1:2:3"`, matching
+/// `Display` produces the colon-joined form `"0:x:y"`, matching
 /// [`OcLabel::entry`]. `FromStr` parses it back.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LabelPath(pub Vec<i32>);
+pub struct LabelPath(pub(crate) Vec<i32>);
+
+impl LabelPath {
+    pub(crate) fn new(items: Vec<i32>) -> Self {
+        Self(items)
+    }
+}
 
 impl fmt::Display for LabelPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

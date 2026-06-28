@@ -11,6 +11,8 @@ use occt_sys::ffi;
 
 use crate::error::OcctError;
 use crate::ocaf::document::OcDocument;
+use crate::ocaf::label::LabelPath;
+use crate::ocaf::OcLabel;
 
 /// An OCAF application — the factory and registry for [`OcDocument`] instances.
 ///
@@ -123,4 +125,21 @@ mod tests {
         assert_eq!(app.nb_documents(), 0);
         // Drop of the now-moved `doc` value already happened in close(); no double-close.
     }
+}
+/// This label's path from the document root, as a sequence of child tags.
+///
+/// Pure Rust: walks [`father`](OcLabel::father)/[`is_root`](OcLabel::is_root)
+/// up to (but not including) the framework root. [`LabelPath`]'s
+/// `Display` produces the same colon-joined form as
+/// [`entry`](OcLabel::entry).
+pub fn path(label: &OcLabel) -> LabelPath {
+    let mut tags = Vec::new();
+    let mut current = label.clone();
+    while !current.is_root() {
+        tags.push(current.tag());
+        // the !current.is_root() creates an "always has a father" invariant
+        current = current.father().unwrap();
+    }
+    tags.reverse();
+    LabelPath::new(tags)
 }

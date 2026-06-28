@@ -27,44 +27,50 @@ pub mod ffi {
         // Reference: https://dev.opencascade.org/doc/refman/html/class_t_naming___named_shape.html
         // ---------------------------------------------------------------------------
 
-        type TnamingNamedShapeHandle;
-        fn is_null(self: &TnamingNamedShapeHandle) -> bool;
+        #[cxx_name = "TnamingNamedShapeHandle"]
+        type TopoNamingNamedShapeHandle;
+        fn is_null(self: &TopoNamingNamedShapeHandle) -> bool;
 
         // Builder — must be used inside an open Command
-        type TnamingBuilderShim;
-        fn new_tnaming_builder(label: &TdfLabel) -> UniquePtr<TnamingBuilderShim>;
-        fn generated_fresh(self: Pin<&mut TnamingBuilderShim>, s: &TopodsShape);
+        #[cxx_name = "TnamingBuilderShim"]
+        type TopoNamingBuilderShim;
+        fn new_tnaming_builder(label: &TdfLabel) -> UniquePtr<TopoNamingBuilderShim>;
+        fn generated_fresh(self: Pin<&mut TopoNamingBuilderShim>, s: &TopodsShape);
         fn generated_from(
-            self: Pin<&mut TnamingBuilderShim>,
+            self: Pin<&mut TopoNamingBuilderShim>,
             old_s: &TopodsShape,
             new_s: &TopodsShape,
         );
-        fn modify(self: Pin<&mut TnamingBuilderShim>, old_s: &TopodsShape, new_s: &TopodsShape);
-        fn delete_shape(self: Pin<&mut TnamingBuilderShim>, old_s: &TopodsShape);
-        fn select(self: Pin<&mut TnamingBuilderShim>, s: &TopodsShape, in_s: &TopodsShape);
-        fn named_shape(self: &TnamingBuilderShim) -> UniquePtr<TnamingNamedShapeHandle>;
+        fn modify(self: Pin<&mut TopoNamingBuilderShim>, old_s: &TopodsShape, new_s: &TopodsShape);
+        fn delete_shape(self: Pin<&mut TopoNamingBuilderShim>, old_s: &TopodsShape);
+        fn select(self: Pin<&mut TopoNamingBuilderShim>, s: &TopodsShape, in_s: &TopodsShape);
+        fn named_shape(self: &TopoNamingBuilderShim) -> UniquePtr<TopoNamingNamedShapeHandle>;
 
         // NamedShape read-side
-        fn find_tnaming_named_shape(lw: &TdfLabel, out: Pin<&mut TnamingNamedShapeHandle>) -> bool;
-        fn tnaming_named_shape_get(h: &TnamingNamedShapeHandle) -> UniquePtr<TopodsShape>;
-        fn tnaming_named_shape_evolution(h: &TnamingNamedShapeHandle) -> i32;
-        fn tnaming_tool_original_shape(h: &TnamingNamedShapeHandle) -> UniquePtr<TopodsShape>;
-        fn new_tnaming_named_shape_handle() -> UniquePtr<TnamingNamedShapeHandle>;
+        fn find_tnaming_named_shape(
+            lw: &TdfLabel,
+            out: Pin<&mut TopoNamingNamedShapeHandle>,
+        ) -> bool;
+        fn tnaming_named_shape_get(h: &TopoNamingNamedShapeHandle) -> UniquePtr<TopodsShape>;
+        fn tnaming_named_shape_evolution(h: &TopoNamingNamedShapeHandle) -> i32;
+        fn tnaming_tool_original_shape(h: &TopoNamingNamedShapeHandle) -> UniquePtr<TopodsShape>;
+        fn new_tnaming_named_shape_handle() -> UniquePtr<TopoNamingNamedShapeHandle>;
 
-        type TnamingSelectorShim;
+        #[cxx_name = "TnamingSelectorShim"]
+        type TopoNamingSelectorShim;
 
-        fn new_tnaming_selector(label: &TdfLabel) -> UniquePtr<TnamingSelectorShim>;
+        fn new_tnaming_selector(label: &TdfLabel) -> UniquePtr<TopoNamingSelectorShim>;
         // sel is Pin<&mut> because Select/Solve are non-const
         fn tnaming_selector_select(
-            sel: Pin<&mut TnamingSelectorShim>,
+            sel: Pin<&mut TopoNamingSelectorShim>,
             shape: &TopodsShape,
             context: &TopodsShape,
         ) -> bool;
-        fn tnaming_selector_solve(sel: Pin<&mut TnamingSelectorShim>) -> bool;
+        fn tnaming_selector_solve(sel: Pin<&mut TopoNamingSelectorShim>) -> bool;
         // NamedShape is const — plain &
         fn tnaming_selector_named_shape(
-            sel: &TnamingSelectorShim,
-            out: Pin<&mut TnamingNamedShapeHandle>,
+            sel: &TopoNamingSelectorShim,
+            out: Pin<&mut TopoNamingNamedShapeHandle>,
         ) -> bool;
         // ── TDataStdNameHandle ────────────────────────────────────────────────────
         // Shim holding Handle(TDataStd_Name) by value.
@@ -636,44 +642,44 @@ pub mod ffi {
         //
         // Geometry participants are Handle(TNaming_NamedShape).
         // C++ overload set (1–4 geometries) is split into four named shims;
-        // the safe Rust API collapses them into a single set(&[&TnamingNamedShape]).
+        // the safe Rust API collapses them into a single set(&[&TopoNamingNamedShape]).
         type TDataXtdConstraintHandle;
 
         fn tdataxtd_constraint_set1(
             label: &TdfLabel,
             constraint_type: i32,
-            g1: &TnamingNamedShapeHandle,
+            g1: &TopoNamingNamedShapeHandle,
         ) -> Result<UniquePtr<TDataXtdConstraintHandle>>;
 
         fn tdataxtd_constraint_set2(
             label: &TdfLabel,
             constraint_type: i32,
-            g1: &TnamingNamedShapeHandle,
-            g2: &TnamingNamedShapeHandle,
+            g1: &TopoNamingNamedShapeHandle,
+            g2: &TopoNamingNamedShapeHandle,
         ) -> Result<UniquePtr<TDataXtdConstraintHandle>>;
 
         fn tdataxtd_constraint_set3(
             label: &TdfLabel,
             constraint_type: i32,
-            g1: &TnamingNamedShapeHandle,
-            g2: &TnamingNamedShapeHandle,
-            g3: &TnamingNamedShapeHandle,
+            g1: &TopoNamingNamedShapeHandle,
+            g2: &TopoNamingNamedShapeHandle,
+            g3: &TopoNamingNamedShapeHandle,
         ) -> Result<UniquePtr<TDataXtdConstraintHandle>>;
 
         fn tdataxtd_constraint_set4(
             label: &TdfLabel,
             constraint_type: i32,
-            g1: &TnamingNamedShapeHandle,
-            g2: &TnamingNamedShapeHandle,
-            g3: &TnamingNamedShapeHandle,
-            g4: &TnamingNamedShapeHandle,
+            g1: &TopoNamingNamedShapeHandle,
+            g2: &TopoNamingNamedShapeHandle,
+            g3: &TopoNamingNamedShapeHandle,
+            g4: &TopoNamingNamedShapeHandle,
         ) -> Result<UniquePtr<TDataXtdConstraintHandle>>;
 
         // SetGeometry(index, ns) — 1-based; non-const.
         fn tdataxtd_constraint_set_geometry(
             c: Pin<&mut TDataXtdConstraintHandle>,
             index: i32,
-            ns: &TnamingNamedShapeHandle,
+            ns: &TopoNamingNamedShapeHandle,
         );
 
         // SetValue — associates a TDataStd_Real as dimension value; non-const.
@@ -695,7 +701,7 @@ pub mod ffi {
         fn tdataxtd_constraint_get_geometry(
             c: &TDataXtdConstraintHandle,
             index: i32,
-        ) -> UniquePtr<TnamingNamedShapeHandle>;
+        ) -> UniquePtr<TopoNamingNamedShapeHandle>;
 
         fn tdataxtd_constraint_is_dimension(c: &TDataXtdConstraintHandle) -> bool;
 
@@ -714,12 +720,12 @@ pub mod ffi {
         // GetPlane — returns null UniquePtr when IsPlanar() is false.
         fn tdataxtd_constraint_get_plane(
             c: &TDataXtdConstraintHandle,
-        ) -> UniquePtr<TnamingNamedShapeHandle>;
+        ) -> UniquePtr<TopoNamingNamedShapeHandle>;
 
         // SetPlane — non-const.
         fn tdataxtd_constraint_set_plane(
             c: Pin<&mut TDataXtdConstraintHandle>,
-            plane: &TnamingNamedShapeHandle,
+            plane: &TopoNamingNamedShapeHandle,
         );
 
         fn tdataxtd_constraint_find(label: &TdfLabel) -> UniquePtr<TDataXtdConstraintHandle>;
@@ -768,7 +774,7 @@ pub mod ffi {
 
         // ── Shape constructors for TDataXtd tag attributes ────────────────
         // Free functions that cross the gp boundary and return TopoDS shapes
-        // for use with TnamingBuilderShim::generated_fresh.  Used by the
+        // for use with TopoNamingBuilderShim::generated_fresh.  Used by the
         // Option B safe API for OcPointAttr / OcAxisAttr / OcPlaneAttr.
 
         // BRepBuilderAPI_MakeVertex from point coordinates.
@@ -808,7 +814,7 @@ pub mod ffi {
         type TDataXtdPointHandle;
 
         // Set(label) — finds or creates the tag; no geometry here.
-        // Shape must be placed on the label via TnamingBuilder in the same command.
+        // Shape must be placed on the label via TopoNamingBuilder in the same command.
         fn tdataxtd_point_set(label: &TdfLabel) -> Result<UniquePtr<TDataXtdPointHandle>>;
 
         // FindAttribute — returns null UniquePtr when attribute is absent.
@@ -822,7 +828,7 @@ pub mod ffi {
         type TDataXtdAxisHandle;
 
         // Set(label) — finds or creates the tag; no geometry here.
-        // Shape must be placed on the label via TnamingBuilder in the same command.
+        // Shape must be placed on the label via TopoNamingBuilder in the same command.
         fn tdataxtd_axis_set(label: &TdfLabel) -> Result<UniquePtr<TDataXtdAxisHandle>>;
 
         // FindAttribute — returns null UniquePtr when attribute is absent.
@@ -836,7 +842,7 @@ pub mod ffi {
         type TDataXtdPlaneHandle;
 
         // Set(label) — finds or creates the tag; no geometry here.
-        // Shape must be placed on the label via TnamingBuilder in the same command.
+        // Shape must be placed on the label via TopoNamingBuilder in the same command.
         fn tdataxtd_plane_set(label: &TdfLabel) -> Result<UniquePtr<TDataXtdPlaneHandle>>;
 
         // FindAttribute — returns null UniquePtr when attribute is absent.

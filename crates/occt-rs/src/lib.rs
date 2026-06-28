@@ -9,7 +9,7 @@
 //!
 //! - `occt_rs::gp` — geometry primitives (`OcPnt`, `OcDir`, `OcVec`, …)
 //! - `occt_rs::rs_topo` — BRep topology (`OcShape`, `OcEdge`, `OcFace`, …) and operation builders
-//! - `occt_rs::ocaf` — document/label/attribute/transaction framework (`OcDocument`, `OcLabel`, …)
+//! - `occt_rs::ocaf` — Application framework and utilitities
 //! - `occt_rs::tessellate` — mesh tessellation (`compute`)
 //! - `occt_rs::error` — error types (`OcctError`, `OcctErrorKind`, …)
 

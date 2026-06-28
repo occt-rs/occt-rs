@@ -9,25 +9,25 @@ use std::marker::PhantomData;
 use cxx::UniquePtr;
 use occt_sys::ffi::{self, new_tnaming_builder};
 
+use super::label::OcLabel;
 use crate::rs_topo::OcShape;
 
-use super::label::OcLabel;
-
 // ---------------------------------------------------------------------------
-// TnamingEvolution
+// TopoNamingEvolution
 // Maps TNaming_Evolution integer values from OCCT.
 // Reference: https://dev.opencascade.org/doc/refman/html/group__enum__t_naming.html
 // ---------------------------------------------------------------------------
 
+/// Encodes the Evolution kind of a set of [`OcShape`]s
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TnamingEvolution {
+pub enum TopoNamingEvolution {
     /// Shape appeared fresh — no topological ancestor.
     Primitive,
-    /// Shape was generated from an ancestor (e.g. extrusion of an edge).
+    /// Shape was generated from an ancestor. Carries an `old/new` shape-pair
     Generated,
-    /// Shape is a modification of an ancestor (e.g. face rounded by fillet).
+    /// Shape is a modification of an ancestor. Carries an `old/new` shape-pair
     Modify,
-    /// Ancestor was deleted by this operation.
+    /// Ancestor deletion.
     Delete,
     #[deprecated(note = "Seems to be retained in OCCT for legacy reasons")]
     Replace,
@@ -35,7 +35,7 @@ pub enum TnamingEvolution {
     Selected,
 }
 
-impl TnamingEvolution {
+impl TopoNamingEvolution {
     fn try_from_raw(v: i32) -> Option<Self> {
         // TNaming_Evolution enum constants — verify ordinal values against
         // https://dev.opencascade.org/doc/refman/html/group__enum__t_naming.html
@@ -53,13 +53,18 @@ impl TnamingEvolution {
     }
 }
 
-pub struct TnamingBuilder<'cmd> {
-    inner: UniquePtr<ffi::TnamingBuilderShim>,
+/// Principal tool for addressing the Topo Naming Problem
+///
+/// Under the OCAF tnaming scheme, an [`OcLabel`] can carry one [`TopoNamingNamedShape`] attribute. It
+/// describes an evolution kind in the form of [`TopoNamingEvolution`], and has one or more shapes
+/// to it
+pub struct TopoNamingBuilder<'cmd> {
+    inner: UniquePtr<ffi::TopoNamingBuilderShim>,
     _not_send: PhantomData<*mut ()>,
     _cmd: PhantomData<&'cmd ()>,
 }
 
-impl<'cmd> TnamingBuilder<'cmd> {
+impl<'cmd> TopoNamingBuilder<'cmd> {
     pub fn new(label: &OcLabel) -> Self {
         Self {
             inner: new_tnaming_builder(&label.inner),
@@ -68,38 +73,40 @@ impl<'cmd> TnamingBuilder<'cmd> {
         }
     }
 
-    /// Records `shape` as a primitive — no topological ancestor.
+    /// Records a [`TopoNamingEvolution::Primitive`]
     ///
     /// Use this for shapes produced by constructors (`BRepPrimAPI_MakeBox`,
     /// `OcFace::from_wire`, etc.) that have no prior shape in the document.
-    pub fn generated_fresh(&mut self, shape: &OcShape) {
+    pub fn primitive(&mut self, shape: &OcShape) {
         self.inner.pin_mut().generated_fresh(shape.as_ffi());
     }
 
-    /// Records `generated` as produced from `old`.
+    /// Records a [`TopoNamingEvolution::Generated`]
     ///
     /// Use this when an operation creates a new sub-shape from an ancestor
     /// sub-shape (e.g. extrusion generates a lateral face from a wire edge).
-    pub fn generated_from(&mut self, old: &OcShape, generated: &OcShape) {
+    pub fn generated(&mut self, old: &OcShape, new: &OcShape) {
         self.inner
             .pin_mut()
-            .generated_from(old.as_ffi(), generated.as_ffi());
+            .generated_from(old.as_ffi(), new.as_ffi());
     }
 
-    /// Records `modified` as a modification of `old`.
+    /// Records a [`TopoNamingEvolution::Modify`]
     ///
     /// Use this when an operation transforms an existing shape into a new one
     /// (e.g. fillet rounds a face — the original face becomes the `old` arg,
     /// the rounded replacement is `modified`).
-    pub fn modify(&mut self, old: &OcShape, modified: &OcShape) {
-        self.inner.pin_mut().modify(old.as_ffi(), modified.as_ffi());
+    pub fn modified(&mut self, old: &OcShape, new: &OcShape) {
+        self.inner.pin_mut().modify(old.as_ffi(), new.as_ffi());
     }
 
-    /// Records `old` as deleted by this operation — it has no successor.
+    /// Records a [`TopoNamingEvolution::Delete`]
     pub fn delete(&mut self, old: &OcShape) {
         self.inner.pin_mut().delete_shape(old.as_ffi());
     }
 
+    /// Records a [`TopoNamingEvolution::Selected`]
+    ///
     /// Records a sub-shape selection in context. Reserved for DOC-4 /
     /// `TNaming_Selector` workflows.
     pub fn select(&mut self, shape: &OcShape, in_shape: &OcShape) {
@@ -111,8 +118,8 @@ impl<'cmd> TnamingBuilder<'cmd> {
     /// Returns a handle to the `TNaming_NamedShape` attribute written on the
     /// label. The handle remains valid after the builder is dropped and across
     /// undo/redo boundaries.
-    pub fn named_shape(&self) -> TnamingNamedShape {
-        TnamingNamedShape {
+    pub fn named_shape(&self) -> TopoNamingNamedShape {
+        TopoNamingNamedShape {
             inner: self.inner.named_shape(),
             _not_send: PhantomData,
         }
@@ -120,33 +127,35 @@ impl<'cmd> TnamingBuilder<'cmd> {
 }
 
 // ---------------------------------------------------------------------------
-// TnamingNamedShape
+// TopoNamingNamedShape
 //
-// Read handle to the TNaming_NamedShape attribute. Can be obtained from
-// TnamingBuilder::named_shape() or TnamingNamedShape::find(label).
-// Reflects undo/redo state — get() returns the shape as of the current
-// transaction stack position.
 // ---------------------------------------------------------------------------
 
-pub struct TnamingNamedShape {
-    inner: UniquePtr<ffi::TnamingNamedShapeHandle>,
+/// Topological shape naming attribute on an [`OcLabel`]
+///
+/// Read handle to the TNaming_NamedShape attribute. Can be obtained from
+/// TopoNamingBuilder::named_shape() or TopoNamingNamedShape::find(label).
+/// Reflects undo/redo state — get() returns the shape as of the current
+/// transaction stack position.
+pub struct TopoNamingNamedShape {
+    inner: UniquePtr<ffi::TopoNamingNamedShapeHandle>,
     _not_send: PhantomData<*mut ()>,
 }
 
-impl TnamingNamedShape {
-    pub(crate) fn from_ffi(inner: UniquePtr<ffi::TnamingNamedShapeHandle>) -> Self {
+impl TopoNamingNamedShape {
+    pub(crate) fn from_ffi(inner: UniquePtr<ffi::TopoNamingNamedShapeHandle>) -> Self {
         Self {
             inner,
             _not_send: PhantomData,
         }
     }
 
-    /// Returns `None` if no `TNaming_NamedShape` attribute is present on `label`.
+    /// Retrieve a handle on `label` if present
     pub fn find(label: &OcLabel) -> Option<Self> {
         // find_tnaming_named_shape writes into `out` on success.
-        // We need a valid (non-null) TnamingNamedShapeHandle to write into.
+        // We need a valid (non-null) TopoNamingNamedShapeHandle to write into.
         // Construct one via the builder round-trip: build an empty wrapper.
-        // The find shim takes Pin<&mut TnamingNamedShapeHandle> — we need an
+        // The find shim takes Pin<&mut TopoNamingNamedShapeHandle> — we need an
         // allocated instance. Use a dummy label-less handle here; the shim
         // will overwrite inner if found.
         //
@@ -165,13 +174,12 @@ impl TnamingNamedShape {
         }
     }
 
-    /// Current shape as recorded on the label. After undo, returns the
-    /// pre-operation shape.
+    /// Current shapes as recorded on the label. None, if empty
     pub fn get(&self) -> Option<OcShape> {
         OcShape::from_ffi(ffi::tnaming_named_shape_get(self.inner.as_ref().unwrap()))
     }
 
-    /// The original shape — before any evolution was recorded on this label.
+    /// The original shapes — before any evolution was recorded on this label.
     pub fn original_shape(&self) -> Option<OcShape> {
         OcShape::from_ffi(ffi::tnaming_tool_original_shape(
             self.inner.as_ref().unwrap(),
@@ -179,25 +187,24 @@ impl TnamingNamedShape {
     }
 
     /// The provenance kind recorded when this shape was written.
-    pub fn evolution(&self) -> Option<TnamingEvolution> {
-        TnamingEvolution::try_from_raw(ffi::tnaming_named_shape_evolution(
+    pub fn evolution(&self) -> Option<TopoNamingEvolution> {
+        TopoNamingEvolution::try_from_raw(ffi::tnaming_named_shape_evolution(
             self.inner.as_ref().unwrap(),
         ))
     }
 
-    pub(crate) fn inner(&self) -> &UniquePtr<ffi::TnamingNamedShapeHandle> {
+    pub(crate) fn inner(&self) -> &UniquePtr<ffi::TopoNamingNamedShapeHandle> {
         &self.inner
     }
 }
 // ---------------------------------------------------------------------------
-// TnamingSelector
+// TopoNamingSelector
 // Reference: https://dev.opencascade.org/doc/refman/html/class_t_naming___selector.html
 // ---------------------------------------------------------------------------
 
-/// Records how a sub-shape was selected so it can be re-found after model
-/// changes.
+/// A stable selection record, providing for re-selection after re-compute
 ///
-/// Construct via [`crate::ocaf::document::Command::selector`].
+/// Construct via [`Command::selector`].
 ///
 /// # Command requirement on `select`
 ///
@@ -209,20 +216,21 @@ impl TnamingNamedShape {
 /// # Precondition on `solve`
 ///
 /// [`solve`] requires that every history-generating operation since the
-/// original [`select`] was recorded with [`TnamingBuilder`].  The bindings
+/// original [`select`] was recorded with [`TopoNamingBuilder`].  The bindings
 /// layer cannot verify this; incomplete recording produces incorrect results
 /// or returns `false` without further diagnosis.
 ///
-/// [`select`]: TnamingSelector::select
-/// [`solve`]: TnamingSelector::solve
+/// [`select`]: TopoNamingSelector::select
+/// [`solve`]: TopoNamingSelector::solve
 /// [`Command`]: crate::ocaf::document::Command
-pub struct TnamingSelector {
-    pub(crate) inner: UniquePtr<ffi::TnamingSelectorShim>,
+/// [`Command::selector`]: crate::ocaf::document::Command::selector
+pub struct TopoNamingSelector {
+    pub(crate) inner: UniquePtr<ffi::TopoNamingSelectorShim>,
     _not_send: PhantomData<*mut ()>,
 }
 
-impl TnamingSelector {
-    pub(crate) fn new(inner: UniquePtr<ffi::TnamingSelectorShim>) -> Self {
+impl TopoNamingSelector {
+    pub(crate) fn new(inner: UniquePtr<ffi::TopoNamingSelectorShim>) -> Self {
         Self {
             inner,
             _not_send: PhantomData,
@@ -249,19 +257,19 @@ impl TnamingSelector {
     /// Re-evaluates the stored selection description against the current model.
     /// Returns `false` if the selection can no longer be resolved.
     ///
-    /// See [struct-level docs](TnamingSelector) for the precondition on
+    /// See [struct-level docs](TopoNamingSelector) for the precondition on
     /// complete provenance recording.
     pub fn solve(&mut self) -> bool {
         ffi::tnaming_selector_solve(self.inner.pin_mut())
     }
 
-    /// Returns the [`TnamingNamedShape`] written by [`select`], if any.
+    /// Returns the [`TopoNamingNamedShape`] written by [`select`], if any.
     ///
-    /// [`select`]: TnamingSelector::select
-    pub fn named_shape(&self) -> Option<TnamingNamedShape> {
+    /// [`select`]: TopoNamingSelector::select
+    pub fn named_shape(&self) -> Option<TopoNamingNamedShape> {
         let mut out = ffi::new_tnaming_named_shape_handle();
         let found = ffi::tnaming_selector_named_shape(self.inner.as_ref().unwrap(), out.pin_mut());
-        found.then(|| TnamingNamedShape {
+        found.then(|| TopoNamingNamedShape {
             inner: out,
             _not_send: PhantomData,
         })
@@ -269,7 +277,7 @@ impl TnamingSelector {
 }
 #[cfg(test)]
 mod test {
-    use crate::ocaf::{OcApplication, TnamingBuilder};
+    use crate::ocaf::{OcApplication, TopoNamingBuilder};
 
     #[test]
     fn tnaming_undo_reverses_modify() {
@@ -306,8 +314,8 @@ mod test {
         let (label, named_shape) = {
             let cmd = doc.begin_command().unwrap();
             let label = root.get_or_create_child(&cmd, 1);
-            let mut b = TnamingBuilder::new(&label);
-            b.generated_fresh(&shape_a);
+            let mut b = TopoNamingBuilder::new(&label);
+            b.primitive(&shape_a);
             let ns = b.named_shape();
             cmd.commit().unwrap();
             (label, ns)
@@ -316,8 +324,8 @@ mod test {
         // Command 2: modify to shape_b
         {
             let cmd = doc.begin_command().unwrap();
-            let mut b = TnamingBuilder::new(&label);
-            b.modify(&shape_a, &shape_b);
+            let mut b = TopoNamingBuilder::new(&label);
+            b.modified(&shape_a, &shape_b);
             cmd.commit().unwrap();
         }
 

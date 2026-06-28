@@ -18,7 +18,7 @@ use occt_sys::ffi;
 use crate::error::{OcctError, OcctErrorKind};
 use crate::ocaf::label::LabelPath;
 use crate::ocaf::label::OcLabel;
-use crate::ocaf::tnaming::{TnamingBuilder, TnamingSelector};
+use crate::ocaf::topo_naming::{TopoNamingBuilder, TopoNamingSelector};
 
 /// An in-memory OCAF document.
 ///
@@ -48,14 +48,14 @@ impl OcDocument {
         }
     }
 
-    /// The root label of the document's user data section.
+    /// Gets the root label
     ///
     /// All application-level label trees are rooted here.  The returned
     /// label's lifetime is tied to `self`.
     pub fn main(&self) -> OcLabel {
         unsafe { OcLabel::from_ffi_unchecked(ffi::document_main(&self.inner)) }
     }
-    /// Resolves a [`LabelPath`] to a label, starting from the document root.
+    /// Resolves a [`LabelPath`] from the document root.
     ///
     /// Returns `None` if any segment of the path does not exist.
     pub fn label_at(&self, path: &LabelPath) -> Option<OcLabel> {
@@ -66,18 +66,13 @@ impl OcDocument {
         Some(current)
     }
 
-    /// Opens a new command scope.
+    /// Opens a new [`Command`] RAII guard.
     ///
-    /// Returns a [`Command`] RAII guard.  On drop, the command is aborted if
-    /// neither [`Command::commit`] nor [`Command::abort`] was called.
+    /// On drop, the command is aborted
     ///
     /// The document is exclusively borrowed for the lifetime of the returned
     /// [`Command`]; no other mutable access is possible while it is live.
     ///
-    /// # Errors
-    ///
-    /// Returns `Err` if OCCT raises during `NewCommand` (unlikely for valid
-    /// documents, but wrapped defensively).
     pub fn begin_command(&mut self) -> Result<Command<'_>, OcctError> {
         if ffi::document_has_open_command(&self.inner) {
             return Err(OcctError {
@@ -95,43 +90,37 @@ impl OcDocument {
         })
     }
 
-    /// Number of commands available for undo.
     pub fn available_undos(&self) -> i32 {
         ffi::document_get_available_undos(&self.inner)
     }
 
-    /// Number of commands available for redo.
     pub fn available_redos(&self) -> i32 {
         ffi::document_get_available_redos(&self.inner)
     }
 
-    /// Undoes the most recently committed command.
-    ///
     /// Returns `true` when an undo was performed, `false` when the undo stack
     /// is empty.
     pub fn undo(&mut self) -> Result<bool, OcctError> {
         ffi::document_undo(self.inner.pin_mut()).map_err(OcctError::from)
     }
 
-    /// Re-applies the most recently undone command.
-    ///
     /// Returns `true` when a redo was performed, `false` when the redo stack
     /// is empty.
     pub fn redo(&mut self) -> Result<bool, OcctError> {
         ffi::document_redo(self.inner.pin_mut()).map_err(OcctError::from)
     }
 
-    /// Sets the maximum number of undoable commands retained.
-    ///
     /// Older entries are discarded when the limit is exceeded.
     pub fn set_undo_limit(&mut self, n: i32) {
         ffi::document_set_undo_limit(self.inner.pin_mut(), n);
     }
+
     pub fn has_open_command(&self) -> bool {
         ffi::document_has_open_command(&self.inner)
     }
 
-    /// Returns `true` if the document is open (registered with its application).
+    /// A Document is considered opened when it is registered with an
+    /// [`OcApplication`](crate::ocaf::OcApplication)
     ///
     /// `IsOpened()` is `false` after [`close`] or [`Drop`] runs.
     ///
@@ -140,16 +129,12 @@ impl OcDocument {
         ffi::document_is_opened(&self.inner)
     }
 
-    /// Closes the document, deregistering it from its application.
+    /// Closes the document, deregistering it from its [`OcApplication`](crate::ocaf::OcApplication).
     ///
     /// Severs both OCAF ownership edges (`app→doc` and `doc→app`).  After
     /// this the document is no longer usable.  Idempotent at the OCCT level:
     /// a subsequent drop calls `document_close` again, which is a no-op
     /// because `IsOpened()` is already `false`.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err` if OCCT raises during `Close`.
     pub fn close(mut self) -> Result<(), OcctError> {
         ffi::document_close(self.inner.pin_mut()).map_err(OcctError::from)
         // self drops here; Drop's document_close is a no-op because IsOpened() is false.
@@ -171,7 +156,7 @@ impl std::fmt::Debug for OcDocument {
 
 // ── Command ───────────────────────────────────────────────────────────────────
 
-/// RAII guard for a TDF command scope.
+/// RAII guard for a `TDF_Command` scope.
 ///
 /// Constructed by [`OcDocument::begin_command`].  The document is exclusively
 /// borrowed for the guard's lifetime.
@@ -207,17 +192,17 @@ impl<'doc> Command<'doc> {
         self.done = true;
         Ok(())
     }
-    pub fn name_builder<'cmd>(&'cmd self, label: &OcLabel) -> TnamingBuilder<'cmd> {
-        TnamingBuilder::new(label)
+    pub fn name_builder<'cmd>(&'cmd self, label: &OcLabel) -> TopoNamingBuilder<'cmd> {
+        TopoNamingBuilder::new(label)
     }
-    /// Creates a [`TnamingSelector`] bound to `label`.
+    /// Creates a [`TopoNamingSelector`] bound to `label`.
     ///
-    /// Call [`TnamingSelector::select`] within an open [`Command`] to record
-    /// how a sub-shape should be re-found.  Call [`TnamingSelector::solve`]
+    /// Call [`TopoNamingSelector::select`] within an open [`Command`] to record
+    /// how a sub-shape should be re-found.  Call [`TopoNamingSelector::solve`]
     /// after subsequent history-generating operations to re-evaluate the
     /// selection.
-    pub fn selector(&self, label: &OcLabel) -> TnamingSelector {
-        TnamingSelector::new(ffi::new_tnaming_selector(label.inner.as_ref().unwrap()))
+    pub fn selector(&self, label: &OcLabel) -> TopoNamingSelector {
+        TopoNamingSelector::new(ffi::new_tnaming_selector(label.inner.as_ref().unwrap()))
     }
 }
 
