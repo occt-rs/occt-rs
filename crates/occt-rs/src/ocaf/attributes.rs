@@ -1,29 +1,19 @@
-//! Standard TDF attributes: scalars (Name, Integer, Real, Comment,
-//! AsciiString) and list/array attributes (ReferenceList, ReferenceArray,
-//! RealArray, IntegerArray, BooleanArray, ByteArray, ExtStringArray,
-//! IntegerList, RealList, ExtStringList, BooleanList), plus the
-//! presence-only UAttribute marker (TDataStd_UAttribute) and the OcGuid
-//! value type its caller-supplied identification uses, plus the scalar
-//! groups (Integer/Real/String/Byte) of NamedData (TDataStd_NamedData).
+//! Standard data-types entered as attributes.
 //!
-//! Each type wraps a `Handle(TDataStd_*)` shim.  The operations per type are:
 //!
-//! - **`set`** — attaches or updates the attribute on a label (inside a command).
-//! - **`get`** — reads the current value from an already-retrieved attribute handle.
-//! - **`find`** — probes whether the attribute is present on a label.
-//! - **`forget`** — removes the attribute from a label (inside a command).
+//! There are three primary groupings:
+//!  - scalars
+//!  - Array collections
+//!  - List collections
 //!
-//! GUIDs are kept on the C++ side; the Rust API never names them.
+//! Each type is implemented as a binding to a `Handle(TDataStd_*)` shim.
+//! The operations per type are:
 //!
-//! ## Indexing: lists panic, arrays return `Result`
+//! - **`set`** — A [`Command`]-scoped upsert on a label
+//! - **`get`** — value read from an already-retrieved attribute handle.
+//! - **`find`** — probes presence on a label.
+//! - **`forget`** — A [`Command`]-scoped removal from a label
 //!
-//! The fixed arrays (`Oc*Array`) expose `value`/`set_value` returning `Result`,
-//! mirroring OCCT's `Value(index)`/`SetValue(index, _)`, which raise
-//! `OutOfRange`. The lists (`Oc*List`) expose `at`, which panics on an
-//! out-of-bounds index like `Vec` indexing. OCCT's list types have no indexed
-//! accessor, so `at` is a Rust convenience over `List()` and takes Rust's
-//! indexing semantics rather than inventing a fallible one. The split is
-//! deliberate and follows the underlying API shape.
 //!
 //! ## Writes take `&self`
 //!
@@ -37,6 +27,7 @@
 
 use occt_sys::ffi;
 use std::marker::PhantomData;
+use std::num::NonZeroI32;
 
 use crate::error::{OcctError, OcctErrorKind};
 use crate::ocaf::document::Command;
@@ -44,19 +35,14 @@ use crate::ocaf::label::OcLabel;
 
 // ── OcName ────────────────────────────────────────────────────────────────────
 
-/// A `TDataStd_Name` attribute handle — a UTF-8 string attached to a label.
-///
-/// Construct via [`OcName::set`] inside an open command scope.
-/// Retrieve from an existing label via [`OcName::find`].
+/// UTF-8 string attached to a label via `TDataStd_Name` binding
 pub struct OcName {
     inner: cxx::UniquePtr<ffi::TDataStdNameHandle>,
     _not_send: PhantomData<*mut ()>,
 }
 
 impl OcName {
-    /// Attaches or updates a `TDataStd_Name` attribute on `label`.
-    ///
-    /// Must be called inside an open [`Command`] scope.
+    /// [`Command`]-scoped upsert on `label`.
     pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: &str) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_name_set(&label.inner, value).map_err(OcctError::from)?;
         Ok(Self {
@@ -65,15 +51,11 @@ impl OcName {
         })
     }
 
-    /// Reads the string value of this attribute.
     pub fn get(&self) -> String {
         ffi::tdatastd_name_get(&self.inner)
     }
 
-    /// Probes for a `TDataStd_Name` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_name_find(&label.inner);
         if inner.is_null() {
@@ -86,10 +68,9 @@ impl OcName {
         }
     }
 
-    /// Removes the `TDataStd_Name` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_name_forget(&label.inner)
     }
@@ -105,16 +86,14 @@ impl std::fmt::Debug for OcName {
 
 // ── OcInteger ─────────────────────────────────────────────────────────────────
 
-/// A `TDataStd_Integer` attribute handle — an `i32` attached to a label.
+/// `i32` attached to a label via `TDataStd_Integer` binding
 pub struct OcInteger {
     inner: cxx::UniquePtr<ffi::TDataStdIntegerHandle>,
     _not_send: PhantomData<*mut ()>,
 }
 
 impl OcInteger {
-    /// Attaches or updates a `TDataStd_Integer` attribute on `label`.
-    ///
-    /// Must be called inside an open [`Command`] scope.
+    /// [`Command`]-scoped upsert on `label`.
     pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: i32) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_integer_set(&label.inner, value).map_err(OcctError::from)?;
         Ok(Self {
@@ -123,14 +102,11 @@ impl OcInteger {
         })
     }
 
-    /// Reads the integer value of this attribute.
     pub fn get(&self) -> i32 {
         ffi::tdatastd_integer_get(&self.inner)
     }
 
-    /// Probes for a `TDataStd_Integer` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_integer_find(&label.inner);
         if inner.is_null() {
@@ -143,10 +119,9 @@ impl OcInteger {
         }
     }
 
-    /// Removes the `TDataStd_Integer` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_integer_forget(&label.inner)
     }
@@ -162,16 +137,14 @@ impl std::fmt::Debug for OcInteger {
 
 // ── OcReal ────────────────────────────────────────────────────────────────────
 
-/// A `TDataStd_Real` attribute handle — an `f64` attached to a label.
+/// `f64` attached to a label via `TDataStd_Real` binding
 pub struct OcReal {
     inner: cxx::UniquePtr<ffi::TDataStdRealHandle>,
     _not_send: PhantomData<*mut ()>,
 }
 
 impl OcReal {
-    /// Attaches or updates a `TDataStd_Real` attribute on `label`.
-    ///
-    /// Must be called inside an open [`Command`] scope.
+    /// [`Command`]-scoped upsert on `label`.
     pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: f64) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_real_set(&label.inner, value).map_err(OcctError::from)?;
         Ok(Self {
@@ -180,14 +153,11 @@ impl OcReal {
         })
     }
 
-    /// Reads the real value of this attribute.
     pub fn get(&self) -> f64 {
         ffi::tdatastd_real_get(&self.inner)
     }
 
-    /// Probes for a `TDataStd_Real` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_real_find(&label.inner);
         if inner.is_null() {
@@ -200,10 +170,9 @@ impl OcReal {
         }
     }
 
-    /// Removes the `TDataStd_Real` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_real_forget(&label.inner)
     }
@@ -228,19 +197,14 @@ impl std::fmt::Debug for OcReal {
 }
 // ── OcComment ─────────────────────────────────────────────────────────────────
 
-/// A `TDataStd_Comment` attribute handle — a UTF-8 string attached to a label.
-///
-/// Construct via [`OcComment::set`] inside an open command scope.
-/// Retrieve from an existing label via [`OcComment::find`].
+/// `UTF-8 string` attached to a label via `TDataStd_Comment` binding
 pub struct OcComment {
     inner: cxx::UniquePtr<ffi::TDataStdCommentHandle>,
     _not_send: PhantomData<*mut ()>,
 }
 
 impl OcComment {
-    /// Attaches or updates a `TDataStd_Comment` attribute on `label`.
-    ///
-    /// Must be called inside an open [`Command`] scope.
+    /// [`Command`]-scoped upsert on `label`.
     pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: &str) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_comment_set(&label.inner, value).map_err(OcctError::from)?;
         Ok(Self {
@@ -249,15 +213,11 @@ impl OcComment {
         })
     }
 
-    /// Reads the string value of this attribute.
     pub fn get(&self) -> String {
         ffi::tdatastd_comment_get(&self.inner)
     }
 
-    /// Probes for a `TDataStd_Comment` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_comment_find(&label.inner);
         if inner.is_null() {
@@ -270,10 +230,9 @@ impl OcComment {
         }
     }
 
-    /// Removes the `TDataStd_Comment` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_comment_forget(&label.inner)
     }
@@ -289,23 +248,18 @@ impl std::fmt::Debug for OcComment {
 
 // ── OcAsciiString ─────────────────────────────────────────────────────────────
 
-/// A `TDataStd_AsciiString` attribute handle — an ASCII string attached to a label.
+/// An unvalidated 8-bit byte buffer attached to a label via `TDataStd_AsciiString` binding
 ///
 /// Despite the name, `TCollection_AsciiString` is an unvalidated 8-bit byte
 /// buffer — any valid-UTF-8 `&str` round-trips unchanged through
 /// [`set`](OcAsciiString::set)/[`get`](OcAsciiString::get) regardless of content.
-///
-/// Construct via [`OcAsciiString::set`] inside an open command scope.
-/// Retrieve from an existing label via [`OcAsciiString::find`].
 pub struct OcAsciiString {
     inner: cxx::UniquePtr<ffi::TDataStdAsciiStringHandle>,
     _not_send: PhantomData<*mut ()>,
 }
 
 impl OcAsciiString {
-    /// Attaches or updates a `TDataStd_AsciiString` attribute on `label`.
-    ///
-    /// Must be called inside an open [`Command`] scope.
+    /// [`Command`]-scoped upsert on `label`.
     pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: &str) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_asciistring_set(&label.inner, value).map_err(OcctError::from)?;
         Ok(Self {
@@ -314,15 +268,11 @@ impl OcAsciiString {
         })
     }
 
-    /// Reads the ASCII string value of this attribute.
     pub fn get(&self) -> String {
         ffi::tdatastd_asciistring_get(&self.inner)
     }
 
-    /// Probes for a `TDataStd_AsciiString` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_asciistring_find(&label.inner);
         if inner.is_null() {
@@ -335,10 +285,9 @@ impl OcAsciiString {
         }
     }
 
-    /// Removes the `TDataStd_AsciiString` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_asciistring_forget(&label.inner)
     }
@@ -354,26 +303,19 @@ impl std::fmt::Debug for OcAsciiString {
 
 // ── OcReferenceList ───────────────────────────────────────────────────────────
 
-/// A `TDataStd_ReferenceList` attribute handle — an ordered list of label
-/// references attached to a label.
+/// A singly-linked-list of label references attached to a label via `TDataStd_ReferenceList`
+/// binding
 ///
 /// Unlike the scalar attributes, [`set`](OcReferenceList::set) finds-or-creates
 /// an *empty* list — there's no single value to set. Use
 /// [`append`](OcReferenceList::append) to populate it.
-///
-/// Indices are 0-based and resolved by walking the underlying OCCT list on
-/// each [`at`](OcReferenceList::at)/[`to_vec`](OcReferenceList::to_vec) call —
-/// fine for the small argument/result lists this attribute is typically used
-/// for, but O(n) per access.
 pub struct OcReferenceList {
     inner: cxx::UniquePtr<ffi::TDataStdReferenceListHandle>,
     _not_send: PhantomData<*mut ()>,
 }
 
 impl OcReferenceList {
-    /// Finds, or creates, an empty `TDataStd_ReferenceList` attribute on `label`.
-    ///
-    /// Must be called inside an open [`Command`] scope.
+    /// [`Command`]-scoped upsert on `label`.
     pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_referencelist_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self {
@@ -382,10 +324,7 @@ impl OcReferenceList {
         })
     }
 
-    /// Probes for a `TDataStd_ReferenceList` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_referencelist_find(&label.inner);
         if inner.is_null() {
@@ -398,10 +337,9 @@ impl OcReferenceList {
         }
     }
 
-    /// Removes the `TDataStd_ReferenceList` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_referencelist_forget(&label.inner)
     }
@@ -440,7 +378,7 @@ impl OcReferenceList {
     /// Returns an iterator over the elements of this list, in order.
     ///
     /// Iteration is O(n) total — the underlying OCCT list cursor advances
-    /// one step per element, unlike [`at`] which walks from the head each time.
+    /// one step per element, unlike [`Self::at`] which walks from the head each time.
     pub fn iter(&self) -> OcReferenceListIter {
         OcReferenceListIter {
             inner: ffi::tdatastd_referencelist_iter_new(&self.inner),
@@ -479,23 +417,19 @@ impl Iterator for OcReferenceListIter {
 
 // ── OcIntegerList ────────────────────────────────────────────────────────────
 
-/// A `TDataStd_IntegerList` attribute handle — an ordered list of `i32`
-/// values attached to a label.
+/// A `i32` singly-linked-list attached to a label via `TDataStd_IntegerList`
+/// binding
 ///
-/// Same shape as [`OcReferenceList`]: [`set`](Self::set) finds-or-creates an
-/// *empty* list; populate via [`append`](Self::append). Indices are 0-based
-/// and resolved by walking the underlying OCCT list on each
-/// [`at`](Self::at)/[`to_vec`](Self::to_vec) call — O(n) per access, fine
-/// for small lists.
+/// Unlike the scalar attributes, [`set`](OcIntegerList::set) finds-or-creates
+/// an *empty* list — there's no single value to set. Use
+/// [`append`](OcReferenceList::append) to populate it.
 pub struct OcIntegerList {
     inner: cxx::UniquePtr<ffi::TDataStdIntegerListHandle>,
     _not_send: PhantomData<*mut ()>,
 }
 
 impl OcIntegerList {
-    /// Finds, or creates, an empty `TDataStd_IntegerList` attribute on `label`.
-    ///
-    /// Must be called inside an open [`Command`] scope.
+    /// [`Command`]-scoped upsert on `label`.
     pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_integerlist_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self {
@@ -504,10 +438,7 @@ impl OcIntegerList {
         })
     }
 
-    /// Probes for a `TDataStd_IntegerList` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_integerlist_find(&label.inner);
         if inner.is_null() {
@@ -520,10 +451,9 @@ impl OcIntegerList {
         }
     }
 
-    /// Removes the `TDataStd_IntegerList` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_integerlist_forget(&label.inner)
     }
@@ -558,7 +488,7 @@ impl OcIntegerList {
     /// Returns an iterator over the elements of this list, in order.
     ///
     /// Iteration is O(n) total — the underlying OCCT list cursor advances
-    /// one step per element, unlike [`at`] which walks from the head each time.
+    /// one step per element, unlike [`Self::at`] which walks from the head each time.
     pub fn iter(&self) -> OcIntegerListIter {
         OcIntegerListIter {
             inner: ffi::tdatastd_integerlist_iter_new(&self.inner),
@@ -599,21 +529,19 @@ impl Iterator for OcIntegerListIter {
 
 // ── OcRealList ───────────────────────────────────────────────────────────────
 
-/// A `TDataStd_RealList` attribute handle — an ordered list of `f64` values
-/// attached to a label.
+/// A `f64` singly-linked-list attached to a label via `TDataStd_RealList`
+/// binding
 ///
-/// Same shape as [`OcIntegerList`]/[`OcReferenceList`]: [`set`](Self::set)
-/// finds-or-creates an *empty* list; populate via [`append`](Self::append).
-/// Indices are 0-based, O(n) per [`at`](Self::at)/[`to_vec`](Self::to_vec) call.
+/// Unlike the scalar attributes, [`set`](OcRealList::set) finds-or-creates
+/// an *empty* list — there's no single value to set. Use
+/// [`append`](OcReferenceList::append) to populate it.
 pub struct OcRealList {
     inner: cxx::UniquePtr<ffi::TDataStdRealListHandle>,
     _not_send: PhantomData<*mut ()>,
 }
 
 impl OcRealList {
-    /// Finds, or creates, an empty `TDataStd_RealList` attribute on `label`.
-    ///
-    /// Must be called inside an open [`Command`] scope.
+    /// [`Command`]-scoped upsert on `label`.
     pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_reallist_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self {
@@ -622,10 +550,7 @@ impl OcRealList {
         })
     }
 
-    /// Probes for a `TDataStd_RealList` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_reallist_find(&label.inner);
         if inner.is_null() {
@@ -638,10 +563,9 @@ impl OcRealList {
         }
     }
 
-    /// Removes the `TDataStd_RealList` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_reallist_forget(&label.inner)
     }
@@ -676,7 +600,7 @@ impl OcRealList {
     /// Returns an iterator over the elements of this list, in order.
     ///
     /// Iteration is O(n) total — the underlying OCCT list cursor advances
-    /// one step per element, unlike [`at`] which walks from the head each time.
+    /// one step per element, unlike [`Self::at`] which walks from the head each time.
     pub fn iter(&self) -> OcRealListIter {
         OcRealListIter {
             inner: ffi::tdatastd_reallist_iter_new(&self.inner),
@@ -711,12 +635,12 @@ impl Iterator for OcRealListIter {
 
 // ── OcExtStringList ──────────────────────────────────────────────────────────
 
-/// A `TDataStd_ExtStringList` attribute handle — an ordered list of UTF-8
-/// strings attached to a label.
+/// A UTF-8 singly-linked-list attached to a label via `TDataStd_ExtStringList`
+/// binding
 ///
-/// Same shape as [`OcIntegerList`]/[`OcReferenceList`]: [`set`](Self::set)
-/// finds-or-creates an *empty* list; populate via [`append`](Self::append).
-/// Indices are 0-based, O(n) per [`at`](Self::at)/[`to_vec`](Self::to_vec) call.
+/// Unlike the scalar attributes, [`set`](OcRealList::set) finds-or-creates
+/// an *empty* list — there's no single value to set. Use
+/// [`append`](OcReferenceList::append) to populate it.
 ///
 /// Each element undergoes the same UTF-8 <-> `TCollection_ExtendedString`
 /// conversion as [`OcName`]/[`OcComment`]/[`OcExtStringArray`]
@@ -727,9 +651,7 @@ pub struct OcExtStringList {
 }
 
 impl OcExtStringList {
-    /// Finds, or creates, an empty `TDataStd_ExtStringList` attribute on `label`.
-    ///
-    /// Must be called inside an open [`Command`] scope.
+    /// [`Command`]-scoped upsert on `label`.
     pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_extstringlist_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self {
@@ -738,10 +660,7 @@ impl OcExtStringList {
         })
     }
 
-    /// Probes for a `TDataStd_ExtStringList` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_extstringlist_find(&label.inner);
         if inner.is_null() {
@@ -754,10 +673,9 @@ impl OcExtStringList {
         }
     }
 
-    /// Removes the `TDataStd_ExtStringList` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_extstringlist_forget(&label.inner)
     }
@@ -792,7 +710,7 @@ impl OcExtStringList {
     /// Returns an iterator over the elements of this list, in order.
     ///
     /// Iteration is O(n) total — the underlying OCCT list cursor advances
-    /// one step per element, unlike [`at`] which walks from the head each time.
+    /// one step per element, unlike [`Self::at`] which walks from the head each time.
     pub fn iter(&self) -> OcStringListIter {
         OcStringListIter {
             inner: ffi::tdatastd_extstringlist_iter_new(&self.inner),
@@ -828,12 +746,12 @@ impl Iterator for OcStringListIter {
 
 // ── OcBooleanList ────────────────────────────────────────────────────────────
 
-/// A `TDataStd_BooleanList` attribute handle — an ordered list of `bool`
-/// values attached to a label.
+/// A `bool` singly-linked-list attached to a label via `TDataStd_BooleanList`
+/// binding
 ///
-/// Same shape as [`OcIntegerList`]/[`OcReferenceList`]: [`set`](Self::set)
-/// finds-or-creates an *empty* list; populate via [`append`](Self::append).
-/// Indices are 0-based, O(n) per [`at`](Self::at)/[`to_vec`](Self::to_vec) call.
+/// Unlike the scalar attributes, [`set`](OcBooleanList::set) finds-or-creates
+/// an *empty* list — there's no single value to set. Use
+/// [`append`](OcReferenceList::append) to populate it.
 ///
 /// Underlying storage is `TDataStd_ListOfByte` (1=true/0=false per OCCT's
 /// documented convention) — converted to/from `bool` transparently. Unlike
@@ -845,9 +763,7 @@ pub struct OcBooleanList {
 }
 
 impl OcBooleanList {
-    /// Finds, or creates, an empty `TDataStd_BooleanList` attribute on `label`.
-    ///
-    /// Must be called inside an open [`Command`] scope.
+    /// [`Command`]-scoped upsert on `label`.
     pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_booleanlist_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self {
@@ -856,10 +772,7 @@ impl OcBooleanList {
         })
     }
 
-    /// Probes for a `TDataStd_BooleanList` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_booleanlist_find(&label.inner);
         if inner.is_null() {
@@ -872,10 +785,9 @@ impl OcBooleanList {
         }
     }
 
-    /// Removes the `TDataStd_BooleanList` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_booleanlist_forget(&label.inner)
     }
@@ -910,7 +822,7 @@ impl OcBooleanList {
     /// Returns an iterator over the elements of this list, in order.
     ///
     /// Iteration is O(n) total — the underlying OCCT list cursor advances
-    /// one step per element, unlike [`at`] which walks from the head each time.
+    /// one step per element, unlike [`Self::at`] which walks from the head each time.
     pub fn iter(&self) -> OcBooleanListIter {
         OcBooleanListIter {
             inner: ffi::tdatastd_booleanlist_iter_new(&self.inner),
@@ -1047,10 +959,7 @@ impl std::str::FromStr for OcGuid {
 pub struct OcUAttribute;
 
 impl OcUAttribute {
-    /// Finds, or creates, a `TDataStd_UAttribute` marker identified by `guid`
-    /// on `label`.
-    ///
-    /// Must be called inside an open [`Command`] scope.
+    /// [`Command`]-scoped upsert on `label`.
     pub fn set(_cmd: &Command<'_>, label: &OcLabel, guid: OcGuid) -> Result<(), OcctError> {
         ffi::tdatastd_uattribute_set(
             &label.inner,
@@ -1088,11 +997,9 @@ impl OcUAttribute {
         )
     }
 
-    /// Removes the `TDataStd_UAttribute` marker identified by `guid` from
-    /// `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if it was not present. Must be called inside an open
-    /// [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel, guid: OcGuid) -> bool {
         ffi::tdatastd_uattribute_forget(
             &label.inner,
@@ -1141,10 +1048,7 @@ pub struct OcNamedData {
 }
 
 impl OcNamedData {
-    /// Finds, or creates, a `TDataStd_NamedData` attribute on `label` with no
-    /// entries.
-    ///
-    /// Must be called inside an open [`Command`] scope.
+    /// [`Command`]-scoped upsert on `label`.
     pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_nameddata_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self {
@@ -1153,10 +1057,7 @@ impl OcNamedData {
         })
     }
 
-    /// Probes for a `TDataStd_NamedData` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_nameddata_find(&label.inner);
         if inner.is_null() {
@@ -1169,10 +1070,9 @@ impl OcNamedData {
         }
     }
 
-    /// Removes the `TDataStd_NamedData` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_nameddata_forget(&label.inner)
     }
@@ -1321,10 +1221,7 @@ impl OcReferenceArray {
         })
     }
 
-    /// Probes for a `TDataStd_ReferenceArray` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_referencearray_find(&label.inner);
         if inner.is_null() {
@@ -1337,10 +1234,9 @@ impl OcReferenceArray {
         }
     }
 
-    /// Removes the `TDataStd_ReferenceArray` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_referencearray_forget(&label.inner)
     }
@@ -1398,14 +1294,9 @@ impl std::fmt::Debug for OcReferenceArray {
 
 // ── OcRealArray ──────────────────────────────────────────────────────────────
 
-/// A `TDataStd_RealArray` attribute handle — a fixed-length array of `f64`
-/// values attached to a label.
+/// `[f64]` - label attribute style: attached as `TDataStd_RealArray` binding
 ///
-/// Same convention as [`OcReferenceArray`]: indices are 0-based, `len` must
-/// be >= 1 (`TColStd_Array1` requires `Lower <= Upper`; `len == 0` raises
-/// `Standard_RangeError` from `Init`, propagated as `Err`). Elements are
-/// zero-initialized until explicitly set via
-/// [`set_value`](OcRealArray::set_value).
+/// Elements are zero-initialized until explicitly set via [`Self::set_value`]
 ///
 /// OCCT's `Set` takes an `isDelta` parameter controlling undo-delta
 /// computation for element modifications; occt-rs omits it, taking OCCT's
@@ -1424,18 +1315,16 @@ impl OcRealArray {
     /// # Errors
     ///
     /// Returns `Err` if `len < 1`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: i32) -> Result<Self, OcctError> {
-        let inner = ffi::tdatastd_realarray_set(&label.inner, len).map_err(OcctError::from)?;
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
+        let inner =
+            ffi::tdatastd_realarray_set(&label.inner, len.into()).map_err(OcctError::from)?;
         Ok(Self {
             inner,
             _not_send: PhantomData,
         })
     }
 
-    /// Probes for a `TDataStd_RealArray` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_realarray_find(&label.inner);
         if inner.is_null() {
@@ -1448,10 +1337,9 @@ impl OcRealArray {
         }
     }
 
-    /// Removes the `TDataStd_RealArray` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_realarray_forget(&label.inner)
     }
@@ -1501,12 +1389,9 @@ impl std::fmt::Debug for OcRealArray {
 
 // ── OcIntegerArray ───────────────────────────────────────────────────────────
 
-/// A `TDataStd_IntegerArray` attribute handle — a fixed-length array of `i32`
-/// values attached to a label.
+/// `[i32 ; NonZeroI32]` - label attribute style: attached as `TDataStd_IntegerArray` binding
 ///
-/// Same convention as [`OcReferenceArray`]/[`OcRealArray`]: indices are
-/// 0-based, `len` must be >= 1. Elements are zero-initialized until
-/// explicitly set via [`set_value`](OcIntegerArray::set_value).
+/// Elements are zero-initialized until explicitly set via [`Self::set_value`]
 ///
 /// OCCT's `Set` takes an `isDelta` parameter controlling undo-delta
 /// computation for element modifications; occt-rs omits it, taking OCCT's
@@ -1525,18 +1410,16 @@ impl OcIntegerArray {
     /// # Errors
     ///
     /// Returns `Err` if `len < 1`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: i32) -> Result<Self, OcctError> {
-        let inner = ffi::tdatastd_integerarray_set(&label.inner, len).map_err(OcctError::from)?;
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
+        let inner =
+            ffi::tdatastd_integerarray_set(&label.inner, len.into()).map_err(OcctError::from)?;
         Ok(Self {
             inner,
             _not_send: PhantomData,
         })
     }
 
-    /// Probes for a `TDataStd_IntegerArray` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_integerarray_find(&label.inner);
         if inner.is_null() {
@@ -1549,10 +1432,9 @@ impl OcIntegerArray {
         }
     }
 
-    /// Removes the `TDataStd_IntegerArray` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_integerarray_forget(&label.inner)
     }
@@ -1601,15 +1483,13 @@ impl std::fmt::Debug for OcIntegerArray {
 
 // ── OcBooleanArray ───────────────────────────────────────────────────────────
 
-/// A `TDataStd_BooleanArray` attribute handle — a fixed-length array of
-/// `bool` values attached to a label.
+/// `[bool ; NonZeroI32]` - label attribute style: attached as `TDataStd_BooleanArray` binding
 ///
-/// Same convention as [`OcReferenceArray`]/[`OcRealArray`]/[`OcIntegerArray`]:
-/// indices are 0-based, `len` must be >= 1. Elements are `false` until
-/// explicitly set via [`set_value`](OcBooleanArray::set_value).
+/// Elements are zero-initialized until explicitly set via [`Self::set_value`]
 ///
-/// Unlike the other array types, `TDataStd_BooleanArray::Set` takes no
-/// `isDelta` parameter — nothing to omit here.
+/// OCCT's `Set` takes an `isDelta` parameter controlling undo-delta
+/// computation for element modifications; occt-rs omits it, taking OCCT's
+/// compiled-in default (`Standard_False`).
 pub struct OcBooleanArray {
     inner: cxx::UniquePtr<ffi::TDataStdBooleanArrayHandle>,
     _not_send: PhantomData<*mut ()>,
@@ -1624,18 +1504,16 @@ impl OcBooleanArray {
     /// # Errors
     ///
     /// Returns `Err` if `len < 1`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: i32) -> Result<Self, OcctError> {
-        let inner = ffi::tdatastd_booleanarray_set(&label.inner, len).map_err(OcctError::from)?;
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
+        let inner =
+            ffi::tdatastd_booleanarray_set(&label.inner, len.into()).map_err(OcctError::from)?;
         Ok(Self {
             inner,
             _not_send: PhantomData,
         })
     }
 
-    /// Probes for a `TDataStd_BooleanArray` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_booleanarray_find(&label.inner);
         if inner.is_null() {
@@ -1648,10 +1526,9 @@ impl OcBooleanArray {
         }
     }
 
-    /// Removes the `TDataStd_BooleanArray` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_booleanarray_forget(&label.inner)
     }
@@ -1733,12 +1610,9 @@ impl std::fmt::Debug for OcBooleanArray {
 
 // ── OcByteArray ──────────────────────────────────────────────────────────────
 
-/// A `TDataStd_ByteArray` attribute handle — a fixed-length array of `u8`
-/// values attached to a label.
+/// `[u8 ; NonZeroI32]` - label attribute style: attached as `TDataStd_ByteArray` binding
 ///
-/// Same convention as [`OcReferenceArray`]/[`OcRealArray`]/[`OcIntegerArray`]:
-/// indices are 0-based, `len` must be >= 1. Elements are zero-initialized
-/// until explicitly set via [`set_value`](OcByteArray::set_value).
+/// Elements are zero-initialized until explicitly set via [`Self::set_value`]
 ///
 /// OCCT's `Set` takes an `isDelta` parameter controlling undo-delta
 /// computation for element modifications; occt-rs omits it, taking OCCT's
@@ -1757,18 +1631,16 @@ impl OcByteArray {
     /// # Errors
     ///
     /// Returns `Err` if `len < 1`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: i32) -> Result<Self, OcctError> {
-        let inner = ffi::tdatastd_bytearray_set(&label.inner, len).map_err(OcctError::from)?;
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
+        let inner =
+            ffi::tdatastd_bytearray_set(&label.inner, len.into()).map_err(OcctError::from)?;
         Ok(Self {
             inner,
             _not_send: PhantomData,
         })
     }
 
-    /// Probes for a `TDataStd_ByteArray` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_bytearray_find(&label.inner);
         if inner.is_null() {
@@ -1781,10 +1653,9 @@ impl OcByteArray {
         }
     }
 
-    /// Removes the `TDataStd_ByteArray` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_bytearray_forget(&label.inner)
     }
@@ -1834,17 +1705,9 @@ impl std::fmt::Debug for OcByteArray {
 
 // ── OcExtStringArray ─────────────────────────────────────────────────────────
 
-/// A `TDataStd_ExtStringArray` attribute handle — a fixed-length array of
-/// UTF-8 strings attached to a label.
+/// `[UTF-8 string ; NonZeroI32]` - label attribute style: attached as `TDataStd_ByteArray` binding
 ///
-/// Same convention as [`OcReferenceArray`]/[`OcRealArray`]/[`OcIntegerArray`]:
-/// indices are 0-based, `len` must be >= 1. Elements are empty strings until
-/// explicitly set via [`set_value`](OcExtStringArray::set_value).
-///
-/// Each element undergoes the same UTF-8 <-> `TCollection_ExtendedString`
-/// conversion as [`OcName`]/[`OcComment`] (`isMultiByte = Standard_True`),
-/// applied per index — confirmed correct for both BMP and non-BMP input via
-/// those types' round-trip tests.
+/// Elements are zero-initialized until explicitly set via [`Self::set_value`]
 ///
 /// OCCT's `Set` takes an `isDelta` parameter controlling undo-delta
 /// computation for element modifications; occt-rs omits it, taking OCCT's
@@ -1863,18 +1726,16 @@ impl OcExtStringArray {
     /// # Errors
     ///
     /// Returns `Err` if `len < 1`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: i32) -> Result<Self, OcctError> {
-        let inner = ffi::tdatastd_extstringarray_set(&label.inner, len).map_err(OcctError::from)?;
+    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
+        let inner =
+            ffi::tdatastd_extstringarray_set(&label.inner, len.into()).map_err(OcctError::from)?;
         Ok(Self {
             inner,
             _not_send: PhantomData,
         })
     }
 
-    /// Probes for a `TDataStd_ExtStringArray` attribute on `label`.
-    ///
-    /// Returns `None` when the attribute is not present.
-    /// No command scope required for read-only access.
+    /// Probes for this attributes entry on `label`.
     pub fn find(label: &OcLabel) -> Option<Self> {
         let inner = ffi::tdatastd_extstringarray_find(&label.inner);
         if inner.is_null() {
@@ -1887,10 +1748,9 @@ impl OcExtStringArray {
         }
     }
 
-    /// Removes the `TDataStd_ExtStringArray` attribute from `label`, if present.
+    /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
-    /// Returns `false` if the attribute was not present. Must be called
-    /// inside an open [`Command`] scope.
+    /// Returns `false` if the attribute was not present.
     pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
         ffi::tdatastd_extstringarray_forget(&label.inner)
     }
@@ -2542,7 +2402,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             label = main.get_or_create_child(&cmd, 1);
-            let arr = OcRealArray::set(&cmd, &label, 3).unwrap();
+            let arr = OcRealArray::set(&cmd, &label, NonZeroI32::new(3).unwrap()).unwrap();
             assert_eq!(arr.len(), 3);
             cmd.commit().unwrap();
         }
@@ -2568,7 +2428,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             label = main.get_or_create_child(&cmd, 1);
-            OcRealArray::set(&cmd, &label, 2).unwrap();
+            OcRealArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             cmd.commit().unwrap();
         }
         {
@@ -2587,7 +2447,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcRealArray::set(&cmd, &label, 2).unwrap();
+            arr = OcRealArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             arr.set_value(&cmd, 0, 1.5).unwrap();
             arr.set_value(&cmd, 1, -2.25).unwrap();
             cmd.commit().unwrap();
@@ -2605,7 +2465,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcRealArray::set(&cmd, &label, 2).unwrap();
+            arr = OcRealArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             cmd.commit().unwrap();
         }
         assert!(arr.value(2).is_err());
@@ -2620,7 +2480,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcRealArray::set(&cmd, &label, 1).unwrap();
+            arr = OcRealArray::set(&cmd, &label, NonZeroI32::new(1).unwrap()).unwrap();
             arr.set_value(&cmd, 0, 1.0).unwrap();
             cmd.commit().unwrap();
         }
@@ -2633,16 +2493,6 @@ mod tests {
         assert!((arr.value(0).unwrap() - 1.0).abs() < 1e-12);
     }
 
-    #[test]
-    fn realarray_zero_length_is_err() {
-        let (_app, mut doc) = new_doc();
-        let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        assert!(OcRealArray::set(&cmd, &label, 0).is_err());
-        cmd.abort().unwrap();
-    }
-
     // ── OcIntegerArray ───────────────────────────────────────────────────────
 
     #[test]
@@ -2653,7 +2503,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             label = main.get_or_create_child(&cmd, 1);
-            let arr = OcIntegerArray::set(&cmd, &label, 3).unwrap();
+            let arr = OcIntegerArray::set(&cmd, &label, NonZeroI32::new(3).unwrap()).unwrap();
             assert_eq!(arr.len(), 3);
             cmd.commit().unwrap();
         }
@@ -2679,7 +2529,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             label = main.get_or_create_child(&cmd, 1);
-            OcIntegerArray::set(&cmd, &label, 2).unwrap();
+            OcIntegerArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             cmd.commit().unwrap();
         }
         {
@@ -2698,7 +2548,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcIntegerArray::set(&cmd, &label, 2).unwrap();
+            arr = OcIntegerArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             arr.set_value(&cmd, 0, 7).unwrap();
             arr.set_value(&cmd, 1, -3).unwrap();
             cmd.commit().unwrap();
@@ -2717,7 +2567,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcIntegerArray::set(&cmd, &label, 2).unwrap();
+            arr = OcIntegerArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             cmd.commit().unwrap();
         }
         assert!(arr.value(2).is_err());
@@ -2732,7 +2582,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcIntegerArray::set(&cmd, &label, 1).unwrap();
+            arr = OcIntegerArray::set(&cmd, &label, NonZeroI32::new(1).unwrap()).unwrap();
             arr.set_value(&cmd, 0, 1).unwrap();
             cmd.commit().unwrap();
         }
@@ -2744,16 +2594,6 @@ mod tests {
         doc.undo().unwrap();
         assert_eq!(arr.value(0).unwrap(), 1);
     }
-
-    #[test]
-    fn integerarray_zero_length_is_err() {
-        let (_app, mut doc) = new_doc();
-        let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        assert!(OcIntegerArray::set(&cmd, &label, 0).is_err());
-        cmd.abort().unwrap();
-    }
     // ── OcBooleanArray ───────────────────────────────────────────────────────
 
     #[test]
@@ -2764,7 +2604,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             label = main.get_or_create_child(&cmd, 1);
-            let arr = OcBooleanArray::set(&cmd, &label, 3).unwrap();
+            let arr = OcBooleanArray::set(&cmd, &label, NonZeroI32::new(3).unwrap()).unwrap();
             assert_eq!(arr.len(), 3);
             cmd.commit().unwrap();
         }
@@ -2790,7 +2630,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             label = main.get_or_create_child(&cmd, 1);
-            OcBooleanArray::set(&cmd, &label, 2).unwrap();
+            OcBooleanArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             cmd.commit().unwrap();
         }
         {
@@ -2809,7 +2649,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcBooleanArray::set(&cmd, &label, 2).unwrap();
+            arr = OcBooleanArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             arr.set_value(&cmd, 0, true).unwrap();
             arr.set_value(&cmd, 1, false).unwrap();
             cmd.commit().unwrap();
@@ -2825,7 +2665,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcBooleanArray::set(&cmd, &label, 2).unwrap();
+            arr = OcBooleanArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             cmd.commit().unwrap();
         }
         assert!(arr.value(2).is_err());
@@ -2842,7 +2682,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcBooleanArray::set(&cmd, &label, 9).unwrap();
+            arr = OcBooleanArray::set(&cmd, &label, NonZeroI32::new(9).unwrap()).unwrap();
             cmd.commit().unwrap();
         }
         // Last valid index is fine.
@@ -2860,7 +2700,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcBooleanArray::set(&cmd, &label, 1).unwrap();
+            arr = OcBooleanArray::set(&cmd, &label, NonZeroI32::new(1).unwrap()).unwrap();
             arr.set_value(&cmd, 0, true).unwrap();
             cmd.commit().unwrap();
         }
@@ -2873,16 +2713,6 @@ mod tests {
         assert_eq!(arr.value(0).unwrap(), true);
     }
 
-    #[test]
-    fn booleanarray_zero_length_is_err() {
-        let (_app, mut doc) = new_doc();
-        let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        assert!(OcBooleanArray::set(&cmd, &label, 0).is_err());
-        cmd.abort().unwrap();
-    }
-
     // ── OcByteArray ──────────────────────────────────────────────────────────
 
     #[test]
@@ -2893,7 +2723,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             label = main.get_or_create_child(&cmd, 1);
-            let arr = OcByteArray::set(&cmd, &label, 3).unwrap();
+            let arr = OcByteArray::set(&cmd, &label, NonZeroI32::new(3).unwrap()).unwrap();
             assert_eq!(arr.len(), 3);
             cmd.commit().unwrap();
         }
@@ -2919,7 +2749,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             label = main.get_or_create_child(&cmd, 1);
-            OcByteArray::set(&cmd, &label, 2).unwrap();
+            OcByteArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             cmd.commit().unwrap();
         }
         {
@@ -2938,7 +2768,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcByteArray::set(&cmd, &label, 2).unwrap();
+            arr = OcByteArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             arr.set_value(&cmd, 0, 0).unwrap();
             arr.set_value(&cmd, 1, 255).unwrap();
             cmd.commit().unwrap();
@@ -2957,7 +2787,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcByteArray::set(&cmd, &label, 2).unwrap();
+            arr = OcByteArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             cmd.commit().unwrap();
         }
         assert!(arr.value(2).is_err());
@@ -2972,7 +2802,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcByteArray::set(&cmd, &label, 1).unwrap();
+            arr = OcByteArray::set(&cmd, &label, NonZeroI32::new(1).unwrap()).unwrap();
             arr.set_value(&cmd, 0, 1).unwrap();
             cmd.commit().unwrap();
         }
@@ -2985,16 +2815,6 @@ mod tests {
         assert_eq!(arr.value(0).unwrap(), 1);
     }
 
-    #[test]
-    fn bytearray_zero_length_is_err() {
-        let (_app, mut doc) = new_doc();
-        let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        assert!(OcByteArray::set(&cmd, &label, 0).is_err());
-        cmd.abort().unwrap();
-    }
-
     // ── OcExtStringArray ─────────────────────────────────────────────────────
 
     #[test]
@@ -3005,7 +2825,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             label = main.get_or_create_child(&cmd, 1);
-            let arr = OcExtStringArray::set(&cmd, &label, 3).unwrap();
+            let arr = OcExtStringArray::set(&cmd, &label, NonZeroI32::new(3).unwrap()).unwrap();
             assert_eq!(arr.len(), 3);
             cmd.commit().unwrap();
         }
@@ -3031,7 +2851,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             label = main.get_or_create_child(&cmd, 1);
-            OcExtStringArray::set(&cmd, &label, 2).unwrap();
+            OcExtStringArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             cmd.commit().unwrap();
         }
         {
@@ -3050,7 +2870,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcExtStringArray::set(&cmd, &label, 2).unwrap();
+            arr = OcExtStringArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             arr.set_value(&cmd, 0, "first").unwrap();
             arr.set_value(&cmd, 1, "second").unwrap();
             cmd.commit().unwrap();
@@ -3069,7 +2889,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcExtStringArray::set(&cmd, &label, 1).unwrap();
+            arr = OcExtStringArray::set(&cmd, &label, NonZeroI32::new(1).unwrap()).unwrap();
             arr.set_value(&cmd, 0, "café 😀").unwrap();
             cmd.commit().unwrap();
         }
@@ -3084,7 +2904,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcExtStringArray::set(&cmd, &label, 2).unwrap();
+            arr = OcExtStringArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
             cmd.commit().unwrap();
         }
         assert!(arr.value(2).is_err());
@@ -3099,7 +2919,7 @@ mod tests {
             let main = doc.main();
             let cmd = doc.begin_command().unwrap();
             let label = main.get_or_create_child(&cmd, 1);
-            arr = OcExtStringArray::set(&cmd, &label, 1).unwrap();
+            arr = OcExtStringArray::set(&cmd, &label, NonZeroI32::new(1).unwrap()).unwrap();
             arr.set_value(&cmd, 0, "before").unwrap();
             cmd.commit().unwrap();
         }
@@ -3112,15 +2932,6 @@ mod tests {
         assert_eq!(arr.value(0).unwrap(), "before");
     }
 
-    #[test]
-    fn extstringarray_zero_length_is_err() {
-        let (_app, mut doc) = new_doc();
-        let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        assert!(OcExtStringArray::set(&cmd, &label, 0).is_err());
-        cmd.abort().unwrap();
-    }
     // ── OcIntegerList ────────────────────────────────────────────────────────
 
     #[test]

@@ -99,7 +99,7 @@ impl OcFace {
     ///
     /// The plane is specified by a point on it (`origin`) and its outward normal
     /// (`normal`).  Using an explicit plane avoids the inference OCCT performs in
-    /// [`from_wire`] and is the preferred constructor when the plane is known.
+    /// [`Self::from_wire`] and is the preferred constructor when the plane is known.
     ///
     /// Returns `Err(ConstructionError)` if:
     /// - `normal` has zero magnitude (caught in the C++ shim)

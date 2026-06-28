@@ -20,7 +20,7 @@ use crate::ocaf::document::Command;
 /// A non-owning reference to a node in a document's label tree.
 ///
 /// Wraps `TDF_Label`, a non-owning reference into the `TDF_Data` tree owned
-/// by an [`OcDocument`].
+/// by an [`super::OcDocument`].
 ///
 /// **The document tie is not tracked by the type system.** `OcLabel` carries
 /// no `'doc` parameter — deliberately: parameterising it conflicts with

@@ -10,9 +10,9 @@
 //!
 //! - [`OcConstraintAttr`] — records a constraint between 1–4 geometry
 //!   participants.  Each participant is referenced by its
-//!   [`TnamingNamedShape`](crate::ocaf::tnaming::TnamingNamedShape) handle —
+//!   [`TnamingNamedShape`] handle —
 //!   the topology record — not by an [`OcGeometryAttr`] handle.  Dimensional
-//!   constraints additionally carry an [`OcReal`](crate::ocaf::attributes::OcReal)
+//!   constraints additionally carry an [`OcReal`]
 //!   value attached via a sub-label.
 //!
 //! ## Constraint kind
@@ -475,8 +475,8 @@ impl std::fmt::Debug for OcConstraintAttr {
 ///
 /// # Undo ordering
 ///
-/// [`set`] applies the position before `AddAttribute`, so the single
-/// `AddAttribute` operation is the complete undo delta.  [`set_position`] is
+/// [`Self::set`] applies the position before `AddAttribute`, so the single
+/// `AddAttribute` operation is the complete undo delta.  [`Self::set_position`] is
 /// for updating a position that was committed in a **prior** command; calling
 /// it on a freshly-created, not-yet-committed attribute is unsound.
 ///

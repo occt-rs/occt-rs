@@ -15,8 +15,8 @@
 //!
 //! `Modified` / `Generated` deferred to F2.
 //!
-//! [`OcShape::offset_shape`]: crate::topo::OcShape::offset_shape
-//! [`OcShape::thick_solid`]: crate::topo::OcShape::thick_solid
+//! [`OcShape::offset_shape`]: crate::rs_topo::OcShape::offset_shape
+//! [`OcShape::thick_solid`]: crate::rs_topo::OcShape::thick_solid
 
 use std::marker::PhantomData;
 

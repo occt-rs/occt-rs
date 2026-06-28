@@ -899,13 +899,12 @@ fn point_to_axis_distance(point: &OcPnt, origin: &OcPnt, direction: &OcDir) -> f
 /// Unlike `OcPnt`/`OcVec`/`OcDir`, coordinates are NOT stored natively in Rust.
 /// `gp_Trsf` carries an internal form enum (`gp_TrsfForm`) that OCCT uses to
 /// optimise downstream operations; reconstructing from a raw 3×4 matrix would
-/// silently degrade to the general form.  The C++ value is held opaquely and
-/// crossed via [`as_ffi`] when passed to OCCT APIs.
+/// silently degrade to the general form.
 ///
 /// # Scale and `TopLoc_Location`
 ///
 /// A transform with scale ≠ 1 cannot pass through `TopLoc_Location` since
-/// OCCT 7.6.  Use [`OcShape::transformed`] (backed by `BRepBuilderAPI_Transform`)
+/// OCCT 7.6.  Use [`crate::rs_topo::OcShape::transformed`] (backed by `BRepBuilderAPI_Transform`)
 /// to apply non-unit scaling to shapes.
 pub struct OcTrsf {
     inner: cxx::UniquePtr<ffi::GpTrsf>,
@@ -971,7 +970,7 @@ impl OcTrsf {
 
     /// Mirror about an axis (axial symmetry).
     ///
-    /// Infallible for the same reason as [`from_rotation`].
+    /// Infallible for the same reason as [`Self::from_rotation`].
     pub fn from_mirror_axis(axis: &OcAx1) -> Self {
         let loc = axis.location();
         let dir = axis.direction();

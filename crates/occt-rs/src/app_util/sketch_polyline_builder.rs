@@ -3,7 +3,7 @@
 //! [`SketchPolylineBuilder`] accumulates points one at a time, maintaining
 //! topological connectivity between consecutive edges by reusing the same
 //! [`OcVertex`] handle at each shared endpoint.  This is the same vertex-sharing
-//! principle as [`KeyedWireBuilder`] but driven by sequential point addition
+//! principle as [`crate::app_util::KeyedWireBuilder`] but driven by sequential point addition
 //! rather than explicit key pairs.
 //!
 //! # Probe methods

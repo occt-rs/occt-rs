@@ -12,7 +12,7 @@
 //! are stable after the build is complete; the `&mut` is a fidelity artefact,
 //! not a mutation signal.
 //!
-//! Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_shape.html
+//! Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_shape.html>
 
 use crate::rs_topo::shape::OcShape;
 

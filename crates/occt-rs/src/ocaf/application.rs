@@ -1,7 +1,9 @@
-//! OCAF application wrapper.
+//! Top level application management: Open/Close/Create/etc. documents
 //!
 //! [`OcApplication`] owns a `TDocStd_Application` Handle and is the factory
-//! for [`OcDocument`] instances.
+//! for [`OcDocument`] instances. At the application development level, it can be considered
+//! the prinvcipal means of overall data management. If you have multiple tabs, one for
+//! each project, [`OcApplication`] is what manages the tabs.
 
 use std::marker::PhantomData;
 

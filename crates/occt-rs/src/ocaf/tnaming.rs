@@ -197,7 +197,7 @@ impl TnamingNamedShape {
 /// Records how a sub-shape was selected so it can be re-found after model
 /// changes.
 ///
-/// Construct via [`OcDocument::selector`].
+/// Construct via [`crate::ocaf::document::Command::selector`].
 ///
 /// # Command requirement on `select`
 ///

@@ -1,3 +1,5 @@
+//! Application Framework: start here
+
 pub mod application;
 pub mod attributes;
 pub mod document;
