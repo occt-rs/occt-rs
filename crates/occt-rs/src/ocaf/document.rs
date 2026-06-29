@@ -22,6 +22,18 @@ use crate::ocaf::topo_naming::{TopoNamingBuilder, TopoNamingSelector};
 
 /// An in-memory OCAF document.
 ///
+/// Manages the tree of [`OcLabel`]s. All application data - shapes, attributes, named
+/// shapes, etc. - lives on an [`OcLabel`] as an attribute.
+///
+/// These are some primary rules of this data structure:
+///
+/// - The tree has arbitrary number of labels per node
+/// - labels are 1-indexed
+/// - Only one instance of an attribute per [`OcLabel`]
+/// - `0:1` is the address of the main label (fetchable with [`OcDocument::main`])
+/// - Changes must happen within a [`Command`] context
+///
+///
 /// Wraps `Handle(TDocStd_Document)`.  On drop, the document closes itself
 /// through its application back-pointer, severing the OCAF ownership cycle
 /// (`app→doc` and `doc→app`).  Use [`close`] for an explicit consuming close
@@ -34,6 +46,104 @@ use crate::ocaf::topo_naming::{TopoNamingBuilder, TopoNamingSelector};
 /// OCCT Handle ref-counting is not atomic.  `OcDocument` must not be sent
 /// across thread boundaries.
 ///
+/// # Example
+///
+/// We create a tree that looks as follows:
+///
+/// ```text
+/// main (0:1)
+/// └── 1 (0:1:1)   planes
+///     ├── 1 (0:1:1:1)   XY plane
+///     │       TopoNamingNamedShape (Primitive, planar face)
+///     │       OcPlaneAttr
+///     ├── 2 (0:1:1:2)   YZ plane
+///     │       TopoNamingNamedShape (Primitive, planar face)
+///     │       OcPlaneAttr
+///     └── 3 (0:1:1:3)   XZ plane
+///             TopoNamingNamedShape (Primitive, planar face)
+///             OcPlaneAttr
+/// ```
+///
+/// ```
+/// use occt_rs::ocaf::OcApplication;
+/// use occt_rs::gp::{OcAx2, OcDir, OcPnt};
+/// use occt_rs::ocaf::tdata_xtd::OcPlaneAttr;
+///
+/// let mut app = OcApplication::new();
+/// let mut doc = app.new_document("BinXCAF").unwrap();
+///
+/// // doc.main() is the root of the application label tree — always tag 1
+/// // under the framework root. Obtain it before opening a command.
+/// let main = doc.main();
+/// assert_eq!(main.tag(), 1);
+///
+/// // Create the top-level container nodes in a single command.
+/// // In the scenario these are: planes (1), sketch (2), body (3), sketch2 (4).
+/// let planes = {
+///     let cmd = doc.begin_command().unwrap();
+///     let planes  = main.get_or_create_child(&cmd, 1);
+///     let _sketch  = main.get_or_create_child(&cmd, 2);
+///     let _body    = main.get_or_create_child(&cmd, 3);
+///     let _sketch2 = main.get_or_create_child(&cmd, 4);
+///     cmd.commit().unwrap();
+///     planes
+/// };
+///
+/// // main (0:1)
+/// // ├── 1 (0:1:1)   planes
+/// // ├── 2 (0:1:2)   sketch
+/// // ├── 3 (0:1:3)   body
+/// // └── 4 (0:1:4)   sketch2
+///
+/// let (xy, xy_frame) = {
+///     let cmd = doc.begin_command().unwrap();
+///     let xy = planes.get_or_create_child(&cmd, 1);
+///     let xy_frame = OcAx2::new(
+///         OcPnt::new(0.0, 0.0, 0.0),
+///         OcDir::new(0.0, 0.0, 1.0).unwrap(),
+///         OcDir::new(1.0, 0.0, 0.0).unwrap(),
+///     ).unwrap();
+///     drop(planes);
+///     (xy, xy_frame)
+/// };
+///
+/// // you can also retreive planes by the label address
+/// let planes_gotten = doc.label_at(&"1:1".parse().unwrap()).unwrap();
+/// let cmd = doc.begin_command().unwrap();
+///
+/// // see [`Command`] for details about the usage of &cmd and its commit method
+/// OcPlaneAttr::record_shape(&cmd, &xy, xy_frame).unwrap();
+/// OcPlaneAttr::set(&cmd, &xy).unwrap();
+///
+/// let yz = planes_gotten.get_or_create_child(&cmd, 2);
+/// let yz_frame = OcAx2::new(
+///     OcPnt::new(0.0, 0.0, 0.0),
+///     OcDir::new(1.0, 0.0, 0.0).unwrap(),
+///     OcDir::new(0.0, 1.0, 0.0).unwrap(),
+/// ).unwrap();
+/// OcPlaneAttr::record_shape(&cmd, &yz, yz_frame).unwrap();
+/// OcPlaneAttr::set(&cmd, &yz).unwrap();
+///
+/// let xz = planes_gotten.get_or_create_child(&cmd, 3);
+/// let xz_frame = OcAx2::new(
+///     OcPnt::new(0.0, 0.0, 0.0),
+///     OcDir::new(0.0, 1.0, 0.0).unwrap(),
+///     OcDir::new(1.0, 0.0, 0.0).unwrap(),
+/// ).unwrap();
+/// OcPlaneAttr::record_shape(&cmd, &xz, xz_frame).unwrap();
+/// OcPlaneAttr::set(&cmd, &xz).unwrap();
+///
+/// cmd.commit().unwrap();
+///
+/// assert!(OcPlaneAttr::find(&xy).is_some());
+/// assert!(OcPlaneAttr::find(&yz).is_some());
+/// assert!(OcPlaneAttr::find(&xz).is_some());
+///
+///
+/// assert_eq!(main.children(false).count(), 4);
+/// ```
+///
+/// [`OcLabel`]: crate::ocaf::label::OcLabel
 /// [`OcApplication`]: crate::ocaf::OcApplication
 pub struct OcDocument {
     pub(crate) inner: cxx::UniquePtr<ffi::DocumentHandle>,
@@ -59,8 +169,12 @@ impl OcDocument {
     ///
     /// Returns `None` if any segment of the path does not exist.
     pub fn label_at(&self, path: &LabelPath) -> Option<OcLabel> {
+        let mut tags = path.0.iter();
+        // The first segment is the framework root tag (0) — skip it,
+        // since we already start there.
+        tags.next();
         let mut current = self.main().root();
-        for &tag in &path.0 {
+        for &tag in tags {
             current = current.find_child(tag)?;
         }
         Some(current)
