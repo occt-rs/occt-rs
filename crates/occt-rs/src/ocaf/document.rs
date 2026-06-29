@@ -100,6 +100,68 @@ impl OcDocument {
 
     /// Returns `true` when an undo was performed, `false` when the undo stack
     /// is empty.
+    ///
+    /// Only commands containing attribute changes produce an undoable delta.
+    /// Commands that only create label nodes produce no delta and do not
+    /// increment [`available_undos`](OcDocument::available_undos). [`OcLabel`] entry changes
+    /// are permanent structural elements of the underlying data-tree.  See [`Command`] for
+    /// details.
+    ///
+    /// The example below will create a tree that looks as follows, and then use undo/redo to
+    /// revert/restore the [`OcInteger`] attribute
+    ///
+    /// ```text
+    /// main (0:1)
+    /// └── 1 (0:1:1)
+    ///     - OcInteger = 42
+    /// ```
+    ///
+    /// ```
+    /// use occt_rs::ocaf::OcApplication;
+    /// use occt_rs::ocaf::attributes::OcInteger;
+    ///
+    /// let mut app = OcApplication::new();
+    /// let mut doc = app.new_document("BinXCAF").unwrap();
+    /// doc.set_undo_limit(10);
+    ///
+    /// // Create the label — structural, produces no undo delta.
+    /// let main = doc.main();
+    /// let label = {
+    ///     let cmd = doc.begin_command().unwrap();
+    ///     let l = main.get_or_create_child(&cmd, 1);
+    ///     cmd.commit().unwrap();
+    ///     l
+    /// };
+    /// assert_eq!(doc.available_undos(), 0);
+    ///
+    /// // Write an attribute — this produces a delta.
+    /// {
+    ///     let cmd = doc.begin_command().unwrap();
+    ///     OcInteger::set(&cmd, &label, 42).unwrap();
+    ///     cmd.commit().unwrap();
+    /// }
+    /// assert_eq!(doc.available_undos(), 1);
+    /// assert_eq!(doc.available_redos(), 0);
+    /// // Data tree now looks like this:
+    /// // main (0:1)
+    /// // └──  (0:1:1)
+    /// //      - OcInteger = 99
+    /// assert_eq!(OcInteger::find(&label).unwrap().get(), 42);
+    ///
+    /// // Undo removes the attribute, restoring the pre-command state.
+    /// assert!(doc.undo().unwrap());
+    /// assert!(OcInteger::find(&label).is_none(), "Integer attribute should have been removed");
+    /// assert_eq!(doc.available_undos(), 0);
+    /// assert_eq!(doc.available_redos(), 1);
+    ///
+    /// // Redo restores it.
+    /// assert!(doc.redo().unwrap());
+    /// assert_eq!(OcInteger::find(&label).unwrap().get(), 42, "Integer attribute should have been restored");
+    /// assert_eq!(doc.available_undos(), 1);
+    /// assert_eq!(doc.available_redos(), 0);
+    /// ```
+    ///
+    /// [`OcInteger`]: crate::ocaf::attributes::OcInteger
     pub fn undo(&mut self) -> Result<bool, OcctError> {
         ffi::document_undo(self.inner.pin_mut()).map_err(OcctError::from)
     }
@@ -154,8 +216,6 @@ impl std::fmt::Debug for OcDocument {
     }
 }
 
-// ── Command ───────────────────────────────────────────────────────────────────
-
 /// RAII guard for a `TDF_Command` scope.
 ///
 /// Constructed by [`OcDocument::begin_command`].  The document is exclusively
@@ -164,6 +224,61 @@ impl std::fmt::Debug for OcDocument {
 /// On drop: if neither [`commit`] nor [`abort`] has been called, the command
 /// is aborted.  Abort errors in drop are silently discarded (cannot propagate
 /// from `Drop`).
+///
+/// The example below will create a tree that looks as follows:
+///
+/// ```text
+/// main (0:1)
+/// └──  (0:1:1)
+///      - OcInteger = 99
+/// ```
+///
+/// ```
+/// use occt_rs::ocaf::OcApplication;
+/// use occt_rs::ocaf::attributes::OcInteger;
+///
+/// let mut app = OcApplication::new();
+/// let mut doc = app.new_document("BinXCAF").unwrap();
+/// doc.set_undo_limit(10);
+///
+/// // Label nodes are permanent — create them in a setup command.
+/// // They will survive abort and undo; only their attributes change.
+/// let main = doc.main();
+/// let label = {
+///     let cmd = doc.begin_command().unwrap();
+///     let l = main.get_or_create_child(&cmd, 1);
+///     cmd.commit().unwrap();
+///     l
+/// };
+///
+/// // Data tree now looks like this:
+/// // main (0:1)
+/// // └──  (0:1:1)
+/// //      <no attributes>
+///
+/// // Write an attribute, but abort the command
+/// {
+///     let cmd = doc.begin_command().unwrap();
+///     OcInteger::set(&cmd, &label, 99).unwrap();
+///     // Though not commited, the attribute is attached to the label
+///     assert_eq!(OcInteger::find(&label).unwrap().get(), 99);
+///     cmd.abort(); // could also just let `cmd` fall out of scope
+///     // aported => revert to pre-command state
+///     assert!(OcInteger::find(&label).is_none());
+/// }
+///
+/// // Write an attribute and commit
+/// let cmd = doc.begin_command().unwrap();
+/// OcInteger::set(&cmd, &label, 99).unwrap();
+/// cmd.commit().unwrap();
+/// // Committed command: attribute attached to label
+/// assert_eq!(OcInteger::find(&label).unwrap().get(), 99);
+///
+/// // Data tree now looks like this:
+/// // main (0:1)
+/// // └──  (0:1:1)
+/// //      - OcInteger = 99
+/// ```
 ///
 /// [`commit`]: Command::commit
 /// [`abort`]: Command::abort
