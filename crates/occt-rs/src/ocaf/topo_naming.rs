@@ -378,21 +378,141 @@ impl TopoNamingNamedShape {
 
 /// A stable selection record, providing for re-selection after re-compute
 ///
-/// Construct via [`Command::selector`].
+/// A stable selection record for re-finding a sub-shape after rebuild.
 ///
-/// # Command requirement on `select`
+/// In the scenario, `sketch2` is drawn on a chamfer face. After the user
+/// edits the sketch and triggers a rebuild, the chamfer face is a different
+/// object at a different address. `TopoNamingSelector` re-finds it by
+/// re-evaluating its recorded naming description against the current shape
+/// history.
 ///
-/// [`select`] writes a `TNaming_Naming` attribute and must be called while a
-/// [`Command`] is open.  This is enforced at compile time: `select` takes a
-/// `&Command<'_>` proof token.  The token is unused at runtime; its presence
-/// in the call site is the guarantee.
+/// Note: Every operation since the original selection must be
+/// recorded with [`TopoNamingBuilder`]. Incomplete provenance recording
+/// produces incorrect results, or [`solve`] returning `false`.
 ///
-/// # Precondition on `solve`
+/// The example below extends the document established in [`ChamferBuilder`],
+/// adding the stable face reference on `sketch2/5`:
 ///
-/// [`solve`] requires that every history-generating operation since the
-/// original [`select`] was recorded with [`TopoNamingBuilder`].  The bindings
-/// layer cannot verify this; incomplete recording produces incorrect results
-/// or returns `false` without further diagnosis.
+/// ```text
+/// main (0:1)
+/// ├── 3 (0:1:3)   body
+/// │   ├── 1 (0:1:3:1)   solid
+/// │   │       TopoNamingNamedShape (Primitive, 1×1×1 prism)
+/// │   │       OcReal "depth" = 1.0
+/// │   └── 2 (0:1:3:2)   chamfer
+/// │           TopoNamingNamedShape (Modify, chamfered solid)
+/// │           OcReal "distance" = 0.05
+/// └── 4 (0:1:4)   sketch2
+///     └── 5 (0:1:4:5)   ref-face
+///             TopoNamingNamedShape (Selected — TopoNamingSelector)
+/// ```
+///
+/// ```rust,ignore
+/// // NOTE: this example is incomplete pending two missing bindings:
+/// //
+/// // 1. OcFace::from_shape — needed to retrieve the face from the document
+/// //    and rebuild from new parameters after a sketch edit.
+/// //
+/// // 2. The solve() demonstration requires a full rebuild cycle:
+/// //    edit sketch point → rebuild wire → rebuild face → rebuild solid →
+/// //    re-apply chamfer → re-record provenance → solve() re-finds the
+/// //    chamfer face by naming description rather than pointer identity.
+/// //
+/// // Until those are in place, this example only shows the write side —
+/// // recording the selection. The read side (solve() after rebuild) is
+/// // where the topo-naming problem is actually demonstrated.
+/// //
+/// // See: todo_toponamingnamedshape_empty_label.md for the related gap.
+/// # let mut doc = app.new_document("BinXCAF").unwrap();
+/// # doc.set_undo_limit(10);
+///
+/// let main = doc.main();
+///
+/// // Build and record the solid on body/1
+/// let wire = OcWire::from_edges(&[
+///     OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
+///     # OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(1.0, 1.0, 0.0)).unwrap(),
+///     # OcEdge::from_pnts(OcPnt::new(1.0, 1.0, 0.0), OcPnt::new(0.0, 1.0, 0.0)).unwrap(),
+///     # OcEdge::from_pnts(OcPnt::new(0.0, 1.0, 0.0), OcPnt::new(0.0, 0.0, 0.0)).unwrap(),
+///     // snipped: the other 3 points
+/// ]).unwrap();
+///
+/// let solid = OcFace::from_wire(&wire, true).unwrap()
+///     .extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
+/// let solid_shape = solid.as_shape();
+///
+/// let pre_faces: Vec<_> = solid_shape.faces().collect();
+///
+/// // setup label 0:1:3 (body) and the first solid child
+/// {
+///     let cmd = doc.begin_command().unwrap();
+///     let lsolid = main.get_or_create_child(&cmd, 3)
+///                      .get_or_create_child(&cmd, 1);
+///     OcReal::set(&cmd, &lsolid, 1.0).unwrap();
+///     cmd.name_builder(&lsolid).primitive(&solid_shape);
+///     cmd.commit().unwrap();
+/// }
+///
+/// // Apply chamfer, record result and modified faces on body/2
+/// let (chamfer_shape, chamfer_face) = {
+///     let cmd = doc.begin_command().unwrap();
+///     let lchamfer = main.get_or_create_child(&cmd, 3)
+///                        .get_or_create_child(&cmd, 2);
+///
+///     let distance = OcReal::set(&cmd, &lchamfer, 0.05).unwrap();
+///     let edge = solid_shape.edges().next().unwrap();
+///     let mut cb = ChamferBuilder::new(&solid_shape).unwrap();
+///     cb.add_edge(distance.get(), &edge).unwrap();
+///     let mut built = cb.build_with_history().unwrap();
+///     let chamfer_shape = built.shape().clone();
+///
+///     // Capture the generated chamfer face while built is still live
+///     let chamfer_face = built.generated(&edge.as_shape()).next().unwrap();
+///
+///     let mut nb = cmd.name_builder(&lchamfer);
+///     for face in &pre_faces {
+///         for modified in built.modified(&face.as_shape()) {
+///             nb.modified(&face.as_shape(), &modified);
+///         }
+///     }
+///
+///     cmd.commit().unwrap();
+///     (chamfer_shape, chamfer_face)
+/// };
+///
+/// // The new face generated from the chamfered edge is the one sketch2
+/// // will be drawn on. We record a stable selection of it on sketch2/5
+/// // so that after rebuild, solve() can re-find it by naming description
+/// // rather than by pointer identity.
+/// let ref_face_label = {
+///     let cmd = doc.begin_command().unwrap();
+///     let sketch2 = main.get_or_create_child(&cmd, 4);
+///     let ref_face = sketch2.get_or_create_child(&cmd, 5);
+///
+///
+///     let mut selector = cmd.selector(&ref_face);
+///     selector.select(&cmd, &chamfer_face, &chamfer_shape);
+///
+///     cmd.commit().unwrap();
+///     ref_face
+/// };
+///
+/// // The selector wrote a Selected named shape on the ref-face label
+/// let ns = TopoNamingNamedShape::find(&ref_face_label).unwrap();
+/// assert_eq!(ns.evolution(), Some(TopoNamingEvolution::Selected));
+///
+/// // solve() re-evaluates the selection against the current model —
+/// // returns true when the named face can still be found
+/// let mut selector = doc.main()
+///     .find_child(4).unwrap()
+///     .find_child(5).unwrap();
+/// // Note: in a full rebuild cycle, solve() is called after re-applying
+/// // all operations and re-recording their provenance with TopoNamingBuilder.
+/// // The selector then walks the naming graph to re-find the chamfer face.
+/// ```
+///
+/// [`TopoNamingBuilder`]: crate::ocaf::topo_naming::TopoNamingBuilder
+/// [`ChamferBuilder`]: crate::rs_topo::ChamferBuilder
 ///
 /// [`select`]: TopoNamingSelector::select
 /// [`solve`]: TopoNamingSelector::solve
