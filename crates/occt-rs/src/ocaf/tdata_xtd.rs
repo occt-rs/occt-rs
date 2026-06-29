@@ -566,27 +566,134 @@ impl std::fmt::Debug for OcPositionAttr {
     }
 }
 
-// ── OcPointAttr ──────────────────────────────────────────────────────────────
-
-/// A `TDataXtd_Point` attribute handle — semantic tag marking a label as a point.
+/// Marker attribute. Indicates a [`TopoNamingNamedShape`] is attached to an [`OcPnt`]
 ///
-/// The geometry lives in a [`TopoNamingNamedShape`] on the **same label** as a
-/// vertex produced by [`TopoNamingBuilder::generated`].  This attribute is
-/// a zero-byte marker that declares the shape's semantic role.
+/// OCAF provides the means to fold a [`OcPnt`] geometry primitive, such as a user-authored sketch
+/// point, into the topo-naming system. For this to happen:
 ///
-/// Because the geometry is a TNaming entity, the point can be referenced as a
-/// geometry participant in [`OcConstraintAttr`] and survives topology
-/// operations via the naming graph.  Use [`OcPositionAttr`] instead when you
-/// only need a raw coordinate that participates in undo/redo but not in
-/// topological naming.
+/// - [`TopoNamingBuilder::primitive`] wraps the [`OcPnt`] coordinate in a
+///   [`TopoNamingNamedShape`] vertex gives it a place in the naming graph.
+///   This provides rebuild-stability
+/// - [`OcPointAttr`] tags the label as a point: Constraint solvers, and other
+///   topo-naming machinery can identify it by role without inspecting the
+///   shape topology.
+/// - Both live on the same label, in the same [`Command`]: All info (coordinate,
+///   naming record, and semantic tag ) are grouped to a single undo/redo.
 ///
-/// # Usage pattern
+/// Effectively: [`OcPnt`] can participate as a TopoNaming entity, the point.
+/// It can be referenced as a geometry participant in [`OcConstraintAttr`], and
+/// survives topology operations through the OCAF topo-naming-problem machinery.
 ///
-/// ```ignore
-/// // Inside an open command — shape first, then tag:
-/// let ns = OcPointAttr::record_shape(&cmd, &label, OcPnt::new(1.0, 2.0, 3.0))?;
-/// let attr = OcPointAttr::set(&cmd, &label)?;
-/// // ns can now be passed to OcConstraintAttr::set as a geometry participant.
+/// Use [`OcPositionAttr`] instead when you only need a raw coordinate that
+/// participates in undo/redo but not in topological naming.
+///
+/// # Example
+///
+/// We will create a tree that looks as follows:
+///
+/// ```text
+/// main (0:1)
+/// └── 1 (0:1:1)   sketch
+///     ├── 1 (0:1:1:1)   point A (0.0, 1.0, 0.0)
+///     │       TopoNamingNamedShape (Primitive, vertex_a)
+///     │       OcPointAttr
+///     ├── 2 (0:1:1:2)   point B (0.0, 0.0, 0.0)
+///     │       TopoNamingNamedShape (Primitive, vertex_b)
+///     │       OcPointAttr
+///     ├── 3 (0:1:1:3)   point C (1.0, 0.0, 0.0)
+///     │       TopoNamingNamedShape (Primitive, vertex_c)
+///     │       OcPointAttr
+///     └── 4 (0:1:1:4)   point D (1.0, 1.0, 0.0)
+///     │       TopoNamingNamedShape (Primitive, vertex_d)
+///     │       OcPointAttr
+///     └── 5 (0:1:1:5)   point A edited
+///             TopoNamingNamedShape (Modify, (vertex_a, vertex_e))
+///             OcPointAttr
+/// ```
+///
+/// You can think of the example as an application handling a user adding the points while doing a
+/// sketch
+///
+/// ```
+/// use occt_rs::gp::OcPnt;
+/// use occt_rs::ocaf::OcApplication;
+/// use occt_rs::ocaf::tdata_xtd::OcPointAttr;
+/// use occt_rs::ocaf::topo_naming::{TopoNamingEvolution, TopoNamingNamedShape};
+///
+/// let mut app = OcApplication::new();
+/// let mut doc = app.new_document("BinXCAF").unwrap();
+/// doc.set_undo_limit(10);
+///
+/// let main = doc.main();
+/// let (pt_a, pt_b, pt_c, pt_d) = {
+///     let cmd = doc.begin_command().unwrap();
+///     let sketch = main.get_or_create_child(&cmd, 1);
+///
+///     let la = sketch.get_or_create_child(&cmd, 1);
+///     OcPointAttr::record_shape(&cmd, &la, OcPnt::new(0.0, 1.0, 0.0)).unwrap();
+///     OcPointAttr::set(&cmd, &la).unwrap();
+///
+///     let lb = sketch.get_or_create_child(&cmd, 2);
+///     OcPointAttr::record_shape(&cmd, &lb, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
+///     OcPointAttr::set(&cmd, &lb).unwrap();
+///
+///     let lc = sketch.get_or_create_child(&cmd, 3);
+///     OcPointAttr::record_shape(&cmd, &lc, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+///     OcPointAttr::set(&cmd, &lc).unwrap();
+///
+///     let ld = sketch.get_or_create_child(&cmd, 4);
+///     OcPointAttr::record_shape(&cmd, &ld, OcPnt::new(1.0, 1.0, 0.0)).unwrap();
+///     OcPointAttr::set(&cmd, &ld).unwrap();
+///
+///     cmd.commit().unwrap();
+///     (la, lb, lc, ld)
+/// };
+///
+/// // Coordinates round-trip through the document
+/// let p = OcPointAttr::get(&pt_a).unwrap().unwrap();
+/// assert!((p.x - 0.0).abs() < 1e-12);
+/// assert!((p.y - 1.0).abs() < 1e-12);
+/// assert!((p.z - 0.0).abs() < 1e-12);
+///
+/// // And let's use the topo-naming system to make a new point that evolved from an old one:
+///
+/// let pt_a_edited = {
+///     let cmd = doc.begin_command().unwrap();
+///     let sketch = main.get_or_create_child(&cmd, 1);
+///     let l = sketch.get_or_create_child(&cmd, 5);
+///
+///     // Retrieve the current shape before overwriting it
+///     let old_shape = TopoNamingNamedShape::find(&pt_a).unwrap().get().unwrap();
+///
+///     // Record the new coordinate
+///     OcPointAttr::record_shape(&cmd, &l, OcPnt::new(0.5, 1.0, 0.0)).unwrap();
+///     OcPointAttr::set(&cmd, &l).unwrap();
+///
+///     // Retrieve the new shape and record the evolution explicitly
+///     let new_shape = TopoNamingNamedShape::find(&l).unwrap().get().unwrap();
+///     cmd.name_builder(&l).modified(&old_shape, &new_shape);
+///
+///     cmd.commit().unwrap();
+///     l
+/// };
+///
+/// // The original label is unchanged
+/// assert_eq!(
+///     TopoNamingNamedShape::find(&pt_a).unwrap().evolution(),
+///     Some(TopoNamingEvolution::Primitive),
+/// );
+/// assert!((OcPointAttr::get(&pt_a).unwrap().unwrap().x - 0.0).abs() < 1e-12);
+///
+/// // The new label records the modification
+/// assert_eq!(
+///     TopoNamingNamedShape::find(&pt_a_edited).unwrap().evolution(),
+///     Some(TopoNamingEvolution::Modify),
+/// );
+/// assert!((OcPointAttr::get(&pt_a_edited).unwrap().unwrap().x - 0.5).abs() < 1e-12);
+///
+/// // Undo removes the edit label's attributes
+/// doc.undo().unwrap();
+/// assert!(TopoNamingNamedShape::find(&pt_a_edited).is_none());
 /// ```
 ///
 /// Reference: <https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___point.html>
