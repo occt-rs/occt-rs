@@ -956,8 +956,6 @@ impl std::fmt::Debug for OcAxisAttr {
     }
 }
 
-// ── OcPlaneAttr ──────────────────────────────────────────────────────────────
-
 /// A `TDataXtd_Plane` attribute handle — semantic tag marking a label as a plane.
 ///
 /// The geometry lives in a [`TopoNamingNamedShape`] on the **same label** as an

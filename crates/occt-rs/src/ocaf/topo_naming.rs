@@ -53,11 +53,185 @@ impl TopoNamingEvolution {
     }
 }
 
-/// Principal tool for addressing the Topo Naming Problem
+/// Records shape provenance: A principal tool for addressing the Topo Naming Problem
 ///
-/// Under the OCAF tnaming scheme, an [`OcLabel`] can carry one [`TopoNamingNamedShape`] attribute. It
-/// describes an evolution kind in the form of [`TopoNamingEvolution`], and has one or more shapes
-/// to it
+/// Every shape in the document — whether a primitive construction or the
+/// result of an operation — is recorded on a label using `TopoNamingBuilder`.
+/// This is what connects raw OCCT geometry to the OCAF document model: the
+/// shape becomes addressable, referenceable, and survives parametric rebuild.
+///
+/// The evolution kind tells the naming graph what happened:
+/// - [`Primitive`] — shape appeared fresh, no topological ancestor
+/// - [`Modify`] — shape is a modification of an ancestor
+/// - [`Generated`] — shape was generated from an ancestor sub-shape
+/// - [`Delete`] — ancestor was consumed and does not appear in the output
+///
+/// The example below extends the document established in [`OcPointAttr`] and
+/// [`OcPlaneAttr`], adding the extruded solid under `body/1`:
+///
+/// ```text
+/// main (0:1)
+/// ├── 1 (0:1:1)   planes
+/// │   ├── 1 (0:1:1:1)   XY plane
+/// │   │       ...
+/// │   ├── 2 (0:1:1:2)   YZ plane
+/// │   │       ...
+/// │   └── 3 (0:1:1:3)   XZ plane
+/// │           TopoNamingNamedShape (Primitive, planar face)
+/// │           OcPlaneAttr
+/// ├── 2 (0:1:2)   sketch
+/// │   ├── 1 (0:1:2:1)   point A (0.0, 1.0, 0.0)
+/// │   │       ...
+/// │   ├── 2 (0:1:2:2)   point B (0.0, 0.0, 0.0)
+/// │   │       ...
+/// │   ├── 3 (0:1:2:3)   point C (1.0, 0.0, 0.0)
+/// │   │       ...
+/// │   ├── 4 (0:1:2:4)   point D (1.0, 1.0, 0.0)
+/// │   │       TopoNamingNamedShape (Primitive, vertex)
+/// │   │       OcPointAttr
+/// │   └── 5 (0:1:2:5)   face
+/// │           TopoNamingNamedShape (Primitive, unit square face)
+/// └── 3 (0:1:3)   body
+///     └── 1 (0:1:3:1)   solid
+///             TopoNamingNamedShape (Primitive, 1×1×1 prism)
+///             OcReal "depth" = 1.0
+/// ```
+///
+/// ```rust,ignore
+/// // Note: this example is incomplete pending OcFace::from_shape binding.
+/// // The planes and sketch commands are correct and can be run independently.
+/// # use occt_rs::gp::{OcAx2, OcDir, OcPnt, OcVec};
+/// # use occt_rs::ocaf::OcApplication;
+/// # use occt_rs::ocaf::attributes::OcReal;
+/// # use occt_rs::ocaf::tdata_xtd::{OcPlaneAttr, OcPointAttr};
+/// # use occt_rs::ocaf::topo_naming::{TopoNamingEvolution, TopoNamingNamedShape};
+/// # use occt_rs::rs_topo::{OcEdge, OcFace, OcWire};
+///
+/// # let mut app = OcApplication::new();
+/// # let mut doc = app.new_document("BinXCAF").unwrap();
+/// # doc.set_undo_limit(10);
+///
+/// let main = doc.main();
+///
+///
+/// // planes command
+/// {
+///     let cmd = doc.begin_command().unwrap();
+///     let planes = main.get_or_create_child(&cmd, 1);
+///
+///     # let xy = planes.get_or_create_child(&cmd, 1);
+///     # OcPlaneAttr::record_shape(&cmd, &xy, OcAx2::new(
+///     #     OcPnt::new(0.0, 0.0, 0.0),
+///     #     OcDir::new(0.0, 0.0, 1.0).unwrap(),
+///     #     OcDir::new(1.0, 0.0, 0.0).unwrap(),
+///     # ).unwrap()).unwrap();
+///     # OcPlaneAttr::set(&cmd, &xy).unwrap();
+///
+///     # let yz = planes.get_or_create_child(&cmd, 2);
+///     # OcPlaneAttr::record_shape(&cmd, &yz, OcAx2::new(
+///     #     OcPnt::new(0.0, 0.0, 0.0),
+///     #     OcDir::new(1.0, 0.0, 0.0).unwrap(),
+///     #     OcDir::new(0.0, 1.0, 0.0).unwrap(),
+///     # ).unwrap()).unwrap();
+///     # OcPlaneAttr::set(&cmd, &yz).unwrap();
+///     // snipped: making xy and yz
+///
+///     let xz = planes.get_or_create_child(&cmd, 3);
+///     OcPlaneAttr::record_shape(&cmd, &xz, OcAx2::new(
+///         OcPnt::new(0.0, 0.0, 0.0),
+///         OcDir::new(0.0, 1.0, 0.0).unwrap(),
+///         OcDir::new(1.0, 0.0, 0.0).unwrap(),
+///     ).unwrap()).unwrap();
+///     OcPlaneAttr::set(&cmd, &xz).unwrap();
+///
+///     cmd.commit().unwrap();
+/// }
+///
+/// // sketch command
+/// {
+///     let cmd = doc.begin_command().unwrap();
+///     let sketch = main.get_or_create_child(&cmd, 2);
+///
+///     # let la = sketch.get_or_create_child(&cmd, 1);
+///     # OcPointAttr::record_shape(&cmd, &la, OcPnt::new(0.0, 1.0, 0.0)).unwrap();
+///     # OcPointAttr::set(&cmd, &la).unwrap();
+///
+///     # let lb = sketch.get_or_create_child(&cmd, 2);
+///     # OcPointAttr::record_shape(&cmd, &lb, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
+///     # OcPointAttr::set(&cmd, &lb).unwrap();
+///
+///     # let lc = sketch.get_or_create_child(&cmd, 3);
+///     # OcPointAttr::record_shape(&cmd, &lc, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+///     # OcPointAttr::set(&cmd, &lc).unwrap();
+///     // snipped: maing la, lb and lc
+///
+///     let ld = sketch.get_or_create_child(&cmd, 4);
+///     OcPointAttr::record_shape(&cmd, &ld, OcPnt::new(1.0, 1.0, 0.0)).unwrap();
+///     OcPointAttr::set(&cmd, &ld).unwrap();
+///
+///     // Record the square face — the extrude input
+///     let lface = sketch.get_or_create_child(&cmd, 5);
+///     let wire = OcWire::from_edges(&[
+///         OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
+///         OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(1.0, 1.0, 0.0)).unwrap(),
+///         OcEdge::from_pnts(OcPnt::new(1.0, 1.0, 0.0), OcPnt::new(0.0, 1.0, 0.0)).unwrap(),
+///         OcEdge::from_pnts(OcPnt::new(0.0, 1.0, 0.0), OcPnt::new(0.0, 0.0, 0.0)).unwrap(),
+///     ]).unwrap();
+///     let face = OcFace::from_wire(&wire, true).unwrap();
+///     cmd.name_builder(&lface).primitive(&face.as_shape());
+///
+///     cmd.commit().unwrap();
+/// }
+///
+/// // extrude command
+/// //
+/// // The solid is generated from the sketch face: Generated
+/// // The extrude depth is stored alongside it as OcReal so that editing
+/// // the depth and rebuilding the solid can be undone as a single step.
+/// let solid_label = {
+///     let cmd = doc.begin_command().unwrap();
+///     let body   = main.get_or_create_child(&cmd, 3);
+///     let lsolid = body.get_or_create_child(&cmd, 1);
+///
+///     let depth = OcReal::set(&cmd, &lsolid, 1.0).unwrap();
+///
+///     // Read the face from the sketch label.
+///     let sketch = main.get_or_create_child(&cmd, 2);
+///     let lface  = sketch.get_or_create_child(&cmd, 5);
+///     let face_shape = TopoNamingNamedShape::find(&lface).unwrap().get().unwrap();
+///     let face = OcFace::from_shape(&face_shape).unwrap();
+///
+///     // do the extrude to make the solid
+///     let solid = face.extrude(OcVec::new(0.0, 0.0, depth.get())).unwrap();
+///
+///     cmd.name_builder(&lsolid).generated(&face_shape, &solid.as_shape());
+///
+///     cmd.commit().unwrap();
+///     lsolid
+/// };
+///
+/// let ns = TopoNamingNamedShape::find(&solid_label).unwrap();
+/// assert_eq!(ns.evolution(), Some(TopoNamingEvolution::Primitive));
+/// assert!(ns.get().is_some());
+/// assert!((OcReal::find(&solid_label).unwrap().get() - 1.0).abs() < 1e-12);
+///
+/// // Undo the extrude — the named shape and depth attribute disappear
+/// doc.undo().unwrap();
+/// assert!(TopoNamingNamedShape::find(&solid_label).is_none());
+/// assert!(OcReal::find(&solid_label).is_none());
+///
+/// // Redo restores both
+/// doc.redo().unwrap();
+/// assert!(TopoNamingNamedShape::find(&solid_label).is_some());
+/// assert!((OcReal::find(&solid_label).unwrap().get() - 1.0).abs() < 1e-12);
+/// ```
+///
+/// [`Primitive`]: TopoNamingEvolution::Primitive
+/// [`Modify`]: TopoNamingEvolution::Modify
+/// [`Generated`]: TopoNamingEvolution::Generated
+/// [`Delete`]: TopoNamingEvolution::Delete
+/// [`OcPointAttr`]: crate::ocaf::tdata_xtd::OcPointAttr
+/// [`OcPlaneAttr`]: crate::ocaf::tdata_xtd::OcPlaneAttr
 pub struct TopoNamingBuilder<'cmd> {
     inner: UniquePtr<ffi::TopoNamingBuilderShim>,
     _not_send: PhantomData<*mut ()>,
