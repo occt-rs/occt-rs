@@ -24,6 +24,82 @@ use crate::ocaf::document::Command;
 /// TODO: i.e.: invalid state (label use after doc-drop) gets past the compiler.
 ///       and needs to be fixed
 ///
+/// # Example
+///
+/// We'll create a tree that looks like so:
+///
+/// ```text
+/// main (0:1)
+/// └── (0:1:1)
+///     │ OcName = "sketch"
+///     └── (0:1:1:1)
+///           OcName = "point A"
+/// ```
+/// Labels are addressed by integer tag relative to their parent. The path
+/// `main/2/1` means: child 2 of `main` (the sketch container), then child 1
+/// of that (point A). See the [crate root][`crate`] for the full scenario
+/// tree.
+///
+/// Label nodes are permanent structural elements of `TDF_Data` — they are
+/// not reversed by abort, undo, or redo. Only the attributes attached to
+/// them participate in the transaction delta mechanism. See [`Command`] for
+/// details.
+///
+///
+/// ```
+/// use occt_rs::ocaf::OcApplication;
+/// use occt_rs::ocaf::OcName;
+///
+/// let mut app = OcApplication::new();
+/// let mut doc = app.new_document("BinXCAF").unwrap();
+///
+/// let main = doc.main();
+/// let cmd = doc.begin_command().unwrap();
+/// let sketch = main.get_or_create_child(&cmd, 1);
+/// let pt_a   = sketch.get_or_create_child(&cmd, 1);
+/// OcName::set(&cmd, &sketch, "Sketch_001").unwrap();
+/// OcName::set(&cmd, &pt_a, "Point_001").unwrap();
+/// cmd.commit().unwrap();
+///
+/// // Tag identifies a label among its siblings
+/// assert_eq!(sketch.tag(), 1);
+/// assert_eq!(pt_a.tag(), 1);
+///
+/// // Navigate up the tree
+/// assert_eq!(pt_a.father().unwrap().tag(), 1);
+/// assert!(!sketch.is_root());
+///
+/// // Entry string — full path from the framework root, useful for debugging
+/// assert_eq!(pt_a.entry(), "0:1:1:1");
+///
+/// // Finding children
+/// assert!(sketch.find_child(1).is_some());
+/// assert!(sketch.find_child(2).is_none());
+///
+/// // Iterating direct children
+/// assert_eq!(sketch.children(false).count(), 1);
+///
+/// // Resolving by path through the document
+/// let path = pt_a.entry().parse().unwrap();
+/// assert!(doc.label_at(&path).is_some());
+/// // Showing that the label we got at the path is the same as the earlier entry assert
+/// assert_eq!(doc.label_at(&path).unwrap().entry(), "0:1:1:1");
+///
+/// // A label holds at most one attribute of each type.
+/// // Setting the same attribute type twice updates the value in place.
+///
+/// assert_eq!(OcName::find(&sketch).unwrap().get(), "Sketch_001");
+/// let cmd2 = doc.begin_command().unwrap();
+/// OcName::set(&cmd2, &sketch, "Sketch_002").unwrap();
+/// cmd2.commit().unwrap();
+///
+/// assert_eq!(OcName::find(&sketch).unwrap().get(), "Sketch_002");
+/// assert_eq!(sketch.nb_attributes(), 1); // still just one OcName
+///
+/// ```
+///
+/// [`Command`]: crate::ocaf::document::Command
+///
 /// [`find_child`]: OcLabel::find_child
 /// [`father`]: OcLabel::father
 /// [`OcDocument`]: crate::ocaf::OcDocument
