@@ -32,24 +32,121 @@ pub trait HistoryProvider {
     fn is_shape_deleted(&mut self, input: &OcShape) -> bool;
 }
 
-/// Holds a completed builder alongside its output shape, keeping the builder
-/// alive so that history queries remain valid.
+/// Holds a build with its output shape. The build can be queried foc topo-naming provenance
 ///
-/// Produced by `build_with_history()` on each operation builder.
+/// The query methods feed directly into [`TopoNamingBuilder`]:
 ///
-/// # Mutability
+/// - retreive modified topology with [`TopoNamingBuilder::modified`]
+/// - retreive generated topology with [`TopoNamingBuilder::generated`]
 ///
-/// History query methods require `&mut self` because the underlying OCCT
-/// methods are non-const.  Declare the binding as `mut` at the call site:
+/// This is the mechanism that keeps the naming graph stable. With everything recorded,
+/// [`TopoNamingSelector::solve`] can re-find sub-shapes after rebuild.
 ///
-/// ```rust,ignore
-/// let mut built = FilletBuilder::new(&shape)?
-///     .add_edge(0.1, &edge)?
-///     .build_with_history()?;
+/// # Why `&mut self` on history queries
 ///
-/// let shape = built.shape().clone();
-/// let modified: Vec<OcShape> = built.modified(&original_face);
+/// `Modified`, `Generated`, and `IsDeleted` are non-const in OCCT. The
+/// `&mut self` is a fidelity artefact of the cxx bridge, not a mutation
+/// signal — results are stable after the build is complete.
+///
+/// # Example
+///
+/// Here we extend the example written out in [`ChamferBuilder`], doc-tests
+/// showing all three query methods and how their results feed into the
+/// naming record:
+///
+/// ```text
+/// main (0:1)
+/// └── 3 (0:1:3)   body
+///     ├── 1 (0:1:3:1)   solid
+///     │       TopoNamingNamedShape (Primitive, 1×1×1 prism)
+///     │       OcReal "depth" = 1.0
+///     └── 2 (0:1:3:2)   chamfer
+///             TopoNamingNamedShape (Modify, chamfered solid)
+///             OcReal "distance" = 0.05
 /// ```
+///
+/// ```
+/// # use occt_rs::gp::{OcPnt, OcVec};
+/// # use occt_rs::ocaf::OcApplication;
+/// # use occt_rs::ocaf::attributes::OcReal;
+/// # use occt_rs::ocaf::topo_naming::{TopoNamingEvolution, TopoNamingNamedShape};
+/// # use occt_rs::rs_topo::{ChamferBuilder, OcEdge, OcFace, OcWire};
+///
+/// # let mut app = OcApplication::new();
+/// # let mut doc = app.new_document("BinXCAF").unwrap();
+///
+/// let main = doc.main();
+///
+/// let wire = OcWire::from_edges(&[
+///     // <snipped edge creation>
+///     # OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
+///     # OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(1.0, 1.0, 0.0)).unwrap(),
+///     # OcEdge::from_pnts(OcPnt::new(1.0, 1.0, 0.0), OcPnt::new(0.0, 1.0, 0.0)).unwrap(),
+///     # OcEdge::from_pnts(OcPnt::new(0.0, 1.0, 0.0), OcPnt::new(0.0, 0.0, 0.0)).unwrap(),
+/// ]).unwrap();
+/// let solid = OcFace::from_wire(&wire, true).unwrap()
+///     .extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
+/// let solid_shape = solid.as_shape();
+/// let initial_faces: Vec<_> = solid_shape.faces().collect();
+/// let initial_edges: Vec<_> = solid_shape.edges().collect();
+///
+/// // Record the solid on body/1
+/// {
+///     # let cmd = doc.begin_command().unwrap();
+///     # let lsolid = main.get_or_create_child(&cmd, 3)
+///     #                  .get_or_create_child(&cmd, 1);
+///     # OcReal::set(&cmd, &lsolid, 1.0).unwrap();
+///     # cmd.name_builder(&lsolid).primitive(&solid_shape);
+///     cmd.commit().unwrap();
+/// }
+///
+/// // Apply the chamfer and query history
+/// let cmd = doc.begin_command().unwrap();
+/// let lchamfer = main.get_or_create_child(&cmd, 3)
+///                    .get_or_create_child(&cmd, 2);
+///
+/// let distance = OcReal::set(&cmd, &lchamfer, 0.05).unwrap();
+/// let edge = solid_shape.edges().next().unwrap();
+/// let mut cb = ChamferBuilder::new(&solid_shape).unwrap();
+/// cb.add_edge(distance.get(), &edge).unwrap();
+/// let mut built = cb.build_with_history().unwrap();
+///
+/// // modified() — which original faces were modified by the chamfer.
+/// // Feed these into TopoNamingBuilder::modified so the naming graph
+/// // records what changed.
+/// let mut nb = cmd.name_builder(&lchamfer);
+/// let mut modified_count = 0;
+/// for face in &initial_faces {
+///     for modified in built.modified(&face.as_shape()) {
+///         nb.modified(&face.as_shape(), &modified);
+///         modified_count += 1;
+///     }
+/// }
+/// assert!(modified_count > 0);
+///
+/// // generated() — the new chamfer face itself, produced from the edge.
+/// // This is the face sketch2 will be drawn on.
+/// let generated: Vec<_> = built.generated(&edge.as_shape()).collect();
+/// assert!(!generated.is_empty());
+///
+/// // is_deleted() — chamfer modifies faces, it does not delete them.
+/// for face in &initial_faces {
+///     assert!(!built.is_deleted(&face.as_shape()));
+/// }
+///
+/// cmd.commit().unwrap();
+///
+/// assert_eq!(
+///     TopoNamingNamedShape::find(&lchamfer).unwrap().evolution(),
+///     Some(TopoNamingEvolution::Modify),
+/// );
+/// ```
+///
+/// [`TopoNamingBuilder`]: crate::ocaf::topo_naming::TopoNamingBuilder
+/// [`TopoNamingBuilder::modified`]: crate::ocaf::topo_naming::TopoNamingBuilder::modified
+/// [`TopoNamingBuilder::generated`]: crate::ocaf::topo_naming::TopoNamingBuilder::generated
+/// [`TopoNamingSelector::solve`]: crate::ocaf::topo_naming::TopoNamingSelector::solve
+/// [`ChamferBuilder`]: crate::rs_topo::ChamferBuilder
 pub struct BuiltWithHistory<B: HistoryProvider> {
     builder: B,
     shape: OcShape,
