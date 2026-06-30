@@ -21,49 +21,40 @@
 //! ```text
 //! main (0:1)
 //! ├── 1 (0:1:1)   planes
-//! │   ├── 1 (0:1:1:1)   XY plane
-//! │   │       TopoNamingNamedShape (Primitive, planar face)
-//! │   │       OcPlaneAttr
-//! │   ├── 2 (0:1:1:2)   YZ plane
-//! │   │       TopoNamingNamedShape (Primitive, planar face)
-//! │   │       OcPlaneAttr
-//! │   └── 3 (0:1:1:3)   XZ plane
-//! │           TopoNamingNamedShape (Primitive, planar face)
-//! │           OcPlaneAttr
-//! ├── 2 (0:1:2)   sketch
-//! │   ├── 1 (0:1:2:1)   point A (0.0, 1.0, 0.0)
-//! │   │       TopoNamingNamedShape (Primitive, vertex)
-//! │   │       OcPointAttr
-//! │   ├── 2 (0:1:2:2)   point B (0.0, 0.0, 0.0)
-//! │   │       TopoNamingNamedShape (Primitive, vertex)
-//! │   │       OcPointAttr
-//! │   ├── 3 (0:1:2:3)   point C (1.0, 0.0, 0.0)
-//! │   │       TopoNamingNamedShape (Primitive, vertex)
-//! │   │       OcPointAttr
-//! │   ├── 4 (0:1:2:4)   point D (1.0, 1.0, 0.0)
-//! │   │       TopoNamingNamedShape (Primitive, vertex)
-//! │   │       OcPointAttr
-//! │   └── 5 (0:1:2:5)   face
+//! │   └── (0:1:1:[1, 2, 3])   [XY, YZ, XZ ] plane
+//! │         TopoNamingNamedShape (Primitive, planar face)
+//! │         OcPlaneAttr
+//! ├── (0:1:2)   sketch
+//! │   ├── (0:1:2:[1, 2, 3, 4])   point [A, B, C, D]
+//! │   │     TopoNamingNamedShape (Primitive, vertex)
+//! │   │     OcPointAttr
+//! │   └── (0:1:2:5)   face
 //! │           TopoNamingNamedShape (Primitive, unit square face)
-//! ├── 3 (0:1:3)   body
-//! │   ├── 1 (0:1:3:1)   solid
-//! │   │       TopoNamingNamedShape (Primitive, 1×1×1 prism)
-//! │   │       OcReal "depth" = 1.0
-//! │   └── 2 (0:1:3:2)   chamfer
+//! ├── (0:1:3)   body
+//! │   ├── (0:1:3:1)   solid
+//! │   │     TopoNamingNamedShape (Generated, 1×1×1 prism)
+//! │   │     OcReal "depth" = 1.0
+//! │   └── (0:1:3:2)   chamfer
 //! │           TopoNamingNamedShape (Modify, chamfered solid)
 //! │           OcReal "distance" = 0.05
-//! └── 4 (0:1:4)   sketch2
-//!     └── 5 (0:1:4:5)   ref-face
-//!             TopoNamingNamedShape (Selected — TopoNamingSelector)
+//! └── (0:1:4)   sketch2
+//!     └── (0:1:4:5)   ref-face
+//!           TopoNamingNamedShape (Selected — TopoNamingSelector)
 //! ```
 //!
 //! ## Known gaps
 //!
-//! The parametric rebuild cycle — editing a sketch point and having the solid,
-//! chamfer, and selector all update — requires `OcFace::try_from` to retrieve
-//! the face shape from the document and pass it to `extrude()`. Until that
-//! binding is added, the rebuild step is present as commented-out code with
-//! inline explanation. Search for `TODO(try_from)` to find all affected sites.
+//! `extrude()` now takes its input face's label path as data (not a
+//! hardcoded constant) and retrieves the shape from the document via
+//! `OcFace::try_from`, so calling it again after a sketch edit *should*
+//! produce a new solid from the updated face — but nothing in this file's
+//! `main()` command sequence actually exercises that yet; there's no
+//! second `AddSketchPoint` + `Extrude` pair to prove it. The chamfer and
+//! selector side of the rebuild cycle is further behind:
+//! `handle_select_chamfer_face` still re-runs the chamfer operation to
+//! derive the chamfer face rather than re-finding it via
+//! `TopoNamingSelector::solve()`. Search for `TODO(try_from)` to find the
+//! remaining affected sites.
 
 use occt_rs::gp::{OcAx2, OcDir, OcPnt, OcVec};
 use occt_rs::ocaf::attributes::OcReal;
@@ -79,24 +70,28 @@ fn main() -> Result<(), AppError> {
     let commands = [
         AppCommand::AddSketchPoint {
             tag: 1,
+            sketch_tag: 2,
             x: 0.0,
             y: 1.0,
             z: 0.0,
         },
         AppCommand::AddSketchPoint {
             tag: 2,
+            sketch_tag: 2,
             x: 0.0,
             y: 0.0,
             z: 0.0,
         },
         AppCommand::AddSketchPoint {
             tag: 3,
+            sketch_tag: 2,
             x: 1.0,
             y: 0.0,
             z: 0.0,
         },
         AppCommand::AddSketchPoint {
             tag: 4,
+            sketch_tag: 2,
             x: 1.0,
             y: 1.0,
             z: 0.0,
@@ -111,13 +106,20 @@ fn main() -> Result<(), AppError> {
             ],
             sketch_tag: 2,
         },
-        AppCommand::Extrude { depth: 1.0 },
+        AppCommand::Extrude {
+            face_label_path: "0:1:2:5".to_string(),
+            depth: 1.0,
+        },
         AppCommand::Chamfer {
             distance: 0.05,
-            _solid_label_path: "0:1:3:1".to_string(),
-            _edge_index: 0, // user clicked the first edge — in a real app this is a pick result
+            solid_label_path: "0:1:3:1".to_string(),
+            edge_index: 0, // user clicked the first edge — in a real app this is a pick result
         },
-        AppCommand::SelectChamferFace,
+        AppCommand::SelectChamferFace {
+            solid_label_path: "0:1:3:1".to_string(),
+            chamfer_label_path: "0:1:3:2".to_string(),
+            edge_index: 0, // must match the Chamfer command above
+        },
         AppCommand::PrintTree,
         AppCommand::Undo,
         AppCommand::PrintTree,
@@ -216,10 +218,17 @@ impl AppState {
         println!("  → sketch face recorded at 0:1:2:5");
         Ok(())
     }
-    fn add_sketch_point(&mut self, tag: i32, x: f64, y: f64, z: f64) -> Result<(), AppError> {
+    fn add_sketch_point(
+        &mut self,
+        tag: i32,
+        sketch_tag: i32,
+        x: f64,
+        y: f64,
+        z: f64,
+    ) -> Result<(), AppError> {
         let main = self.doc.main();
         let cmd = self.doc.begin_command()?;
-        let sketch = main.get_or_create_child(&cmd, 2);
+        let sketch = main.get_or_create_child(&cmd, sketch_tag);
         let label = sketch.get_or_create_child(&cmd, tag);
 
         OcPointAttr::record_shape(&cmd, &label, OcPnt::new(x, y, z))?;
@@ -301,41 +310,13 @@ impl AppState {
         Ok(())
     }
 
-    fn extrude(&mut self, depth: f64) -> Result<(), AppError> {
-        // TODO(try_from): In a complete implementation, the face would be
-        // retrieved from the document via:
-        //
-        //   let lface = state.label_at("0:1:2:5")?;
-        //   let face_shape = TopoNamingNamedShape::find(&lface)
-        //       .ok_or(AppError::MissingShape("0:1:2:5"))?.get()
-        //       .ok_or(AppError::MissingShape("0:1:2:5"))?;
-        //   let face = OcFace::try_from(&face_shape)?;
-        //   let solid = face.extrude(OcVec::new(0.0, 0.0, depth))?;
-        //
-        // This is the parametric link: the extrude depends on whatever shape
-        // the sketch label currently holds. Editing a sketch point and re-running
-        // this handler produces a new solid from the updated face.
-        //
-        // TODO(try_from): now that OcFace::try_from is bound, the point coordinates as a workaround should be
-        // addressed
-
-        let pt_a = self.label_at("0:1:2:1")?;
-        let pt_b = self.label_at("0:1:2:2")?;
-        let pt_c = self.label_at("0:1:2:3")?;
-        let pt_d = self.label_at("0:1:2:4")?;
-
-        let a = OcPointAttr::get(&pt_a)?.ok_or(AppError::MissingShape("0:1:2:1".to_string()))?;
-        let b = OcPointAttr::get(&pt_b)?.ok_or(AppError::MissingShape("0:1:2:2".to_string()))?;
-        let c = OcPointAttr::get(&pt_c)?.ok_or(AppError::MissingShape("0:1:2:3".to_string()))?;
-        let d = OcPointAttr::get(&pt_d)?.ok_or(AppError::MissingShape("0:1:2:4".to_string()))?;
-
-        let wire = OcWire::from_edges(&[
-            OcEdge::from_pnts(b, c)?,
-            OcEdge::from_pnts(c, d)?,
-            OcEdge::from_pnts(d, a)?,
-            OcEdge::from_pnts(a, b)?,
-        ])?;
-        let face = OcFace::from_wire(&wire, true)?;
+    fn extrude(&mut self, face_label_path: &str, depth: f64) -> Result<(), AppError> {
+        let lface = self.label_at(face_label_path)?;
+        let face_shape = TopoNamingNamedShape::find(&lface)
+            .ok_or(AppError::MissingShape(face_label_path.to_string()))?
+            .get()
+            .ok_or(AppError::MissingShape(face_label_path.to_string()))?;
+        let face = OcFace::try_from(&face_shape)?;
         let solid_shape = face.extrude(OcVec::new(0.0, 0.0, depth))?;
 
         let main = self.doc.main();
@@ -345,10 +326,9 @@ impl AppState {
             .get_or_create_child(&cmd, 1);
 
         // Store the depth first — the authoritative parameter.
-        // When OcFace::try_from is available, this value drives the extrusion
-        // directly: `face.extrude(OcVec::new(0.0, 0.0, depth_attr.get()))`.
         OcReal::set(&cmd, &lsolid, depth)?;
-        cmd.name_builder(&lsolid).primitive(&solid_shape);
+        cmd.name_builder(&lsolid)
+            .generated(&face_shape, &solid_shape);
 
         cmd.commit()?;
         println!("  → solid recorded at 0:1:3:1 (depth = {depth})");
@@ -399,6 +379,8 @@ impl AppState {
 enum AppCommand {
     AddSketchPoint {
         tag: i32,
+        /// Tag of the sketch container label under main.
+        sketch_tag: i32,
         x: f64,
         y: f64,
         z: f64,
@@ -411,16 +393,28 @@ enum AppCommand {
         sketch_tag: i32,
     },
     Extrude {
+        /// Label path of the face to extrude — e.g. the path the user
+        /// selected in the feature tree or clicked in the viewport.
+        face_label_path: String,
         depth: f64,
     },
     /// Chamfer one edge of the solid by `distance`.
     Chamfer {
         distance: f64,
-        _solid_label_path: String,
-        _edge_index: usize, // or a ShapeKey, once that's exposed publicly
+        solid_label_path: String,
+        /// Index into the solid's edge iterator — stands in for a real pick
+        /// result (e.g. a `ShapeKey`) in a full application.
+        edge_index: usize,
     },
     /// Record a stable reference to the chamfer face for the second sketch.
-    SelectChamferFace,
+    SelectChamferFace {
+        solid_label_path: String,
+        chamfer_label_path: String,
+        /// Must match the `edge_index` used in the `Chamfer` command being
+        /// re-derived — see `TODO(try_from)` in `handle_select_chamfer_face`
+        /// for why this is still a re-derivation rather than a lookup.
+        edge_index: usize,
+    },
     /// Undo the most recent command.
     Undo,
     /// Redo the most recently undone command.
@@ -429,25 +423,31 @@ enum AppCommand {
     PrintTree,
 }
 
-fn handle_chamfer(state: &mut AppState, distance: f64) -> Result<(), AppError> {
+fn handle_chamfer(
+    state: &mut AppState,
+    solid_label_path: &str,
+    edge_index: usize,
+    distance: f64,
+) -> Result<(), AppError> {
     // Retrieve the solid shape from the document.
-    let lsolid = state.label_at("0:1:3:1")?;
+    let lsolid = state.label_at(solid_label_path)?;
     let solid_shape = TopoNamingNamedShape::find(&lsolid)
-        .ok_or(AppError::MissingShape("0:1:3:1".to_string()))?
+        .ok_or(AppError::MissingShape(solid_label_path.to_string()))?
         .get()
-        .ok_or(AppError::MissingShape("0:1:3:1".to_string()))?;
+        .ok_or(AppError::MissingShape(solid_label_path.to_string()))?;
 
     let pre_faces: Vec<_> = solid_shape.faces().collect();
 
     let edge = solid_shape
         .edges()
-        .next()
-        .ok_or(AppError::MissingShape("0:1:3:1 edges".to_string()))?;
+        .nth(edge_index)
+        .ok_or(AppError::MissingShape(format!(
+            "{solid_label_path} edge {edge_index}"
+        )))?;
 
     let mut cb = ChamferBuilder::new(&solid_shape)?;
     cb.add_edge(distance, &edge)?;
     let mut built = cb.build_with_history()?;
-    let chamfer_shape = built.shape().clone();
 
     let main = state.doc.main();
     let cmd = state.doc.begin_command()?;
@@ -469,47 +469,51 @@ fn handle_chamfer(state: &mut AppState, distance: f64) -> Result<(), AppError> {
 
     cmd.commit()?;
 
-    // Store the chamfer shape for the selector step.
-    // TODO(try_from): once OcFace::try_from is bound, the chamfer shape
-    // can be retrieved from the document directly in handle_select_chamfer_face
-    // via TopoNamingNamedShape::find(&lchamfer).get(). The field below can
-    // then be removed from AppState.
-    let _ = chamfer_shape; // used in handle_select_chamfer_face
-
     println!("  → chamfer recorded at 0:1:3:2 (distance = {distance})");
     Ok(())
 }
 
-fn handle_select_chamfer_face(state: &mut AppState) -> Result<(), AppError> {
+fn handle_select_chamfer_face(
+    state: &mut AppState,
+    solid_label_path: &str,
+    chamfer_label_path: &str,
+    edge_index: usize,
+) -> Result<(), AppError> {
     // Retrieve the solid and chamfer shapes from the document.
-    let lsolid = state.label_at("0:1:3:1")?;
-    let lchamfer = state.label_at("0:1:3:2")?;
+    let lsolid = state.label_at(solid_label_path)?;
+    let lchamfer = state.label_at(chamfer_label_path)?;
 
     let solid_shape = TopoNamingNamedShape::find(&lsolid)
-        .ok_or(AppError::MissingShape("0:1:3:1".to_string()))?
+        .ok_or(AppError::MissingShape(solid_label_path.to_string()))?
         .get()
-        .ok_or(AppError::MissingShape("0:1:3:1".to_string()))?;
+        .ok_or(AppError::MissingShape(solid_label_path.to_string()))?;
 
     let chamfer_shape = TopoNamingNamedShape::find(&lchamfer)
-        .ok_or(AppError::MissingShape("0:1:3:2".to_string()))?
+        .ok_or(AppError::MissingShape(chamfer_label_path.to_string()))?
         .get()
-        .ok_or(AppError::MissingShape("0:1:3:2".to_string()))?;
+        .ok_or(AppError::MissingShape(chamfer_label_path.to_string()))?;
 
     // Find the chamfer face — the shape generated from the chamfered edge.
     // We re-run the chamfer here to access build_with_history().
     //
-    // TODO(try_from): once OcFace::try_from is bound, the chamfer face
-    // can be retrieved directly from the naming graph without re-running the
-    // operation. The selector's named shape (evolution: Selected) on sketch2/5
-    // holds the face reference after the first select call.
+    // TODO(try_from): handle_chamfer never records the chamfer face's own
+    // provenance (only the modified pre-existing faces), so there's nothing
+    // in the naming graph yet to look this up by. Re-deriving it here by
+    // re-running the operation with the same edge_index is a stand-in until
+    // the solve() cycle replaces both this and the edge_index duplication
+    // with a real lookup. See: todo_toponamingselector_solve.md
     let distance = OcReal::find(&lchamfer)
-        .ok_or(AppError::MissingShape("0:1:3:2 distance".to_string()))?
+        .ok_or(AppError::MissingShape(format!(
+            "{chamfer_label_path} distance"
+        )))?
         .get();
 
     let edge = solid_shape
         .edges()
-        .next()
-        .ok_or(AppError::MissingShape("0:1:3:1 edges".to_string()))?;
+        .nth(edge_index)
+        .ok_or(AppError::MissingShape(format!(
+            "{solid_label_path} edge {edge_index}"
+        )))?;
 
     let mut cb = ChamferBuilder::new(&solid_shape)?;
     cb.add_edge(distance, &edge)?;
@@ -553,14 +557,31 @@ fn handle_select_chamfer_face(state: &mut AppState) -> Result<(), AppError> {
 
 fn dispatch(state: &mut AppState, command: AppCommand) -> Result<(), AppError> {
     match command {
-        AppCommand::AddSketchPoint { tag, x, y, z } => state.add_sketch_point(tag, x, y, z),
+        AppCommand::AddSketchPoint {
+            tag,
+            sketch_tag,
+            x,
+            y,
+            z,
+        } => state.add_sketch_point(tag, sketch_tag, x, y, z),
         AppCommand::AddSketchFace {
             point_paths,
             sketch_tag,
         } => state.add_sketch_face(point_paths, sketch_tag),
-        AppCommand::Extrude { depth } => state.extrude(depth),
-        AppCommand::Chamfer { distance, .. } => handle_chamfer(state, distance),
-        AppCommand::SelectChamferFace => handle_select_chamfer_face(state),
+        AppCommand::Extrude {
+            face_label_path,
+            depth,
+        } => state.extrude(&face_label_path, depth),
+        AppCommand::Chamfer {
+            distance,
+            solid_label_path,
+            edge_index,
+        } => handle_chamfer(state, &solid_label_path, edge_index, distance),
+        AppCommand::SelectChamferFace {
+            solid_label_path,
+            chamfer_label_path,
+            edge_index,
+        } => handle_select_chamfer_face(state, &solid_label_path, &chamfer_label_path, edge_index),
         AppCommand::Undo => state.undo(),
         AppCommand::Redo => state.redo(),
         AppCommand::PrintTree => state.print_tree(),
