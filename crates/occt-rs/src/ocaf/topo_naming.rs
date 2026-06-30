@@ -93,11 +93,11 @@ impl TopoNamingEvolution {
 /// │           TopoNamingNamedShape (Primitive, unit square face)
 /// └── 3 (0:1:3)   body
 ///     └── 1 (0:1:3:1)   solid
-///             TopoNamingNamedShape (Primitive, 1×1×1 prism)
+///             TopoNamingNamedShape (Generated, 1×1×1 prism)
 ///             OcReal "depth" = 1.0
 /// ```
 ///
-/// ```rust,ignore
+/// ```
 /// // Note: this example is incomplete pending OcFace::try_from binding.
 /// // The planes and sketch commands are correct and can be run independently.
 /// # use occt_rs::gp::{OcAx2, OcDir, OcPnt, OcVec};
@@ -211,7 +211,7 @@ impl TopoNamingEvolution {
 /// };
 ///
 /// let ns = TopoNamingNamedShape::find(&solid_label).unwrap();
-/// assert_eq!(ns.evolution(), Some(TopoNamingEvolution::Primitive));
+/// assert_eq!(ns.evolution(), Some(TopoNamingEvolution::Generated));
 /// assert!(ns.get().is_some());
 /// assert!((OcReal::find(&solid_label).unwrap().get() - 1.0).abs() < 1e-12);
 ///
@@ -224,6 +224,15 @@ impl TopoNamingEvolution {
 /// doc.redo().unwrap();
 /// assert!(TopoNamingNamedShape::find(&solid_label).is_some());
 /// assert!((OcReal::find(&solid_label).unwrap().get() - 1.0).abs() < 1e-12);
+///
+/// // A label with no named shape returns None
+/// let empty_label = {
+///     let cmd = doc.begin_command().unwrap();
+///     let l = main.get_or_create_child(&cmd, 99);
+///     cmd.commit().unwrap();
+///     l
+/// };
+/// assert!(TopoNamingNamedShape::find(&empty_label).is_none());
 /// ```
 ///
 /// [`Primitive`]: TopoNamingEvolution::Primitive
