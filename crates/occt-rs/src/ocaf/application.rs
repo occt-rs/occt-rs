@@ -1,14 +1,18 @@
-//! OCAF application wrapper.
+//! Top level application management: Open/Close/Create/etc. documents
 //!
 //! [`OcApplication`] owns a `TDocStd_Application` Handle and is the factory
-//! for [`OcDocument`] instances.
+//! for [`OcDocument`] instances. At the application development level, it can be considered
+//! the prinvcipal means of overall data management. If you have multiple tabs, one for
+//! each project, [`OcApplication`] is what manages the tabs.
 
 use std::marker::PhantomData;
 
 use occt_sys::ffi;
 
 use crate::error::OcctError;
-use crate::topo::document::OcDocument;
+use crate::ocaf::document::OcDocument;
+use crate::ocaf::label::LabelPath;
+use crate::ocaf::OcLabel;
 
 /// An OCAF application — the factory and registry for [`OcDocument`] instances.
 ///
@@ -50,6 +54,13 @@ impl OcApplication {
             ffi::application_new_document(self.inner.pin_mut(), format).map_err(OcctError::from)?;
         Ok(OcDocument::from_ffi(inner))
     }
+
+    /// Returns the number of documents currently registered with this application.
+    ///
+    /// Useful as a test hook to confirm that dropping an [`OcDocument`] deregisters it.
+    pub fn nb_documents(&self) -> i32 {
+        ffi::application_nb_documents(&self.inner)
+    }
 }
 
 impl Default for OcApplication {
@@ -85,18 +96,50 @@ mod tests {
         let doc_a = app.new_document("BinXCAF").unwrap();
         let doc_b = app.new_document("BinXCAF").unwrap();
         // Both documents have valid (non-null) main labels.
-        assert!(!doc_a.main().is_null());
-        assert!(!doc_b.main().is_null());
+        assert!(!doc_a.main().inner.is_null());
+        assert!(!doc_b.main().inner.is_null());
     }
 
     #[test]
-    fn document_outlives_application() {
-        // The document Handle keeps the underlying object alive even after
-        // the application is dropped from the Rust side.
-        let doc = {
-            let mut app = OcApplication::new();
-            app.new_document("BinXCAF").unwrap()
-        };
-        assert!(!doc.main().is_null());
+    fn dropping_document_deregisters_it_from_application() {
+        let mut app = OcApplication::new();
+        assert_eq!(app.nb_documents(), 0);
+        {
+            let _doc = app.new_document("BinXCAF").unwrap();
+            assert_eq!(app.nb_documents(), 1);
+        } // _doc dropped here → Drop calls document_close → deregisters
+        assert_eq!(
+            app.nb_documents(),
+            0,
+            "document leaked: still registered after drop"
+        );
     }
+
+    #[test]
+    fn explicit_close_deregisters_and_drop_is_safe() {
+        let mut app = OcApplication::new();
+        let doc = app.new_document("BinXCAF").unwrap();
+        assert_eq!(app.nb_documents(), 1);
+        doc.close().unwrap();
+        // After explicit close, document is gone from the registry.
+        assert_eq!(app.nb_documents(), 0);
+        // Drop of the now-moved `doc` value already happened in close(); no double-close.
+    }
+}
+/// This label's path from the document root, as a sequence of child tags.
+///
+/// Pure Rust: walks [`father`](OcLabel::father)/[`is_root`](OcLabel::is_root)
+/// up to (but not including) the framework root. [`LabelPath`]'s
+/// `Display` produces the same colon-joined form as
+/// [`entry`](OcLabel::entry).
+pub fn path(label: &OcLabel) -> LabelPath {
+    let mut tags = Vec::new();
+    let mut current = label.clone();
+    while !current.is_root() {
+        tags.push(current.tag());
+        // the !current.is_root() creates an "always has a father" invariant
+        current = current.father().unwrap();
+    }
+    tags.reverse();
+    LabelPath::new(tags)
 }

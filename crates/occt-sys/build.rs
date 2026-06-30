@@ -38,7 +38,7 @@ fn main() {
     // Bridge source files.
     println!("cargo:rerun-if-changed=src/lib.rs");
     println!("cargo:rerun-if-changed=src/gp.rs");
-    println!("cargo:rerun-if-changed=src/topo.rs");
+    println!("cargo:rerun-if-changed=src/sys_topo.rs");
     // C++ headers — one entry per file so incremental rebuilds are precise.
     println!("cargo:rerun-if-changed=include/occt_sys.hxx");
     println!("cargo:rerun-if-changed=include/occt_sys/exception.hxx");
@@ -56,12 +56,18 @@ fn main() {
     println!("cargo:rerun-if-changed=include/occt_sys/ocaf/document.hxx");
     println!("cargo:rerun-if-changed=include/occt_sys/ocaf/application.hxx");
     println!("cargo:rerun-if-changed=include/occt_sys/ocaf/attributes.hxx");
-    // println!("cargo:rerun-if-changed=include/occt_sys/topo/edge_polygon.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/ocaf/attribute_iters.hxx");
+    println!("cargo:rerun-if-changed=include/occt_sys/ocaf/tdata_xtd.hxx");
     println!("cargo:rerun-if-env-changed=OCCT_DIR");
 
     let include_paths = discover_occt();
 
-    cxx_build::bridges(["src/gp.rs", "src/topo.rs"])
+    let mut bridge = cxx_build::bridges(["src/gp.rs", "src/sys_topo.rs"]);
+    // satisfyies the warning 'warning _FORTIFY_SOURCE requires compiling with optimization (-O)'
+    if let Ok("debug") = std::env::var("PROFILE").as_ref().map(|s| s.as_str()) {
+        bridge.flag_if_supported("-O1");
+    }
+    bridge
         .flag_if_supported("-std=c++17")
         .includes(&include_paths)
         .include("include")

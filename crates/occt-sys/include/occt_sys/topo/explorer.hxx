@@ -45,6 +45,11 @@ struct ShapeExplorer {
     // Returns a reference to the current sub-shape.  The reference is valid
     // until next() is called or the explorer is destroyed.
     const TopoDS_Shape& current() const { return inner.Current(); }
+    // Returns an owned copy of the current sub-shape, allowing the caller
+// to advance the explorer without invalidating the returned shape.
+std::unique_ptr<TopoDS_Shape> current_owned() const {
+    return std::make_unique<TopoDS_Shape>(inner.Current());
+}
 };
 
 inline std::unique_ptr<ShapeExplorer> new_shape_explorer(

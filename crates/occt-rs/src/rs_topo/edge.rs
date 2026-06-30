@@ -8,8 +8,8 @@
 
 use crate::error::{OcctError, OcctErrorKind};
 use crate::gp::OcPnt;
-use crate::topo::shape::ShapeKey;
-use crate::topo::{OcShape, OcVertex};
+use crate::rs_topo::shape::ShapeKey;
+use crate::rs_topo::{OcShape, OcVertex};
 use occt_sys::ffi;
 use std::marker::PhantomData;
 
@@ -43,10 +43,9 @@ impl OcEdge {
     pub fn from_vertices(v1: &OcVertex, v2: &OcVertex) -> Result<Self, OcctError> {
         let mut builder = ffi::new_make_edge_builder(v1.as_ffi(), v2.as_ffi());
         if builder.is_done() {
-            Ok(Self {
-                inner: builder.pin_mut().edge(),
-                _not_send: PhantomData,
-            })
+            // Safety: MakeEdgeBuilder::edge() returns make_unique<TopoDS_Edge>
+            // on a completed builder — non-null.
+            Ok(unsafe { Self::from_ffi_unchecked(builder.pin_mut().edge()) })
         } else {
             Err(OcctError {
                 kind: OcctErrorKind::ConstructionError,
@@ -70,22 +69,48 @@ impl OcEdge {
     /// The conversion is a cheap TShape handle reference-count increment;
     /// no geometry is copied.
     pub fn as_shape(&self) -> OcShape {
-        OcShape::from_ffi(ffi::clone_shape(ffi::edge_as_shape(&self.inner)))
+        // Safety: edge_as_shape is a zero-cost upcast; clone_shape is make_unique — non-null.
+        unsafe { OcShape::from_ffi_unchecked(ffi::clone_shape(ffi::edge_as_shape(&self.inner))) }
     }
 
     pub fn start_vertex(&self) -> OcVertex {
-        OcVertex::from_ffi(ffi::edge_start_vertex(&self.inner))
+        // Safety: edge_start_vertex uses TopExp::Vertices on an OcEdge that was
+        // constructed via MakeEdgeBuilder::IsDone() — always has two valid vertices.
+        unsafe { OcVertex::from_ffi_unchecked(ffi::edge_start_vertex(&self.inner)) }
     }
 
     pub fn end_vertex(&self) -> OcVertex {
-        OcVertex::from_ffi(ffi::edge_end_vertex(&self.inner))
+        // Safety: same as start_vertex.
+        unsafe { OcVertex::from_ffi_unchecked(ffi::edge_end_vertex(&self.inner)) }
     }
 
     pub(crate) fn as_ffi(&self) -> &ffi::TopodsEdge {
         &self.inner
     }
 
-    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsEdge>) -> Self {
+    /// Returns `None` if `inner` is a null `UniquePtr` or the `TopoDS_Edge`
+    /// has a null TShape handle (`IsNull()`).
+    #[allow(dead_code)]
+    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopodsEdge>) -> Option<Self> {
+        if inner.is_null() {
+            return None;
+        }
+        if ffi::topods_edge_is_null(inner.as_ref().unwrap()) {
+            return None;
+        }
+        Some(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Constructs an `OcEdge` without null checks.
+    ///
+    /// # Safety
+    ///
+    /// Caller guarantees that `inner` is a non-null `UniquePtr` wrapping a
+    /// `TopoDS_Edge` whose TShape handle is non-null (`!IsNull()`).
+    pub(crate) unsafe fn from_ffi_unchecked(inner: cxx::UniquePtr<ffi::TopodsEdge>) -> Self {
         Self {
             inner,
             _not_send: PhantomData,
@@ -95,10 +120,8 @@ impl OcEdge {
 
 impl Clone for OcEdge {
     fn clone(&self) -> Self {
-        Self {
-            inner: ffi::clone_edge(&self.inner),
-            _not_send: PhantomData,
-        }
+        // Safety: clone_edge is make_unique<TopoDS_Edge>(e) — non-null.
+        unsafe { Self::from_ffi_unchecked(ffi::clone_edge(&self.inner)) }
     }
 }
 

@@ -12,6 +12,9 @@
 #include <TNaming_NamedShape.hxx>
 #include <TNaming_Tool.hxx>
 #include <TopoDS_Shape.hxx>
+#include <TNaming_Selector.hxx>
+#include <TDF_LabelMap.hxx>
+
 
 // ---------------------------------------------------------------------------
 // Handle wrapper for TNaming_NamedShape
@@ -124,4 +127,59 @@ inline std::unique_ptr<TopoDS_Shape> tnaming_tool_original_shape(
 }
 inline std::unique_ptr<TnamingNamedShapeHandle> new_tnaming_named_shape_handle() {
     return std::unique_ptr<TnamingNamedShapeHandle>(new TnamingNamedShapeHandle{});
+}
+
+// ---------------------------------------------------------------------------
+// TNaming_Selector shim
+//
+// TNaming_Selector is a stack-allocated C++ value type owned here by value so
+// cxx can treat it as a heap-allocated opaque type via UniquePtr.
+//
+// Select() writes a TNaming_Naming attribute — must be called inside an open
+// TDF_Transaction (Command).  Solve() re-evaluates the stored description;
+// no transaction required.
+//
+// Solve() takes TDF_LabelMap by const-ref in OCCT; TDF_LabelMap cannot cross
+// the cxx bridge.  An empty map (all labels valid) is constructed here on the
+// C++ side, which is the correct default for unconditional re-evaluation.
+// ---------------------------------------------------------------------------
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_naming___selector.html
+
+struct TnamingSelectorShim {
+    TNaming_Selector inner;
+    explicit TnamingSelectorShim(const TDF_Label& label) : inner(label) {}
+};
+
+inline std::unique_ptr<TnamingSelectorShim>
+new_tnaming_selector(const TdfLabel& label) {
+    return std::unique_ptr<TnamingSelectorShim>(
+        new TnamingSelectorShim(label.inner)
+    );
+}
+
+// Select: non-const — writes TNaming_Naming attribute.
+// Must be called within an open Command; enforced on the Rust side via
+// the &Command<'_> proof-token parameter.
+inline bool tnaming_selector_select(
+    TnamingSelectorShim& sel,
+    const TopoDS_Shape& shape,
+    const TopoDS_Shape& context)
+{
+    return sel.inner.Select(shape, context);
+}
+
+// Solve: re-evaluates selection description against current model.
+// Empty TDF_LabelMap = all labels are valid context for re-evaluation.
+inline bool tnaming_selector_solve(TnamingSelectorShim& sel) {
+    TDF_LabelMap valid;
+    return sel.inner.Solve(valid);
+}
+
+// NamedShape: const — reads the Handle written by Select.
+inline bool tnaming_selector_named_shape(
+    const TnamingSelectorShim& sel,
+    TnamingNamedShapeHandle& out)
+{
+    out.inner = sel.inner.NamedShape();
+    return !out.inner.IsNull();
 }

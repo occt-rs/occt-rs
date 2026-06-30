@@ -6,10 +6,9 @@
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_face.html>
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::gp::OcVec;
-use crate::topo::shape::ShapeKey;
-use crate::topo::{OcShape, OcSolid, OcWire};
-use crate::{OcDir, OcPnt};
+use crate::gp::{OcDir, OcPnt, OcVec};
+use crate::rs_topo::shape::ShapeKey;
+use crate::rs_topo::{OcShape, OcSolid, OcWire};
 use occt_sys::ffi;
 use std::marker::PhantomData;
 
@@ -58,7 +57,9 @@ impl OcFace {
         let mut builder = ffi::new_make_prism_from_face(self.as_ffi(), vec.x, vec.y, vec.z)
             .map_err(OcctError::from)?;
         if builder.is_done() {
-            Ok(OcSolid::from_ffi(builder.pin_mut().solid()))
+            // Safety: MakePrismBuilder::solid() returns make_unique<TopdsSolid>
+            // on a completed builder — non-null.
+            Ok(unsafe { OcSolid::from_ffi_unchecked(builder.pin_mut().solid()) })
         } else {
             Err(OcctError {
                 kind: OcctErrorKind::ConstructionError,
@@ -81,10 +82,9 @@ impl OcFace {
     pub fn from_wire(wire: &OcWire, only_plane: bool) -> Result<Self, OcctError> {
         let mut builder = ffi::new_make_face_from_wire(wire.as_ffi(), only_plane);
         if builder.is_done() {
-            Ok(Self {
-                inner: builder.pin_mut().face(),
-                _not_send: PhantomData,
-            })
+            // Safety: MakeFaceBuilder::face() returns make_unique<TopdsFace>
+            // on a completed builder — non-null.
+            Ok(unsafe { Self::from_ffi_unchecked(builder.pin_mut().face()) })
         } else {
             Err(OcctError {
                 kind: OcctErrorKind::ConstructionError,
@@ -99,7 +99,7 @@ impl OcFace {
     ///
     /// The plane is specified by a point on it (`origin`) and its outward normal
     /// (`normal`).  Using an explicit plane avoids the inference OCCT performs in
-    /// [`from_wire`] and is the preferred constructor when the plane is known.
+    /// [`Self::from_wire`] and is the preferred constructor when the plane is known.
     ///
     /// Returns `Err(ConstructionError)` if:
     /// - `normal` has zero magnitude (caught in the C++ shim)
@@ -122,10 +122,9 @@ impl OcFace {
         )
         .map_err(OcctError::from)?;
         if builder.is_done() {
-            Ok(Self {
-                inner: builder.pin_mut().face(),
-                _not_send: PhantomData,
-            })
+            // Safety: same as from_wire — MakeFaceBuilder::face() on completed
+            // builder is non-null.
+            Ok(unsafe { Self::from_ffi_unchecked(builder.pin_mut().face()) })
         } else {
             Err(OcctError {
                 kind: OcctErrorKind::ConstructionError,
@@ -141,7 +140,10 @@ impl OcFace {
     ///
     /// Calls `BRepTools::OuterWire`.
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_tools.html>
-    pub fn outer_wire(&self) -> OcWire {
+    pub fn outer_wire(&self) -> Option<OcWire> {
+        // BRepTools::OuterWire returns a null-TShape wire when the face has no
+        // outer wire (e.g. open or degenerate face). from_ffi maps that to None.
+
         OcWire::from_ffi(ffi::face_outer_wire(&self.inner))
     }
 
@@ -151,14 +153,38 @@ impl OcFace {
     /// The conversion is a cheap TShape handle reference-count increment;
     /// no geometry is copied.
     pub fn as_shape(&self) -> OcShape {
-        OcShape::from_ffi(ffi::clone_shape(ffi::face_as_shape(&self.inner)))
+        // Safety: face_as_shape is a zero-cost upcast ref; clone_shape is
+        // make_unique<TopoDS_Shape> — non-null. self.inner non-null by invariant.
+        unsafe { OcShape::from_ffi_unchecked(ffi::clone_shape(ffi::face_as_shape(&self.inner))) }
     }
 
     pub(crate) fn as_ffi(&self) -> &ffi::TopdsFace {
         &self.inner
     }
 
-    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopdsFace>) -> Self {
+    /// Returns `None` if `inner` is a null `UniquePtr` or the `TopoDS_Face`
+    /// has a null TShape handle (`IsNull()`).
+    #[allow(dead_code)]
+    pub(crate) fn from_ffi(inner: cxx::UniquePtr<ffi::TopdsFace>) -> Option<Self> {
+        if inner.is_null() {
+            return None;
+        }
+        if ffi::topods_face_is_null(inner.as_ref().unwrap()) {
+            return None;
+        }
+        Some(Self {
+            inner,
+            _not_send: PhantomData,
+        })
+    }
+
+    /// Constructs an `OcFace` without null checks.
+    ///
+    /// # Safety
+    ///
+    /// Caller guarantees that `inner` is a non-null `UniquePtr` wrapping a
+    /// `TopoDS_Face` whose TShape handle is non-null (`!IsNull()`).
+    pub(crate) unsafe fn from_ffi_unchecked(inner: cxx::UniquePtr<ffi::TopdsFace>) -> Self {
         Self {
             inner,
             _not_send: PhantomData,
@@ -168,10 +194,8 @@ impl OcFace {
 
 impl Clone for OcFace {
     fn clone(&self) -> Self {
-        Self {
-            inner: ffi::clone_face(&self.inner),
-            _not_send: PhantomData,
-        }
+        // Safety: clone_face is make_unique<TopoDS_Face>(f) — non-null.
+        unsafe { Self::from_ffi_unchecked(ffi::clone_face(&self.inner)) }
     }
 }
 
@@ -179,7 +203,7 @@ impl Clone for OcFace {
 mod tests {
     use super::*;
     use crate::gp::OcPnt;
-    use crate::topo::OcEdge;
+    use crate::rs_topo::OcEdge;
 
     fn triangle_wire() -> OcWire {
         let edges = vec![
@@ -206,8 +230,8 @@ mod tests {
     fn outer_wire_has_expected_edge_count() {
         let wire = triangle_wire();
         let face = OcFace::from_wire(&wire, true).unwrap();
-        let outer = face.outer_wire();
-        assert_eq!(outer.edges().len(), 3);
+        let outer = face.outer_wire().unwrap();
+        assert_eq!(outer.edges().collect::<Vec<_>>().len(), 3);
     }
 
     #[test]
@@ -215,8 +239,19 @@ mod tests {
         let wire = triangle_wire();
         let face = OcFace::from_wire(&wire, true).unwrap();
         let cloned = face.clone();
-        assert_eq!(face.outer_wire().edges().len(), 3);
-        assert_eq!(cloned.outer_wire().edges().len(), 3);
+        assert_eq!(
+            face.outer_wire().unwrap().edges().collect::<Vec<_>>().len(),
+            3
+        );
+        assert_eq!(
+            cloned
+                .outer_wire()
+                .unwrap()
+                .edges()
+                .collect::<Vec<_>>()
+                .len(),
+            3
+        );
     }
 
     #[test]
@@ -264,7 +299,10 @@ mod tests {
         let origin = OcPnt::new(0.0, 0.0, 0.0);
         let normal = OcDir::new(0.0, 0.0, 1.0).unwrap();
         let face = OcFace::from_wire_on_plane(origin, normal, &wire).unwrap();
-        assert_eq!(face.outer_wire().edges().len(), 3);
+        assert_eq!(
+            face.outer_wire().unwrap().edges().collect::<Vec<_>>().len(),
+            3
+        );
     }
 
     #[test]

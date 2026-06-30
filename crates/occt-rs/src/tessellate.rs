@@ -20,11 +20,6 @@
 //! }
 //! ```
 //!
-//! # Coordinate precision
-//!
-//! OCCT stores all geometry as `f64`.  Tessellation output uses `f32` for triangle
-//! meshes (GPU buffer natural precision).  Edge polylines are returned as `f64`
-//! to preserve the precision of the underlying polygon data.
 //!
 //! # TopLoc_Location
 //!
@@ -50,8 +45,8 @@
 //!   `TopExp_Explorer`                 — <https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html>
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::topo::shape::ShapeKey;
-use crate::topo::OcShape;
+use crate::rs_topo::shape::ShapeKey;
+use crate::rs_topo::OcShape;
 use occt_sys::ffi;
 
 // TopAbs_ShapeEnum constants.
@@ -69,15 +64,16 @@ const TOP_ABS_VERTEX: i32 = 7;
 #[derive(Debug, Clone)]
 pub struct TriMesh {
     /// Interleaved vertex positions: `[x₀, y₀, z₀, x₁, y₁, z₁, …]`.
-    ///
-    /// Length is always a multiple of 3.  `f32` matches typical GPU buffer
-    /// layout; OCCT's internal precision is `f64`.
-    pub vertices: Vec<f32>,
+    pub vertices: Vec<f64>,
 
     /// Triangle vertex indices, 0-based, in groups of three: `[a₀, b₀, c₀, …]`.
     ///
     /// Length is always a multiple of 3.
     pub indices: Vec<u32>,
+    /// Per-node surface normals from the kernel, interleaved [nx₀,ny₀,nz₀,…],
+    /// same length as `vertices`. Empty when the kernel produced none.
+    /// Face-local frame (pre-TopLoc_Location), matching `vertices`.
+    pub normals: Vec<f64>,
 }
 
 /// A tessellated face.
@@ -93,6 +89,13 @@ pub struct TessFace {
     /// These keys correspond to entries in [`TessellationResult::edges`] and
     /// can be used by callers to map face ↔ edge adjacency without re-traversal.
     pub bounding_edge_keys: Vec<ShapeKey>,
+    pub placement: Option<Affine3>,
+    pub reversed: bool,
+}
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(C)]
+pub struct Affine3 {
+    pub cols: [[f64; 3]; 4],
 }
 
 /// A tessellated edge polyline.
@@ -110,8 +113,7 @@ pub struct TessEdge {
 pub struct TessVertex {
     /// Session-scoped identity of the originating `TopoDS_Vertex`.
     pub key: ShapeKey,
-    /// Vertex position in model space.  `f32`; see module-level precision note.
-    pub point: [f32; 3],
+    pub point: [f64; 3],
 }
 
 /// Output of [`compute`].
@@ -181,16 +183,16 @@ pub fn compute(
         let face = ffi::shape_as_face(shape_ref);
 
         let tri = ffi::face_triangulation(&face);
+        let reversed = ffi::face_is_reversed(&face);
         if !tri.is_null() {
             let nb_v = tri.nb_nodes();
             let nb_t = tri.nb_triangles();
 
             let mut vertices = Vec::with_capacity(3 * nb_v as usize);
             for i in 1..=nb_v {
-                // f64 → f32 narrowing: deliberate, see module-level precision note.
-                vertices.push(tri.node_x(i) as f32);
-                vertices.push(tri.node_y(i) as f32);
-                vertices.push(tri.node_z(i) as f32);
+                vertices.push(tri.node_x(i));
+                vertices.push(tri.node_y(i));
+                vertices.push(tri.node_z(i));
             }
 
             let mut indices = Vec::with_capacity(3 * nb_t as usize);
@@ -199,6 +201,25 @@ pub fn compute(
                 indices.push((tri.triangle_n1(i) - 1) as u32);
                 indices.push((tri.triangle_n2(i) - 1) as u32);
                 indices.push((tri.triangle_n3(i) - 1) as u32);
+            }
+            // Surface normals: BRepMesh leaves HasNormals()==false and stores UV
+            // instead; ComputeNormals evaluates the surface at those UV nodes.
+            let mut normals = Vec::new();
+            if ffi::compute_face_normals(&face) && tri.has_normals() {
+                normals.reserve(3 * nb_v as usize);
+                for i in 1..=nb_v {
+                    normals.push(tri.normal_x(i));
+                    normals.push(tri.normal_y(i));
+                    normals.push(tri.normal_z(i));
+                }
+                // ComputeNormals writes surface-natural normals, ignoring face
+                // orientation. OCCT's outward normal for a reversed face is the
+                // surface normal negated — restore that semantic here.
+                if reversed {
+                    for v in normals.iter_mut() {
+                        *v = -*v;
+                    }
+                }
             }
             // Collect the ShapeKeys of edges bounding this face.
             // Uses the same TopExp_Explorer path as the top-level edge pass,
@@ -211,10 +232,45 @@ pub fn compute(
                 bound_exp.pin_mut().next();
             }
 
+            let placement = if tri.placement_is_identity() {
+                None
+            } else {
+                Some(Affine3 {
+                    cols: [
+                        [
+                            tri.placement_value(0),
+                            tri.placement_value(4),
+                            tri.placement_value(8),
+                        ],
+                        [
+                            tri.placement_value(1),
+                            tri.placement_value(5),
+                            tri.placement_value(9),
+                        ],
+                        [
+                            tri.placement_value(2),
+                            tri.placement_value(6),
+                            tri.placement_value(10),
+                        ],
+                        [
+                            tri.placement_value(3),
+                            tri.placement_value(7),
+                            tri.placement_value(11),
+                        ],
+                    ],
+                })
+            };
+
             faces.push(TessFace {
                 key,
-                mesh: TriMesh { vertices, indices },
+                mesh: TriMesh {
+                    vertices,
+                    indices,
+                    normals,
+                },
                 bounding_edge_keys,
+                placement,
+                reversed,
             });
         }
 
@@ -249,9 +305,9 @@ pub fn compute(
         vertices.push(TessVertex {
             key,
             point: [
-                ffi::vertex_pnt_x(&vertex) as f32,
-                ffi::vertex_pnt_y(&vertex) as f32,
-                ffi::vertex_pnt_z(&vertex) as f32,
+                ffi::vertex_pnt_x(&vertex),
+                ffi::vertex_pnt_y(&vertex),
+                ffi::vertex_pnt_z(&vertex),
             ],
         });
         vtx_exp.pin_mut().next();
@@ -301,9 +357,9 @@ fn try_polygon3d(edge: &ffi::TopodsEdge) -> Option<Vec<[f64; 3]>> {
 mod tests {
     use super::*;
     use crate::gp::{OcPnt, OcVec};
-    use crate::topo::{OcEdge, OcFace, OcWire};
+    use crate::rs_topo::{OcEdge, OcFace, OcWire};
 
-    fn triangle_prism() -> crate::topo::OcSolid {
+    fn triangle_prism() -> crate::rs_topo::OcSolid {
         let edges = vec![
             OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
             OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(0.5, 1.0, 0.0)).unwrap(),
@@ -451,5 +507,96 @@ mod tests {
             .count();
         assert_eq!(tri_face_count, 2);
         assert_eq!(rect_face_count, 3);
+    }
+    #[test]
+    fn face_normals_point_outward() {
+        let shape = triangle_prism().as_shape();
+        let result = compute(&shape, 0.1, 0.5).unwrap();
+
+        let place_pt = |f: &TessFace, p: [f64; 3]| -> [f64; 3] {
+            match &f.placement {
+                None => p,
+                Some(a) => {
+                    let m = &a.cols;
+                    [
+                        m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0],
+                        m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][0],
+                        m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2],
+                    ]
+                }
+            }
+        };
+        let place_dir = |f: &TessFace, n: [f64; 3]| -> [f64; 3] {
+            match &f.placement {
+                None => n,
+                Some(a) => {
+                    let m = &a.cols;
+                    [
+                        // rotation block only, no translation
+                        m[0][0] * n[0] + m[1][0] * n[1] + m[2][0] * n[2],
+                        m[0][1] * n[0] + m[1][1] * n[1] + m[2][1] * n[2],
+                        m[0][2] * n[0] + m[1][2] * n[1] + m[2][2] * n[2],
+                    ]
+                }
+            }
+        };
+
+        let mut sum = [0.0; 3];
+        let mut count = 0usize;
+        for f in &result.faces {
+            for i in 0..f.mesh.vertices.len() / 3 {
+                let w = place_pt(
+                    f,
+                    [
+                        f.mesh.vertices[3 * i],
+                        f.mesh.vertices[3 * i + 1],
+                        f.mesh.vertices[3 * i + 2],
+                    ],
+                );
+                sum[0] += w[0];
+                sum[1] += w[1];
+                sum[2] += w[2];
+                count += 1;
+            }
+        }
+        let c = [
+            sum[0] / count as f64,
+            sum[1] / count as f64,
+            sum[2] / count as f64,
+        ];
+
+        for f in &result.faces {
+            assert!(
+                !f.mesh.normals.is_empty(),
+                "face {:?} has no normals",
+                f.key
+            );
+            for i in 0..f.mesh.vertices.len() / 3 {
+                let w = place_pt(
+                    f,
+                    [
+                        f.mesh.vertices[3 * i],
+                        f.mesh.vertices[3 * i + 1],
+                        f.mesh.vertices[3 * i + 2],
+                    ],
+                );
+                let n = place_dir(
+                    f,
+                    [
+                        f.mesh.normals[3 * i],
+                        f.mesh.normals[3 * i + 1],
+                        f.mesh.normals[3 * i + 2],
+                    ],
+                );
+                let out = [w[0] - c[0], w[1] - c[1], w[2] - c[2]];
+                let dot = n[0] * out[0] + n[1] * out[1] + n[2] * out[2];
+                assert!(
+                    dot > 0.0,
+                    "face {:?} node {} inward (dot={dot:+.3})",
+                    f.key,
+                    i
+                );
+            }
+        }
     }
 }

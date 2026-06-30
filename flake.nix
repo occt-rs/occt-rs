@@ -2,21 +2,23 @@
   description = "occt-rs development environment";
   inputs = {
     nixpkgs.url     = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs-occt.url = "github:NixOS/nixpkgs/4bd9165a9165d7b5e33ae57f3eecbcb28fb231c9";
     rust-overlay.url = "github:oxalica/rust-overlay";
     flake-utils.url  = "github:numtide/flake-utils";
   };
-  outputs = { self, nixpkgs, rust-overlay, flake-utils }:
+  outputs = { self, nixpkgs, nixpkgs-occt, rust-overlay, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ (import rust-overlay) ];
         pkgs     = import nixpkgs { inherit system overlays; };
+        pkgs-occt= import inputs.nixpkgs-occt { inherit system; };
         rustToolchain = pkgs.rust-bin.stable.latest.default.override {
           extensions = [ "rust-src" "rust-analyzer" "clippy" "rustfmt" ];
           # No wasm target — this is a native geometry kernel crate.
           # rust-analyzer is included here so all contributors get it via the
           # flake rather than relying on a system or editor-managed install.
         };
-        opencascade = pkgs.opencascade-occt;
+        opencascade = pkgs-occt.opencascade-occt;
       in {
         devShells.default = pkgs.mkShell {
           buildInputs = [
@@ -32,6 +34,7 @@
             pkgs.bacon           # background compile/test/check loop
             pkgs.cargo-nextest   # faster test runner; used in CI
             pkgs.cargo-deny      # licence + advisory auditing; enforces IP hygiene policy
+            pkgs.cargo-format 
             pkgs.clang-tools     # clangd for C++ shim editing (cxx bridge)
 
             # OpenCASCADE — dynamically linked, as required by LGPL and DEVELOPMENT.md

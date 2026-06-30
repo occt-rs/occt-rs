@@ -61,6 +61,13 @@ inline std::unique_ptr<TdfLabel> tdf_label_father(const TdfLabel& l) {
     return std::make_unique<TdfLabel>(TdfLabel{l.inner.Father()});
 }
 
+// TDF_Label::Root() — the root label of the data framework (depth 0).
+// Same shim pattern as Father(): returns a fresh TdfLabel by value.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_d_f___label.html
+inline std::unique_ptr<TdfLabel> tdf_label_root(const TdfLabel& l) {
+    return std::make_unique<TdfLabel>(TdfLabel{l.inner.Root()});
+}
+
 // TDF_Label::FindChild(tag, create):
 //   create=true  — creates the child with this tag if it does not exist.
 //                  Result is never null.
@@ -92,6 +99,14 @@ inline rust::String tdf_label_entry(const TdfLabel& l) {
     TCollection_AsciiString entry;
     TDF_Tool::Entry(l.inner, entry);
     return rust::String(entry.ToCString());
+}
+// TDF_Label::ForgetAllAttributes(clearChildren) — const on TDF_Label,
+// compatible with Transaction & Delta. Forgets all attributes on this
+// label, and on every descendant if clear_children is true.
+// Rust side requires &Command<'_> as a proof token (see
+// OcLabel::forget_all_attributes); not enforced here.
+inline void tdf_label_forget_all_attributes(const TdfLabel& l, bool clear_children) {
+    l.inner.ForgetAllAttributes(clear_children ? Standard_True : Standard_False);
 }
 
 // ── TDF_ChildIterator shim ────────────────────────────────────────────────────

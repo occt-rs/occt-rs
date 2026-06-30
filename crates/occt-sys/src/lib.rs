@@ -2,7 +2,7 @@
 //!
 //! Two bridge modules mirror the `occt-rs` structure:
 //!   - [`gp`]   — geometric primitive materialisers (`gp_Pnt`, `gp_Vec`, …)
-//!   - [`topo`] — topological shape builders and inspectors
+//!   - [`sys_topo`] — topological shape builders and inspectors
 //!
 //! The unified [`ffi`] re-export lets `occt-rs` continue using
 //! `use occt_sys::ffi;` without change.
@@ -12,7 +12,7 @@
 //! See DEVELOPMENT.md for the IP hygiene policy.
 
 pub mod gp;
-pub mod topo;
+pub mod sys_topo;
 
 /// Unified FFI namespace.
 ///
@@ -20,5 +20,5 @@ pub mod topo;
 /// have no overlapping names, so glob re-export is unambiguous.
 pub mod ffi {
     pub use crate::gp::ffi::*;
-    pub use crate::topo::ffi::*;
+    pub use crate::sys_topo::ffi::*;
 }

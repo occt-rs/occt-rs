@@ -43,6 +43,28 @@
 #include <TopoDS_Wire.hxx>
 #include <gp_Trsf.hxx>
 
+// ── Null predicates ───────────────────────────────────────────────────────────
+// TopoDS_Shape::IsNull() returns true when the TShape handle is null.
+// Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___shape.html
+
+inline bool topods_shape_is_null(const TopoDS_Shape& s) {
+    return s.IsNull();
+}
+inline bool topods_face_is_null(const TopoDS_Face& s) {
+    return s.IsNull();
+}
+inline bool topods_edge_is_null(const TopoDS_Edge& s) {
+    return s.IsNull();
+}
+inline bool topods_wire_is_null(const TopoDS_Wire& s) {
+    return s.IsNull();
+}
+inline bool topods_vertex_is_null(const TopoDS_Vertex& s) {
+    return s.IsNull();
+}
+inline bool topods_solid_is_null(const TopoDS_Solid& s) {
+    return s.IsNull();
+}
 // ── Clone ─────────────────────────────────────────────────────────────────────
 
 // Copy-constructs a TopoDS_Shape.  The underlying TShape handle is shared
@@ -87,6 +109,9 @@ inline std::size_t shape_key(const TopoDS_Shape& s) {
         }
     }
     return h;
+}
+inline bool face_is_reversed(const TopoDS_Face& f) {
+    return f.Orientation() == TopAbs_REVERSED;
 }
 
 // Returns the raw TShape pointer as a size_t.
