@@ -199,6 +199,34 @@ impl Clone for OcFace {
     }
 }
 
+impl TryFrom<&OcShape> for OcFace {
+    type Error = OcctError;
+
+    /// Shape -> Face downcast
+    ///
+    /// Calls `TopoDS::Face(const TopoDS_Shape&)` under the hood.
+    /// Reference: <https://dev.opencascade.org/doc/refman/html/class_topo_d_s.html>
+    ///
+    /// Fails with `DomainError` if `shape` is not actually a face.
+    fn try_from(shape: &OcShape) -> Result<Self, Self::Error> {
+        // `shape_type` is needed before the actual FFI call because the underlying CPP api throws
+        // an exception if the wrong object is provided. We avoid exceptions by guaranteeing at the
+        // setting up a pre-condition at the first FFI boundary crossing that precludes a CPP
+        // exception being thrown
+        let actual = shape.shape_type();
+        if actual != crate::rs_topo::ShapeType::Face {
+            return Err(OcctError {
+                kind: OcctErrorKind::DomainError,
+                message: format!("expected TopAbs_FACE, found {actual:?}"),
+            });
+        }
+        // Safety: shape_type() confirmed TopAbs_FACE above, so shape_as_face's
+        // precondition holds and TopoDS::Face cannot throw here. shape_as_face
+        // wraps the result in make_unique<TopoDS_Face> => non-null.
+        Ok(unsafe { Self::from_ffi_unchecked(ffi::shape_as_face(shape.as_ffi())) })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -284,6 +312,20 @@ mod tests {
         let wire = triangle_wire();
         let face = OcFace::from_wire(&wire, true).unwrap();
         let _shape = face.as_shape(); // must not panic
+    }
+
+    #[test]
+    fn try_from_matching_type_succeeds() {
+        let face = OcFace::from_wire(&triangle_wire(), true).unwrap();
+        let shape = face.as_shape();
+        assert!(OcFace::try_from(&shape).is_ok());
+    }
+
+    #[test]
+    fn try_from_mismatched_type_fails() {
+        let wire_shape = triangle_wire().as_shape();
+        let err = OcFace::try_from(&wire_shape).unwrap_err();
+        assert_eq!(err.kind, crate::error::OcctErrorKind::DomainError);
     }
     #[test]
     fn from_wire_on_plane_xy_succeeds() {

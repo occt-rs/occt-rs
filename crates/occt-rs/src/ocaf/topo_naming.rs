@@ -98,7 +98,7 @@ impl TopoNamingEvolution {
 /// ```
 ///
 /// ```rust,ignore
-/// // Note: this example is incomplete pending OcFace::from_shape binding.
+/// // Note: this example is incomplete pending OcFace::try_from binding.
 /// // The planes and sketch commands are correct and can be run independently.
 /// # use occt_rs::gp::{OcAx2, OcDir, OcPnt, OcVec};
 /// # use occt_rs::ocaf::OcApplication;
@@ -199,7 +199,7 @@ impl TopoNamingEvolution {
 ///     let sketch = main.get_or_create_child(&cmd, 2);
 ///     let lface  = sketch.get_or_create_child(&cmd, 5);
 ///     let face_shape = TopoNamingNamedShape::find(&lface).unwrap().get().unwrap();
-///     let face = OcFace::from_shape(&face_shape).unwrap();
+///     let face = OcFace::try_from(&face_shape).unwrap();
 ///
 ///     // do the extrude to make the solid
 ///     let solid = face.extrude(OcVec::new(0.0, 0.0, depth.get())).unwrap();
@@ -410,7 +410,7 @@ impl TopoNamingNamedShape {
 /// ```rust,ignore
 /// // NOTE: this example is incomplete pending two missing bindings:
 /// //
-/// // 1. OcFace::from_shape — needed to retrieve the face from the document
+/// // 1. OcFace::try_from — needed to retrieve the face from the document
 /// //    and rebuild from new parameters after a sketch edit.
 /// //
 /// // 2. The solve() demonstration requires a full rebuild cycle:
