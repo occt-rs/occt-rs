@@ -10,3 +10,4 @@ authors    = [ "Ben Pieters-Hawke" ]
 [dependencies]
 cxx        = "1.0.194"
 occt-sys = { path = "../occt-sys" }
+uuid = "1.23.4"

@@ -32,3 +32,4 @@
 #include "ocaf/attribute_iters.hxx"
 #include "ocaf/tnaming.hxx"
 #include "ocaf/tdata_xtd.hxx"
+#include "ocaf/function.hxx"

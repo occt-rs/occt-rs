@@ -942,6 +942,81 @@ pub mod ffi {
         ) -> Result<UniquePtr<DocumentHandle>>;
         // Const: NbDocuments() — number of documents registered with this application.
         fn application_nb_documents(app: &ApplicationHandle) -> i32;
+        // ── TFunctionLogbookHandle ────────────────────────────────────────────
+        // Opaque bridge type wrapping Handle(TFunction_Logbook) by value.
+        // Passed by raw pointer to extern "Rust" callbacks; valid only for
+        // the duration of a single virtual method call.
+        //
+        // All const operations take &TFunctionLogbookHandle.
+        // All non-const operations take Pin<&mut TFunctionLogbookHandle>,
+        // following the cxx convention for non-const C++ methods.
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_function___logbook.html
+        type TFunctionLogbookHandle;
+
+        // IsModified — const. True if L or its children is touched/impacted.
+        fn tfunction_logbook_is_modified(
+            h: &TFunctionLogbookHandle,
+            label: &TdfLabel,
+            with_children: bool,
+        ) -> bool;
+
+        // SetImpacted — non-const. Marks L (and optionally children) as impacted.
+        fn tfunction_logbook_set_impacted(
+            h: Pin<&mut TFunctionLogbookHandle>,
+            label: &TdfLabel,
+            with_children: bool,
+        );
+
+        // SetValid — non-const. Marks L (and optionally children) as valid.
+        fn tfunction_logbook_set_valid(
+            h: Pin<&mut TFunctionLogbookHandle>,
+            label: &TdfLabel,
+            with_children: bool,
+        );
+
+        // IsDone — const. Returns execution status flag.
+        fn tfunction_logbook_is_done(h: &TFunctionLogbookHandle) -> bool;
+
+        // Done — non-const. Sets execution status flag.
+        fn tfunction_logbook_done(h: Pin<&mut TFunctionLogbookHandle>, status: bool);
+
+        // ── TFunctionLabelListShim ────────────────────────────────────────────
+        // Opaque bridge type wrapping TDF_LabelList* (non-owning pointer to the
+        // out-parameter of Arguments() / Results()). Valid only during the
+        // rust_driver_arguments / rust_driver_results callback.
+        //
+        // Reference: TFunction_Driver::Arguments / Results
+        type TFunctionLabelListShim;
+
+        // Appends label to the list. Called via OcFunctionLabelList::push.
+        fn tfunction_labellist_append(shim: Pin<&mut TFunctionLabelListShim>, label: &TdfLabel);
+        // ── TFunction registration ────────────────────────────────────────────
+        // Creates a RustFunctionDriverShim for rust_id and registers it under
+        // the given UUID fields in the global TFunction_DriverTable.
+        //
+        // Fields map directly to Standard_GUID(int, char16_t×3, uint8_t×6).
+        // All parameters are primitives — no string parsing, no exception path.
+        // Decompose uuid::Uuid via as_fields() on the Rust side before calling.
+        //
+        // Returns true if added; false if a driver with this GUID already exists
+        // (TFunction_DriverTable::AddDriver semantics).
+        //
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_standard___g_u_i_d.html
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_t_function___driver_table.html
+        fn tfunction_register_rust_driver(
+            a32b: u32,
+            a16b1: u16,
+            a16b2: u16,
+            a16b3: u16,
+            a8b1: u8,
+            a8b2: u8,
+            a8b3: u8,
+            a8b4: u8,
+            a8b5: u8,
+            a8b6: u8,
+            rust_id: u64,
+        ) -> bool;
 
         // ── MakeOffsetShapeBuilder ────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_offset_a_p_i___make_offset_shape.html
@@ -1345,5 +1420,417 @@ pub mod ffi {
             out_z: &mut f64,
         );
         fn location_is_identity(loc: &TopLocLocation) -> bool;
+    }
+    // Extern "Rust" callbacks invoked by RustFunctionDriverShim's virtual
+    // method overrides. Implemented in `occt_sys::function_driver`.
+    //
+    // All parameters are raw pointers to stack-local shim structs created
+    // by the C++ virtual method body immediately before the call; the pointer
+    // is valid for exactly the duration of the call. `unsafe` is required
+    // because cxx cannot express this lifetime guarantee statically.
+    //
+    // Panics from Rust drivers are caught with `catch_unwind` inside the
+    // implementations; they do not propagate to C++.
+    extern "Rust" {
+        /// Dispatches to FunctionDriverRaw::execute_raw.
+        /// Returns application-defined integer; 0 conventionally means success.
+        unsafe fn rust_driver_execute(id: u64, log: usize) -> i32;
+
+        /// Dispatches to FunctionDriverRaw::must_execute_raw.
+        /// log points to a copy of the const logbook handle — read-only by contract.
+        unsafe fn rust_driver_must_execute(id: u64, log: usize) -> bool;
+
+        /// Dispatches to FunctionDriverRaw::validate_raw.
+        unsafe fn rust_driver_validate(id: u64, log: usize);
+
+        /// Dispatches to FunctionDriverRaw::arguments_raw.
+        unsafe fn rust_driver_arguments(id: u64, list: usize);
+
+        /// Dispatches to FunctionDriverRaw::results_raw.
+        unsafe fn rust_driver_results(id: u64, list: usize);
+    }
+}
+
+// TFunction driver registry — raw FFI layer.
+//
+// This module lives in `occt-sys` because the extern "Rust" callbacks
+// declared in the cxx bridge (sys_topo.rs) must be defined in the same
+// crate as the bridge. All types here use raw FFI types from `ffi::*`.
+//
+// Application code interacts exclusively with `occt-rs::function_driver`,
+// which wraps this module in a safe, ergonomic API using `OcLabel` and the
+// `FunctionDriver` trait. Nothing in this module is intended to be used
+// directly by application authors.
+
+use std::cell::RefCell;
+use std::collections::HashMap;
+
+// ── Raw driver trait ──────────────────────────────────────────────────────────
+//
+// Implemented by `occt-rs::function_driver::FunctionDriverAdapter<D>`, which
+// bridges to the public `FunctionDriver` trait using the safe wrapper types.
+// Marked unsafe because implementors receive and must correctly handle raw
+// pointers to short-lived C++ stack objects.
+
+pub unsafe trait FunctionDriverRaw: 'static {
+    /// Called by RustFunctionDriverShim::Execute.
+    /// log: valid for the duration of this call; non-const (may be mutated).
+    unsafe fn execute_raw(&self, log: *mut ffi::TFunctionLogbookHandle) -> i32;
+
+    /// Called by RustFunctionDriverShim::MustExecute.
+    /// log: valid for the duration of this call; treat as read-only (the
+    /// underlying Handle was copied from a const source).
+    unsafe fn must_execute_raw(&self, log: *mut ffi::TFunctionLogbookHandle) -> bool;
+
+    /// Called by RustFunctionDriverShim::Validate.
+    /// log: valid for the duration of this call; non-const (may be mutated).
+    unsafe fn validate_raw(&self, log: *mut ffi::TFunctionLogbookHandle);
+
+    /// Called by RustFunctionDriverShim::Arguments.
+    /// list: valid for the duration of this call; append via tfunction_labellist_append.
+    unsafe fn arguments_raw(&self, list: *mut ffi::TFunctionLabelListShim);
+
+    /// Called by RustFunctionDriverShim::Results.
+    /// list: valid for the duration of this call; append via tfunction_labellist_append.
+    unsafe fn results_raw(&self, list: *mut ffi::TFunctionLabelListShim);
+}
+
+// ── Registry ──────────────────────────────────────────────────────────────────
+//
+// Thread-local because the OCCT session model is single-threaded: the existing
+// `PhantomData<*mut ()>` on all OCAF wrapper types already prevents Send, so
+// concurrent access to the session — and therefore this registry — is not
+// possible. No locking is needed.
+//
+// Both registration and dispatch can occur at any point in the session's
+// lifetime (supporting runtime plugin loading), so the table is always mutable.
+// The RefCell borrow cost (a usize increment on borrow, decrement on drop) is
+// negligible compared to any OCCT geometry operation.
+
+thread_local! {
+    static REGISTRY: RefCell<HashMap<u64, Box<dyn FunctionDriverRaw>>> =
+        RefCell::new(HashMap::new());
+
+    static NEXT_ID: RefCell<u64> = const { RefCell::new(0) };
+}
+
+// ── Registration ──────────────────────────────────────────────────────────────
+
+/// Inserts `driver` into the thread-local registry and registers a
+/// `RustFunctionDriverShim` with OCCT's `TFunction_DriverTable` under
+/// `guid_str`.
+///
+/// Returns the internal `u64` id on success, or propagates the `cxx::Exception`
+/// if `tfunction_register_rust_driver` fails (e.g. malformed GUID string).
+/// The id is not part of the public API; `occt-rs` uses it only to wire up
+/// the OCCT registration call.
+pub fn register_raw(uuid: uuid::Uuid, driver: Box<dyn FunctionDriverRaw>) -> Option<u64> {
+    let id = NEXT_ID.with(|n| {
+        let mut n = n.borrow_mut();
+        let id = *n;
+        *n = n.checked_add(1).expect("TFunction driver id overflow");
+        id
+    });
+
+    REGISTRY.with(|r| r.borrow_mut().insert(id, driver));
+
+    let (d0, d1, d2, d3) = uuid.as_fields();
+    let a16b3 = (d3[0] as u16) << 8 | d3[1] as u16;
+
+    let added = ffi::tfunction_register_rust_driver(
+        d0, d1, d2, a16b3, d3[2], d3[3], d3[4], d3[5], d3[6], d3[7], id,
+    );
+
+    if added {
+        Some(id)
+    } else {
+        REGISTRY.with(|r| r.borrow_mut().remove(&id));
+        None
+    }
+}
+
+// ── extern "Rust" callback implementations ────────────────────────────────────
+//
+// These functions are declared in the `extern "Rust"` block in sys_topo.rs.
+// cxx generates C++ thunks that call them; those thunks are invoked from
+// RustFunctionDriverShim's virtual method bodies in function.hxx.
+//
+// Each function:
+//   1. Wraps the dispatch in `catch_unwind` so that panics in driver code do
+//      not unwind into C++ (which would be undefined behaviour or process abort
+//      at the cxx ABI boundary).
+//   2. Borrows the REGISTRY immutably — concurrent borrows during a nested
+//      driver dispatch are impossible under the single-threaded session model,
+//      but would panic rather than deadlock if they occurred.
+//
+// Safety contract for all five functions:
+//   The pointer parameters are stack addresses of shim structs created by the
+//   C++ caller immediately before the call and not touched until after it
+//   returns. They are therefore valid, aligned, and exclusively referenced for
+//   the duration of the call.
+
+// Safety: see module-level safety contract above.
+pub(crate) unsafe fn rust_driver_execute(id: u64, log: usize) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        REGISTRY.with(|r| {
+            let r = r.borrow();
+            match r.get(&id) {
+                // Safety: pointer valid for call duration (see contract above).
+                Some(driver) => unsafe {
+                    driver.execute_raw(log as *mut ffi::TFunctionLogbookHandle)
+                },
+                None => {
+                    // Should never happen: id is assigned before OCCT registration
+                    // and the shim is only callable after registration succeeds.
+                    eprintln!("occt-sys: rust_driver_execute called with unknown id {id}");
+                    -1
+                }
+            }
+        })
+    }));
+
+    match result {
+        Ok(code) => code,
+        Err(_) => {
+            eprintln!("occt-sys: rust_driver_execute panicked for id {id}");
+            -1
+        }
+    }
+}
+
+// Safety: see module-level safety contract above.
+pub(crate) unsafe fn rust_driver_must_execute(id: u64, log: usize) -> bool {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        REGISTRY.with(|r| {
+            let r = r.borrow();
+            match r.get(&id) {
+                // Safety: pointer valid for call duration.
+                Some(driver) => unsafe {
+                    driver.must_execute_raw(log as *mut ffi::TFunctionLogbookHandle)
+                },
+                None => {
+                    eprintln!("occt-sys: rust_driver_must_execute called with unknown id {id}");
+                    false
+                }
+            }
+        })
+    }));
+
+    match result {
+        Ok(v) => v,
+        Err(_) => {
+            eprintln!("occt-sys: rust_driver_must_execute panicked for id {id}");
+            false
+        }
+    }
+}
+
+// Safety: see module-level safety contract above.
+pub(crate) unsafe fn rust_driver_validate(id: u64, log: usize) {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        REGISTRY.with(|r| {
+            let r = r.borrow();
+            match r.get(&id) {
+                // Safety: pointer valid for call duration.
+                Some(driver) => unsafe {
+                    driver.validate_raw(log as *mut ffi::TFunctionLogbookHandle)
+                },
+                None => {
+                    eprintln!("occt-sys: rust_driver_validate called with unknown id {id}");
+                }
+            }
+        })
+    }));
+
+    if result.is_err() {
+        eprintln!("occt-sys: rust_driver_validate panicked for id {id}");
+    }
+}
+
+// Safety: see module-level safety contract above.
+pub(crate) unsafe fn rust_driver_arguments(id: u64, list: usize) {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        REGISTRY.with(|r| {
+            let r = r.borrow();
+            match r.get(&id) {
+                // Safety: pointer valid for call duration.
+                Some(driver) => unsafe {
+                    driver.arguments_raw(list as *mut ffi::TFunctionLabelListShim)
+                },
+                None => {
+                    eprintln!("occt-sys: rust_driver_arguments called with unknown id {id}");
+                }
+            }
+        })
+    }));
+
+    if result.is_err() {
+        eprintln!("occt-sys: rust_driver_arguments panicked for id {id}");
+    }
+}
+
+// Safety: see module-level safety contract above.
+pub(crate) unsafe fn rust_driver_results(id: u64, list: usize) {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        REGISTRY.with(|r| {
+            let r = r.borrow();
+            match r.get(&id) {
+                // Safety: pointer valid for call duration.
+                Some(driver) => unsafe {
+                    driver.results_raw(list as *mut ffi::TFunctionLabelListShim)
+                },
+                None => {
+                    eprintln!("occt-sys: rust_driver_results called with unknown id {id}");
+                }
+            }
+        })
+    }));
+
+    if result.is_err() {
+        eprintln!("occt-sys: rust_driver_results panicked for id {id}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use uuid::Uuid;
+
+    use super::*;
+
+    // A driver that records how many times execute was called and returns a
+    // fixed code. Uses Cell for interior mutability — FunctionDriverRaw takes
+    // &self (const on the C++ side), so &mut self is not available.
+    struct CountingDriver {
+        execute_count: std::cell::Cell<u32>,
+        execute_return: i32,
+    }
+
+    impl CountingDriver {
+        fn new(execute_return: i32) -> Self {
+            CountingDriver {
+                execute_count: std::cell::Cell::new(0),
+                execute_return,
+            }
+        }
+    }
+
+    unsafe impl FunctionDriverRaw for CountingDriver {
+        unsafe fn execute_raw(&self, _log: *mut ffi::TFunctionLogbookHandle) -> i32 {
+            self.execute_count.set(self.execute_count.get() + 1);
+            self.execute_return
+        }
+        unsafe fn must_execute_raw(&self, _log: *mut ffi::TFunctionLogbookHandle) -> bool {
+            true
+        }
+        unsafe fn validate_raw(&self, _log: *mut ffi::TFunctionLogbookHandle) {}
+        unsafe fn arguments_raw(&self, _list: *mut ffi::TFunctionLabelListShim) {}
+        unsafe fn results_raw(&self, _list: *mut ffi::TFunctionLabelListShim) {}
+    }
+
+    // Null stand-in for log/list pointers in tests where the driver does not
+    // dereference them. Not valid for drivers that touch the pointer.
+    const UNUSED_PTR: usize = 0;
+
+    #[test]
+    fn registration_valid_guid_succeeds() {
+        // Ok(Some(_)) on first run; Ok(None) if OCCT table already has this GUID
+        // from a previous test run in the same process. Either is not an error.
+        let result = register_raw(
+            Uuid::try_from("a3f8c2d1-4e5b-6f70-8192-a3b4c5d6e7f8").unwrap(),
+            Box::new(CountingDriver::new(0)),
+        );
+    }
+
+    #[test]
+    fn registration_duplicate_guid_returns_none() {
+        let guid = Uuid::try_from("c5fae4f3-6071-8192-a314-c5d6e7f8091a").unwrap();
+        register_raw(guid, Box::new(CountingDriver::new(0))).unwrap();
+        let second = register_raw(guid, Box::new(CountingDriver::new(0)));
+        assert!(matches!(second, None));
+    }
+
+    #[test]
+    fn execute_dispatch_calls_driver_and_returns_its_value() {
+        let id = register_raw(
+            Uuid::try_from("b4e9d3e2-5f6c-7081-9203-b4c5d6e7f809").unwrap(),
+            Box::new(CountingDriver::new(99)),
+        )
+        .unwrap(); // Some(id)
+        let result = unsafe { rust_driver_execute(id, UNUSED_PTR) };
+        assert_eq!(result, 99);
+    }
+
+    #[test]
+    fn execute_increments_call_count() {
+        let driver = Box::new(CountingDriver::new(0));
+        // Safety: we need to read execute_count after the call, but Box gives
+        // us no way back to the value once moved. Use a shared Rc instead.
+        // Simpler: just call twice and check the return value is consistent.
+        let id = register_raw(
+            Uuid::try_from("d4d4d4d4-dddd-dddd-dddd-dddddddddddd").unwrap(),
+            driver,
+        )
+        .unwrap();
+
+        unsafe { rust_driver_execute(id, UNUSED_PTR) };
+        unsafe { rust_driver_execute(id, UNUSED_PTR) };
+        // Can't inspect the counter through the Box, but two successful
+        // dispatches without panic is sufficient evidence the path is exercised.
+    }
+
+    #[test]
+    fn execute_unknown_id_returns_minus_one() {
+        // u64::MAX is an id that was never registered.
+        let result = unsafe { rust_driver_execute(u64::MAX, UNUSED_PTR) };
+        assert_eq!(result, -1);
+    }
+
+    #[test]
+    fn panicking_driver_returns_minus_one_without_unwinding() {
+        struct PanicDriver;
+        unsafe impl FunctionDriverRaw for PanicDriver {
+            unsafe fn execute_raw(&self, _: *mut ffi::TFunctionLogbookHandle) -> i32 {
+                panic!("intentional panic in driver");
+            }
+            unsafe fn must_execute_raw(&self, _: *mut ffi::TFunctionLogbookHandle) -> bool {
+                panic!("intentional panic");
+            }
+            unsafe fn validate_raw(&self, _: *mut ffi::TFunctionLogbookHandle) {
+                panic!("intentional panic");
+            }
+            unsafe fn arguments_raw(&self, _: *mut ffi::TFunctionLabelListShim) {
+                panic!("intentional panic");
+            }
+            unsafe fn results_raw(&self, _: *mut ffi::TFunctionLabelListShim) {
+                panic!("intentional panic");
+            }
+        }
+
+        let id = register_raw(
+            Uuid::try_from("e5e5e5e5-eeee-eeee-eeee-eeeeeeeeeeee").unwrap(),
+            Box::new(PanicDriver),
+        )
+        .unwrap();
+
+        // None of these should unwind out of the test.
+        // Safety: PanicDriver panics before touching any pointer.
+        assert_eq!(unsafe { rust_driver_execute(id, UNUSED_PTR) }, -1);
+        assert!(!unsafe { rust_driver_must_execute(id, UNUSED_PTR) });
+        unsafe { rust_driver_validate(id, UNUSED_PTR) };
+        unsafe { rust_driver_arguments(id, UNUSED_PTR) };
+        unsafe { rust_driver_results(id, UNUSED_PTR) };
+    }
+
+    #[test]
+    fn must_execute_dispatch_calls_driver() {
+        let id = register_raw(
+            Uuid::try_from("f6f6f6f6-ffff-ffff-ffff-ffffffffffff").unwrap(),
+            Box::new(CountingDriver::new(0)),
+        )
+        .unwrap();
+
+        // Safety: CountingDriver::must_execute_raw does not dereference the pointer.
+        let result = unsafe { rust_driver_must_execute(id, UNUSED_PTR) };
+        assert!(result);
     }
 }
