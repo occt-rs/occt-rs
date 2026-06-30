@@ -359,7 +359,7 @@ mod tests {
     use crate::gp::{OcPnt, OcVec};
     use crate::rs_topo::{OcEdge, OcFace, OcWire};
 
-    fn triangle_prism() -> crate::rs_topo::OcSolid {
+    fn triangle_prism() -> crate::rs_topo::OcShape {
         let edges = vec![
             OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
             OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(0.5, 1.0, 0.0)).unwrap(),
@@ -372,7 +372,7 @@ mod tests {
 
     #[test]
     fn prism_has_five_faces() {
-        let shape = triangle_prism().as_shape();
+        let shape = triangle_prism();
         let result = compute(&shape, 0.1, 0.5).unwrap();
         // A triangular prism has 2 triangular + 3 rectangular faces.
         assert_eq!(result.faces.len(), 5);
@@ -381,7 +381,7 @@ mod tests {
     #[test]
     #[ignore = "edge polylines require PolygonOnTriangulation, not Polygon3D; deferred to assembly-import PR"]
     fn prism_has_nine_edges() {
-        let shape = triangle_prism().as_shape();
+        let shape = triangle_prism();
         let result = compute(&shape, 0.1, 0.5).unwrap();
         // A triangular prism has 9 edges: 3 on bottom, 3 on top, 3 vertical.
         assert_eq!(
@@ -394,7 +394,7 @@ mod tests {
 
     #[test]
     fn all_edges_have_points() {
-        let shape = triangle_prism().as_shape();
+        let shape = triangle_prism();
         let result = compute(&shape, 0.1, 0.5).unwrap();
         for edge in &result.edges {
             assert!(!edge.points.is_empty(), "edge {:?} has no points", edge.key);
@@ -403,7 +403,7 @@ mod tests {
 
     #[test]
     fn edge_keys_are_distinct() {
-        let shape = triangle_prism().as_shape();
+        let shape = triangle_prism();
         let result = compute(&shape, 0.1, 0.5).unwrap();
         let mut keys: Vec<usize> = result.edges.iter().map(|e| e.key.0).collect();
         keys.sort_unstable();
@@ -417,7 +417,7 @@ mod tests {
 
     #[test]
     fn all_faces_non_empty() {
-        let shape = triangle_prism().as_shape();
+        let shape = triangle_prism();
         let result = compute(&shape, 0.1, 0.5).unwrap();
         for f in &result.faces {
             assert!(
@@ -437,7 +437,7 @@ mod tests {
 
     #[test]
     fn face_keys_are_distinct() {
-        let shape = triangle_prism().as_shape();
+        let shape = triangle_prism();
         let result = compute(&shape, 0.1, 0.5).unwrap();
         let mut keys: Vec<usize> = result.faces.iter().map(|f| f.key.0).collect();
         keys.sort_unstable();
@@ -447,7 +447,7 @@ mod tests {
 
     #[test]
     fn vertices_nonempty() {
-        let shape = triangle_prism().as_shape();
+        let shape = triangle_prism();
         let result = compute(&shape, 0.1, 0.5).unwrap();
         // A triangular prism has 6 vertices; TopExp_Explorer may return duplicates.
         assert!(result.vertices.len() >= 6);
@@ -469,7 +469,7 @@ mod tests {
     }
     #[test]
     fn top_level_edges_are_subset_of_face_bounding_keys() {
-        let shape = triangle_prism().as_shape();
+        let shape = triangle_prism();
         let result = compute(&shape, 0.1, 0.5).unwrap();
 
         // Collect every edge key that appears as a face boundary.
@@ -491,7 +491,7 @@ mod tests {
     }
     #[test]
     fn triangular_prism_face_edge_counts() {
-        let shape = triangle_prism().as_shape();
+        let shape = triangle_prism();
         let result = compute(&shape, 0.1, 0.5).unwrap();
 
         // Triangular prism: 2 triangular faces (3 edges each) + 3 rectangular faces (4 edges each).
@@ -510,7 +510,7 @@ mod tests {
     }
     #[test]
     fn face_normals_point_outward() {
-        let shape = triangle_prism().as_shape();
+        let shape = triangle_prism();
         let result = compute(&shape, 0.1, 0.5).unwrap();
 
         let place_pt = |f: &TessFace, p: [f64; 3]| -> [f64; 3] {

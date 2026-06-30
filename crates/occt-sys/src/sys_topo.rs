@@ -1179,7 +1179,7 @@ pub mod ffi {
             vz: f64,
         ) -> Result<UniquePtr<MakePrismBuilder>>;
         fn is_done(self: &MakePrismBuilder) -> bool;
-        fn solid(self: Pin<&mut MakePrismBuilder>) -> UniquePtr<TopdsSolid>;
+        fn shape(self: Pin<&mut MakePrismBuilder>) -> UniquePtr<TopodsShape>;
 
         // ── TopoDS_Shape ──────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___shape.html

@@ -269,8 +269,7 @@ mod integration_sketch_extrude {
             let lsolid = body.get_or_create_child(&cmd, 1);
 
             let face = make_square_face();
-            let solid = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
-            let solid_shape = solid.as_shape();
+            let solid_shape = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
 
             let mut builder = TopoNamingBuilder::new(&lsolid);
             builder.primitive(&solid_shape);

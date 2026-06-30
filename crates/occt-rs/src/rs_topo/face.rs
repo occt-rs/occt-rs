@@ -8,7 +8,7 @@
 use crate::error::{OcctError, OcctErrorKind};
 use crate::gp::{OcDir, OcPnt, OcVec};
 use crate::rs_topo::shape::ShapeKey;
-use crate::rs_topo::{OcShape, OcSolid, OcWire};
+use crate::rs_topo::{OcShape, OcWire};
 use occt_sys::ffi;
 use std::marker::PhantomData;
 
@@ -28,7 +28,9 @@ pub struct OcFace {
 
 impl std::fmt::Debug for OcFace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OcFace").finish_non_exhaustive()
+        f.debug_struct("OcFace")
+            .field("outer_wire", &self.outer_wire())
+            .finish_non_exhaustive()
     }
 }
 
@@ -40,7 +42,7 @@ impl OcFace {
     pub fn shape_key(&self) -> ShapeKey {
         ShapeKey(ffi::shape_key(ffi::face_as_shape(&self.inner)))
     }
-    /// Extrudes this face along `vec` to produce a solid.
+    /// Extrudes this face along `vec`, returning the resulting shape.
     ///
     /// Calls `BRepPrimAPI_MakePrism(face, vec)`.
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_prim_a_p_i___make_prism.html>
@@ -53,13 +55,13 @@ impl OcFace {
     /// `BRepPrimAPI_MakePrism` exposes `Modified`, `Generated`, and
     /// `IsDeleted` for shape history queries.  History access is not yet
     /// bound — if you need it, hold on to the builder (work in progress).
-    pub fn extrude(&self, vec: OcVec) -> Result<OcSolid, OcctError> {
+    pub fn extrude(&self, vec: OcVec) -> Result<OcShape, OcctError> {
         let mut builder = ffi::new_make_prism_from_face(self.as_ffi(), vec.x, vec.y, vec.z)
             .map_err(OcctError::from)?;
         if builder.is_done() {
-            // Safety: MakePrismBuilder::solid() returns make_unique<TopdsSolid>
+            // Safety: MakePrismBuilder::shape() returns make_unique<TopoDS_Shape>
             // on a completed builder — non-null.
-            Ok(unsafe { OcSolid::from_ffi_unchecked(builder.pin_mut().solid()) })
+            Ok(unsafe { OcShape::from_ffi_unchecked(builder.pin_mut().shape()) })
         } else {
             Err(OcctError {
                 kind: OcctErrorKind::ConstructionError,
@@ -199,6 +201,34 @@ impl Clone for OcFace {
     }
 }
 
+impl TryFrom<&OcShape> for OcFace {
+    type Error = OcctError;
+
+    /// Shape -> Face downcast
+    ///
+    /// Calls `TopoDS::Face(const TopoDS_Shape&)` under the hood.
+    /// Reference: <https://dev.opencascade.org/doc/refman/html/class_topo_d_s.html>
+    ///
+    /// Fails with `DomainError` if `shape` is not actually a face.
+    fn try_from(shape: &OcShape) -> Result<Self, Self::Error> {
+        // `shape_type` is needed before the actual FFI call because the underlying CPP api throws
+        // an exception if the wrong object is provided. We avoid exceptions by guaranteeing at the
+        // setting up a pre-condition at the first FFI boundary crossing that precludes a CPP
+        // exception being thrown
+        let actual = shape.shape_type();
+        if actual != crate::rs_topo::ShapeType::Face {
+            return Err(OcctError {
+                kind: OcctErrorKind::DomainError,
+                message: format!("expected TopAbs_FACE, found {actual:?}"),
+            });
+        }
+        // Safety: shape_type() confirmed TopAbs_FACE above, so shape_as_face's
+        // precondition holds and TopoDS::Face cannot throw here. shape_as_face
+        // wraps the result in make_unique<TopoDS_Face> => non-null.
+        Ok(unsafe { Self::from_ffi_unchecked(ffi::shape_as_face(shape.as_ffi())) })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -284,6 +314,20 @@ mod tests {
         let wire = triangle_wire();
         let face = OcFace::from_wire(&wire, true).unwrap();
         let _shape = face.as_shape(); // must not panic
+    }
+
+    #[test]
+    fn try_from_matching_type_succeeds() {
+        let face = OcFace::from_wire(&triangle_wire(), true).unwrap();
+        let shape = face.as_shape();
+        assert!(OcFace::try_from(&shape).is_ok());
+    }
+
+    #[test]
+    fn try_from_mismatched_type_fails() {
+        let wire_shape = triangle_wire().as_shape();
+        let err = OcFace::try_from(&wire_shape).unwrap_err();
+        assert_eq!(err.kind, crate::error::OcctErrorKind::DomainError);
     }
     #[test]
     fn from_wire_on_plane_xy_succeeds() {

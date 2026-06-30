@@ -5,6 +5,7 @@
 //!
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___make_vertex.html>
 
+use crate::error::{OcctError, OcctErrorKind};
 use crate::gp::OcPnt;
 use crate::rs_topo::OcShape;
 use occt_sys::ffi;
@@ -22,6 +23,14 @@ use std::marker::PhantomData;
 pub struct OcVertex {
     inner: cxx::UniquePtr<ffi::TopodsVertex>,
     _not_send: PhantomData<*mut ()>,
+}
+
+impl std::fmt::Debug for OcVertex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcVertex")
+            .field("pnt", &self.pnt())
+            .finish_non_exhaustive()
+    }
 }
 
 impl OcVertex {
@@ -92,6 +101,35 @@ impl Clone for OcVertex {
     }
 }
 
+impl TryFrom<&OcShape> for OcVertex {
+    type Error = OcctError;
+
+    /// Shape -> Vertex downcast
+    ///
+    /// Calls `TopoDS::Vertex(const TopoDS_Shape&)`.
+    /// Reference: <https://dev.opencascade.org/doc/refman/html/class_topo_d_s.html>
+    ///
+    /// Fails with `DomainError` if `shape` is not actually a vertex.
+    fn try_from(shape: &OcShape) -> Result<Self, Self::Error> {
+        // `shape_type` is needed before the actual FFI call because the underlying CPP api throws
+        // an exception if the wrong object is provided. We avoid exceptions by guaranteeing at the
+        // setting up a pre-condition at the first FFI boundary crossing that precludes a CPP
+        // exception being thrown
+        let actual = shape.shape_type();
+        if actual != crate::rs_topo::ShapeType::Vertex {
+            return Err(OcctError {
+                kind: OcctErrorKind::DomainError,
+                message: format!("expected TopAbs_VERTEX, found {actual:?}"),
+            });
+        }
+        // Safety: shape_type() confirmed TopAbs_VERTEX above, so
+        // shape_as_vertex's precondition holds and TopoDS::Vertex cannot
+        // throw here. shape_as_vertex wraps the result in
+        // make_unique<TopoDS_Vertex> — non-null.
+        Ok(unsafe { Self::from_ffi_unchecked(ffi::shape_as_vertex(shape.as_ffi())) })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,5 +161,22 @@ mod tests {
         let p = OcPnt::new(1.0, 2.0, 3.0);
         let v = OcVertex::from_pnt(&p);
         let _shape = v.as_shape();
+    }
+
+    #[test]
+    fn try_from_matching_type_succeeds() {
+        let v = OcVertex::from_pnt(&OcPnt::new(1.0, 2.0, 3.0));
+        let shape = v.as_shape();
+        assert!(OcVertex::try_from(&shape).is_ok());
+    }
+
+    #[test]
+    fn try_from_mismatched_type_fails() {
+        let e =
+            crate::rs_topo::OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0))
+                .unwrap();
+        let shape = e.as_shape();
+        let err = OcVertex::try_from(&shape).unwrap_err();
+        assert_eq!(err.kind, crate::error::OcctErrorKind::DomainError);
     }
 }

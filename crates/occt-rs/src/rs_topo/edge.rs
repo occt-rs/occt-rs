@@ -29,7 +29,10 @@ pub struct OcEdge {
 
 impl std::fmt::Debug for OcEdge {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OcEdge").finish_non_exhaustive()
+        f.debug_struct("OcEdge")
+            .field("start", &self.start_vertex().pnt())
+            .field("end", &self.end_vertex().pnt())
+            .finish_non_exhaustive()
     }
 }
 
@@ -125,6 +128,34 @@ impl Clone for OcEdge {
     }
 }
 
+impl TryFrom<&OcShape> for OcEdge {
+    type Error = OcctError;
+
+    /// Shape -> Edge downcast
+    ///
+    /// Calls `TopoDS::Edge(const TopoDS_Shape&)` under the hood.
+    /// Reference: <https://dev.opencascade.org/doc/refman/html/class_topo_d_s.html>
+    ///
+    /// Fails with `DomainError` if `shape` is not actually an edge.
+    fn try_from(shape: &OcShape) -> Result<Self, Self::Error> {
+        // `shape_type` is needed before the actual FFI call because the underlying CPP api throws
+        // an exception if the wrong object is provided. We avoid exceptions by guaranteeing at the
+        // setting up a pre-condition at the first FFI boundary crossing that precludes a CPP
+        // exception being thrown
+        let actual = shape.shape_type();
+        if actual != crate::rs_topo::ShapeType::Edge {
+            return Err(OcctError {
+                kind: OcctErrorKind::DomainError,
+                message: format!("expected TopAbs_EDGE, found {actual:?}"),
+            });
+        }
+        // Safety: shape_type() confirmed TopAbs_EDGE above, so shape_as_edge's
+        // precondition holds and TopoDS::Edge cannot throw here. shape_as_edge
+        // wraps the result in make_unique<TopoDS_Edge> => non-null.
+        Ok(unsafe { Self::from_ffi_unchecked(ffi::shape_as_edge(shape.as_ffi())) })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,5 +190,20 @@ mod tests {
     fn as_shape_widens() {
         let e = OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap();
         let _shape = e.as_shape();
+    }
+
+    #[test]
+    fn try_from_matching_type_succeeds() {
+        let e = OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+        let shape = e.as_shape();
+        assert!(OcEdge::try_from(&shape).is_ok());
+    }
+
+    #[test]
+    fn try_from_mismatched_type_fails() {
+        let v = OcVertex::from_pnt(&OcPnt::new(0.0, 0.0, 0.0));
+        let shape = v.as_shape();
+        let err = OcEdge::try_from(&shape).unwrap_err();
+        assert_eq!(err.kind, crate::error::OcctErrorKind::DomainError);
     }
 }

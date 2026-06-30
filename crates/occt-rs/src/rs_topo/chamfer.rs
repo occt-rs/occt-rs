@@ -69,9 +69,8 @@ use crate::rs_topo::{BuiltWithHistory, HistoryProvider, OcEdge, OcFace, OcShape}
 ///     OcEdge::from_pnts(OcPnt::new(1.0, 1.0, 0.0), OcPnt::new(0.0, 1.0, 0.0)).unwrap(),
 ///     OcEdge::from_pnts(OcPnt::new(0.0, 1.0, 0.0), OcPnt::new(0.0, 0.0, 0.0)).unwrap(),
 /// ]).unwrap();
-/// let solid = OcFace::from_wire(&wire, true).unwrap()
+/// let solid_shape = OcFace::from_wire(&wire, true).unwrap()
 ///     .extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
-/// let solid_shape = solid.as_shape();
 ///
 /// let (solid_label, pre_faces) = {
 ///     let cmd = doc.begin_command().unwrap();

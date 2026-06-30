@@ -60,10 +60,10 @@
 //! ## Known gaps
 //!
 //! The parametric rebuild cycle — editing a sketch point and having the solid,
-//! chamfer, and selector all update — requires `OcFace::from_shape` to retrieve
+//! chamfer, and selector all update — requires `OcFace::try_from` to retrieve
 //! the face shape from the document and pass it to `extrude()`. Until that
 //! binding is added, the rebuild step is present as commented-out code with
-//! inline explanation. Search for `TODO(from_shape)` to find all affected sites.
+//! inline explanation. Search for `TODO(try_from)` to find all affected sites.
 
 use occt_rs::gp::{OcAx2, OcDir, OcPnt, OcVec};
 use occt_rs::ocaf::attributes::OcReal;
@@ -114,8 +114,8 @@ fn main() -> Result<(), AppError> {
         AppCommand::Extrude { depth: 1.0 },
         AppCommand::Chamfer {
             distance: 0.05,
-            solid_label_path: "0:1:3:1".to_string(),
-            edge_index: 0, // user clicked the first edge — in a real app this is a pick result
+            _solid_label_path: "0:1:3:1".to_string(),
+            _edge_index: 0, // user clicked the first edge — in a real app this is a pick result
         },
         AppCommand::SelectChamferFace,
         AppCommand::PrintTree,
@@ -163,7 +163,7 @@ impl From<occt_rs::error::OcctError> for AppError {
 }
 
 struct AppState {
-    app: OcApplication,
+    _app: OcApplication,
     doc: OcDocument,
 }
 
@@ -171,7 +171,7 @@ impl AppState {
     fn new() -> Result<Self, AppError> {
         let mut app = OcApplication::new();
         let doc = app.new_document("BinXCAF")?;
-        let mut res = Self { app, doc };
+        let mut res = Self { _app: app, doc };
         res.add_base_planes()?;
         Ok(res)
     }
@@ -302,22 +302,22 @@ impl AppState {
     }
 
     fn extrude(&mut self, depth: f64) -> Result<(), AppError> {
-        // TODO(from_shape): In a complete implementation, the face would be
+        // TODO(try_from): In a complete implementation, the face would be
         // retrieved from the document via:
         //
         //   let lface = state.label_at("0:1:2:5")?;
         //   let face_shape = TopoNamingNamedShape::find(&lface)
         //       .ok_or(AppError::MissingShape("0:1:2:5"))?.get()
         //       .ok_or(AppError::MissingShape("0:1:2:5"))?;
-        //   let face = OcFace::from_shape(&face_shape)?;  // not yet bound
+        //   let face = OcFace::try_from(&face_shape)?;
         //   let solid = face.extrude(OcVec::new(0.0, 0.0, depth))?;
         //
         // This is the parametric link: the extrude depends on whatever shape
         // the sketch label currently holds. Editing a sketch point and re-running
         // this handler produces a new solid from the updated face.
         //
-        // Until OcFace::from_shape is bound, we reconstruct the face from the
-        // point coordinates as a workaround.
+        // TODO(try_from): now that OcFace::try_from is bound, the point coordinates as a workaround should be
+        // addressed
 
         let pt_a = self.label_at("0:1:2:1")?;
         let pt_b = self.label_at("0:1:2:2")?;
@@ -336,7 +336,7 @@ impl AppState {
             OcEdge::from_pnts(a, b)?,
         ])?;
         let face = OcFace::from_wire(&wire, true)?;
-        let solid = face.extrude(OcVec::new(0.0, 0.0, depth))?;
+        let solid_shape = face.extrude(OcVec::new(0.0, 0.0, depth))?;
 
         let main = self.doc.main();
         let cmd = self.doc.begin_command()?;
@@ -345,10 +345,10 @@ impl AppState {
             .get_or_create_child(&cmd, 1);
 
         // Store the depth first — the authoritative parameter.
-        // When OcFace::from_shape is available, this value drives the extrusion
+        // When OcFace::try_from is available, this value drives the extrusion
         // directly: `face.extrude(OcVec::new(0.0, 0.0, depth_attr.get()))`.
         OcReal::set(&cmd, &lsolid, depth)?;
-        cmd.name_builder(&lsolid).primitive(&solid.as_shape());
+        cmd.name_builder(&lsolid).primitive(&solid_shape);
 
         cmd.commit()?;
         println!("  → solid recorded at 0:1:3:1 (depth = {depth})");
@@ -416,8 +416,8 @@ enum AppCommand {
     /// Chamfer one edge of the solid by `distance`.
     Chamfer {
         distance: f64,
-        solid_label_path: String,
-        edge_index: usize, // or a ShapeKey, once that's exposed publicly
+        _solid_label_path: String,
+        _edge_index: usize, // or a ShapeKey, once that's exposed publicly
     },
     /// Record a stable reference to the chamfer face for the second sketch.
     SelectChamferFace,
@@ -470,7 +470,7 @@ fn handle_chamfer(state: &mut AppState, distance: f64) -> Result<(), AppError> {
     cmd.commit()?;
 
     // Store the chamfer shape for the selector step.
-    // TODO(from_shape): once OcFace::from_shape is bound, the chamfer shape
+    // TODO(try_from): once OcFace::try_from is bound, the chamfer shape
     // can be retrieved from the document directly in handle_select_chamfer_face
     // via TopoNamingNamedShape::find(&lchamfer).get(). The field below can
     // then be removed from AppState.
@@ -498,7 +498,7 @@ fn handle_select_chamfer_face(state: &mut AppState) -> Result<(), AppError> {
     // Find the chamfer face — the shape generated from the chamfered edge.
     // We re-run the chamfer here to access build_with_history().
     //
-    // TODO(from_shape): once OcFace::from_shape is bound, the chamfer face
+    // TODO(try_from): once OcFace::try_from is bound, the chamfer face
     // can be retrieved directly from the naming graph without re-running the
     // operation. The selector's named shape (evolution: Selected) on sketch2/5
     // holds the face reference after the first select call.
@@ -530,12 +530,12 @@ fn handle_select_chamfer_face(state: &mut AppState) -> Result<(), AppError> {
 
     cmd.commit()?;
 
-    // TODO(from_shape): the full rebuild + solve() cycle belongs here.
+    // TODO(try_from): the full rebuild + solve() cycle belongs here.
     // After a sketch edit, the workflow is:
     //
     //   1. Edit sketch point (new OcPointAttr::record_shape on sketch/2/1)
     //   2. Retrieve face from sketch/2/5 via TopoNamingNamedShape::get()
-    //      and OcFace::from_shape()                    ← not yet bound
+    //      and OcFace::try_from()                    ← ~~not yet bound~~ not yet put to use
     //   3. Rebuild solid: face.extrude(OcVec::new(0.0, 0.0, depth))
     //   4. Re-apply chamfer on new solid
     //   5. Re-record all modified faces with TopoNamingBuilder::modified
@@ -559,7 +559,7 @@ fn dispatch(state: &mut AppState, command: AppCommand) -> Result<(), AppError> {
             sketch_tag,
         } => state.add_sketch_face(point_paths, sketch_tag),
         AppCommand::Extrude { depth } => state.extrude(depth),
-        AppCommand::Chamfer { distance, solid_label_path, edge_index } => handle_chamfer(state, distance),
+        AppCommand::Chamfer { distance, .. } => handle_chamfer(state, distance),
         AppCommand::SelectChamferFace => handle_select_chamfer_face(state),
         AppCommand::Undo => state.undo(),
         AppCommand::Redo => state.redo(),

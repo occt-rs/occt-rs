@@ -296,9 +296,8 @@ mod tests {
         ];
         let wire = OcWire::from_edges(&edges).unwrap();
         let face = OcFace::from_wire(&wire, true).unwrap();
-        let solid = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
-        let shape = solid.as_shape();
-        assert_eq!(shape.faces().collect::<Vec<_>>().len(), 5);
+        let solid_shape = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
+        assert_eq!(solid_shape.faces().collect::<Vec<_>>().len(), 5);
     }
 
     #[test]
@@ -323,14 +322,14 @@ mod tests {
         ];
         let wire = OcWire::from_edges(&edges).unwrap();
         let face = OcFace::from_wire(&wire, true).unwrap();
-        let solid = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
+        let solid_shape = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
         // TopExp_Explorer visits each edge once per adjacent face, so a prism's
         // 9 edges appear 18 times (each edge bounds exactly 2 faces).
-        assert_eq!(solid.as_shape().edges().collect::<Vec<_>>().len(), 18);
+        assert_eq!(solid_shape.edges().collect::<Vec<_>>().len(), 18);
     }
     // A 1×1 square face in the XY plane, offset by `x_offset` on X,
     // extruded 1 unit along Z to produce a unit box.
-    fn box_solid(x_offset: f64) -> crate::rs_topo::OcSolid {
+    fn box_solid(x_offset: f64) -> crate::rs_topo::OcShape {
         let x0 = x_offset;
         let x1 = x_offset + 1.0;
         let edges = vec![
@@ -347,8 +346,8 @@ mod tests {
     #[test]
     fn fuse_overlapping_solids_succeeds() {
         // Box A: x 0..1, Box B: x 0.5..1.5 — they overlap in x 0.5..1.
-        let a = box_solid(0.0).as_shape();
-        let b = box_solid(0.5).as_shape();
+        let a = box_solid(0.0);
+        let b = box_solid(0.5);
         let result = a.oc_fuse(&b);
         assert!(
             result.is_ok(),
@@ -359,8 +358,8 @@ mod tests {
 
     #[test]
     fn fused_shape_tessellates_with_faces() {
-        let a = box_solid(0.0).as_shape();
-        let b = box_solid(0.5).as_shape();
+        let a = box_solid(0.0);
+        let b = box_solid(0.5);
         let fused = a.oc_fuse(&b).unwrap();
         let tess = crate::tessellate::compute(&fused, 0.1, 0.5)
             .expect("tessellation of fused shape should not fail");
@@ -374,8 +373,8 @@ mod tests {
     fn fuse_is_not_identity_of_either_input() {
         // The fused bounding box spans both inputs.
         // Tessellate vertex x-coords should exceed x=1.0, proving B was included.
-        let a = box_solid(0.0).as_shape();
-        let b = box_solid(0.5).as_shape();
+        let a = box_solid(0.0);
+        let b = box_solid(0.5);
         let fused = a.oc_fuse(&b).unwrap();
         let tess = crate::tessellate::compute(&fused, 0.1, 0.5).unwrap();
         let max_x = tess
@@ -390,14 +389,14 @@ mod tests {
     }
     #[test]
     fn shape_type_of_solid_is_solid() {
-        let s = box_solid(0.0).as_shape();
+        let s = box_solid(0.0);
         assert_eq!(s.shape_type(), ShapeType::Solid);
     }
     #[test]
     fn cut_overlapping_solids_succeeds() {
         // Box A: x 0..1, Box B: x 0.5..1.5 — A minus B should leave x 0..0.5 region.
-        let a = box_solid(0.0).as_shape();
-        let b = box_solid(0.5).as_shape();
+        let a = box_solid(0.0);
+        let b = box_solid(0.5);
         let result = a.oc_cut(&b);
         assert!(
             result.is_ok(),
@@ -408,8 +407,8 @@ mod tests {
 
     #[test]
     fn cut_disjoint_solids_returns_argument_unchanged() {
-        let a = box_solid(0.0).as_shape();
-        let b = box_solid(10.0).as_shape();
+        let a = box_solid(0.0);
+        let b = box_solid(10.0);
         let result = a.oc_cut(&b);
         assert!(
             result.is_ok(),
@@ -428,8 +427,8 @@ mod tests {
     #[test]
     fn cut_is_noncommutative() {
         // A.cut(B) and B.cut(A) should produce geometrically distinct results.
-        let a = box_solid(0.0).as_shape();
-        let b = box_solid(0.5).as_shape();
+        let a = box_solid(0.0);
+        let b = box_solid(0.5);
         let a_minus_b = a.oc_cut(&b).unwrap();
         let b_minus_a = b.oc_cut(&a).unwrap();
         let tess_ab = crate::tessellate::compute(&a_minus_b, 0.1, 0.5).unwrap();
@@ -458,8 +457,8 @@ mod tests {
 
     #[test]
     fn common_overlapping_solids_succeeds() {
-        let a = box_solid(0.0).as_shape();
-        let b = box_solid(0.5).as_shape();
+        let a = box_solid(0.0);
+        let b = box_solid(0.5);
         let result = a.oc_common(&b);
         assert!(
             result.is_ok(),
@@ -471,8 +470,8 @@ mod tests {
     #[test]
     fn common_overlap_region_is_correct() {
         // Intersection of x 0..1 and x 0.5..1.5 should be x 0.5..1.
-        let a = box_solid(0.0).as_shape();
-        let b = box_solid(0.5).as_shape();
+        let a = box_solid(0.0);
+        let b = box_solid(0.5);
         let common = a.oc_common(&b).unwrap();
         let tess = crate::tessellate::compute(&common, 0.1, 0.5).unwrap();
         let min_x = tess
@@ -497,8 +496,8 @@ mod tests {
 
     #[test]
     fn common_disjoint_solids_returns_no_intersection() {
-        let a = box_solid(0.0).as_shape();
-        let b = box_solid(10.0).as_shape();
+        let a = box_solid(0.0);
+        let b = box_solid(10.0);
         let result = a.oc_common(&b);
         assert!(
             result.is_ok(),
@@ -513,7 +512,7 @@ mod tests {
     }
     #[test]
     fn translated_shape_moves_vertices() {
-        let s = box_solid(0.0).as_shape();
+        let s = box_solid(0.0);
         let trsf = crate::gp::OcTrsf::from_translation(OcVec::new(5.0, 0.0, 0.0));
         let moved = s.transformed(&trsf).unwrap();
         let tess = crate::tessellate::compute(&moved, 0.1, 0.5).unwrap();
@@ -528,7 +527,7 @@ mod tests {
     #[test]
     fn transformed_is_independent_of_source() {
         // Verify copy=true: the source shape's vertices are unaffected.
-        let s = box_solid(0.0).as_shape();
+        let s = box_solid(0.0);
         let trsf = crate::gp::OcTrsf::from_translation(OcVec::new(10.0, 0.0, 0.0));
         let _moved = s.transformed(&trsf).unwrap();
         // Tessellate the original — it must still sit at x=0..1.
@@ -547,7 +546,7 @@ mod tests {
     #[test]
     fn scale_applied_via_transformed() {
         // Uniform scale by 2 about origin: box 0..1 should become 0..2.
-        let s = box_solid(0.0).as_shape();
+        let s = box_solid(0.0);
         let trsf = crate::gp::OcTrsf::from_scale(OcPnt::origin(), 2.0);
         let scaled = s.transformed(&trsf).unwrap();
         let tess = crate::tessellate::compute(&scaled, 0.1, 0.5).unwrap();
@@ -563,7 +562,7 @@ mod tests {
     }
     #[test]
     fn fillet_box_edges_succeeds() {
-        let s = box_solid(0.0).as_shape();
+        let s = box_solid(0.0);
         let edges = s.edges();
         // Deduplicate by ShapeKey — edges() returns each edge once per adjacent face.
         let mut seen = std::collections::HashSet::new();
@@ -575,7 +574,7 @@ mod tests {
     #[test]
     fn fillet_builder_add_then_build() {
         use crate::rs_topo::FilletBuilder;
-        let s = box_solid(0.0).as_shape();
+        let s = box_solid(0.0);
         let edges = s.edges();
         let mut seen = std::collections::HashSet::new();
         let unique_edges: Vec<_> = edges.filter(|e| seen.insert(e.shape_key())).collect();
@@ -589,7 +588,7 @@ mod tests {
 
     #[test]
     fn fillet_result_tessellates() {
-        let s = box_solid(0.0).as_shape();
+        let s = box_solid(0.0);
         let edges = s.edges();
         let mut seen = std::collections::HashSet::new();
         let unique_edges: Vec<_> = edges.filter(|e| seen.insert(e.shape_key())).collect();
@@ -610,7 +609,7 @@ mod tests {
 
     #[test]
     fn chamfer_box_edges_succeeds() {
-        let s = box_solid(0.0).as_shape();
+        let s = box_solid(0.0);
         let edges = unique_edges(&s);
         let result = s.chamfer(&edges.iter().map(|e| (0.05, e)).collect::<Vec<_>>());
         assert!(result.is_ok(), "chamfer failed: {:?}", result.err());
@@ -619,7 +618,7 @@ mod tests {
     #[test]
     fn chamfer_builder_symmetric() {
         use crate::rs_topo::ChamferBuilder;
-        let s = box_solid(0.0).as_shape();
+        let s = box_solid(0.0);
         let edges = unique_edges(&s);
         let mut builder = ChamferBuilder::new(&s).unwrap();
         for e in &edges {
@@ -630,7 +629,7 @@ mod tests {
 
     #[test]
     fn chamfer_result_tessellates() {
-        let s = box_solid(0.0).as_shape();
+        let s = box_solid(0.0);
         let edges = unique_edges(&s);
         let chamfered = s
             .chamfer(&edges.iter().map(|e| (0.05, e)).collect::<Vec<_>>())
@@ -640,7 +639,7 @@ mod tests {
     }
     #[test]
     fn offset_shape_outward_expands_bounds() {
-        let s = box_solid(0.0).as_shape();
+        let s = box_solid(0.0);
         let expanded = s.offset_shape(0.1).unwrap();
         let tess = crate::tessellate::compute(&expanded, 0.05, 0.5).unwrap();
         let max_x = tess
@@ -657,7 +656,7 @@ mod tests {
     #[test]
     fn thick_solid_one_face_removed() {
         // Box 0..1. Remove the top face (max Z), hollow inward by -0.1.
-        let s = box_solid(0.0).as_shape();
+        let s = box_solid(0.0);
         // Find the face with highest Z centroid — that's the top.
         let top_face = s
             .faces()
@@ -684,7 +683,7 @@ mod tests {
 
     #[test]
     fn thick_solid_result_tessellates() {
-        let s = box_solid(0.0).as_shape();
+        let s = box_solid(0.0);
         let top_face = s
             .faces()
             .into_iter()
@@ -712,8 +711,8 @@ mod tests {
     fn fuse_disjoint_solids_returns_ok_compound() {
         // Box A: x 0..1, Box B: x 10..11 — disjoint.
         // OCCT returns a Compound containing both; this must be Ok, not Err.
-        let a = box_solid(0.0).as_shape();
-        let b = box_solid(10.0).as_shape();
+        let a = box_solid(0.0);
+        let b = box_solid(10.0);
         let result = a.oc_fuse(&b);
         assert!(
             result.is_ok(),

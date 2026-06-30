@@ -13,6 +13,12 @@ pub struct OcWire {
     _not_send: PhantomData<*mut ()>,
 }
 
+impl std::fmt::Debug for OcWire {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcWire").finish_non_exhaustive()
+    }
+}
+
 impl OcWire {
     pub fn edges(&self) -> impl Iterator<Item = OcEdge> {
         WireEdgeIter::new(ffi::new_wire_edge_explorer(&self.inner))
@@ -84,6 +90,34 @@ impl Clone for OcWire {
     }
 }
 
+impl TryFrom<&OcShape> for OcWire {
+    type Error = OcctError;
+
+    /// Shape -> Wire downcast
+    ///
+    /// Calls `TopoDS::Wire(const TopoDS_Shape&)`.
+    /// Reference: <https://dev.opencascade.org/doc/refman/html/class_topo_d_s.html>
+    ///
+    /// Fails with `DomainError` if `shape` is not actually a wire.
+    fn try_from(shape: &OcShape) -> Result<Self, Self::Error> {
+        // `shape_type` is needed before the actual FFI call because the underlying CPP api throws
+        // an exception if the wrong object is provided. We avoid exceptions by guaranteeing at the
+        // setting up a pre-condition at the first FFI boundary crossing that precludes a CPP
+        // exception being thrown
+        let actual = shape.shape_type();
+        if actual != crate::rs_topo::ShapeType::Wire {
+            return Err(OcctError {
+                kind: OcctErrorKind::DomainError,
+                message: format!("expected TopAbs_WIRE, found {actual:?}"),
+            });
+        }
+        // Safety: shape_type() confirmed TopAbs_WIRE above, so shape_as_wire's
+        // precondition holds and TopoDS::Wire cannot throw here. shape_as_wire
+        // wraps the result in make_unique<TopoDS_Wire> — non-null.
+        Ok(unsafe { Self::from_ffi_unchecked(ffi::shape_as_wire(shape.as_ffi())) })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,5 +166,25 @@ mod tests {
         ];
         let wire = OcWire::from_edges(&edges).unwrap();
         let _shape = wire.as_shape();
+    }
+
+    #[test]
+    fn try_from_matching_type_succeeds() {
+        let edges = vec![
+            OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
+            OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(0.5, 1.0, 0.0)).unwrap(),
+            OcEdge::from_pnts(OcPnt::new(0.5, 1.0, 0.0), OcPnt::new(0.0, 0.0, 0.0)).unwrap(),
+        ];
+        let wire = OcWire::from_edges(&edges).unwrap();
+        let shape = wire.as_shape();
+        assert!(OcWire::try_from(&shape).is_ok());
+    }
+
+    #[test]
+    fn try_from_mismatched_type_fails() {
+        let e = OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+        let shape = e.as_shape();
+        let err = OcWire::try_from(&shape).unwrap_err();
+        assert_eq!(err.kind, crate::error::OcctErrorKind::DomainError);
     }
 }

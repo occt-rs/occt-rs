@@ -93,12 +93,12 @@ impl TopoNamingEvolution {
 /// │           TopoNamingNamedShape (Primitive, unit square face)
 /// └── 3 (0:1:3)   body
 ///     └── 1 (0:1:3:1)   solid
-///             TopoNamingNamedShape (Primitive, 1×1×1 prism)
+///             TopoNamingNamedShape (Generated, 1×1×1 prism)
 ///             OcReal "depth" = 1.0
 /// ```
 ///
-/// ```rust,ignore
-/// // Note: this example is incomplete pending OcFace::from_shape binding.
+/// ```
+/// // Note: this example is incomplete pending OcFace::try_from binding.
 /// // The planes and sketch commands are correct and can be run independently.
 /// # use occt_rs::gp::{OcAx2, OcDir, OcPnt, OcVec};
 /// # use occt_rs::ocaf::OcApplication;
@@ -199,19 +199,19 @@ impl TopoNamingEvolution {
 ///     let sketch = main.get_or_create_child(&cmd, 2);
 ///     let lface  = sketch.get_or_create_child(&cmd, 5);
 ///     let face_shape = TopoNamingNamedShape::find(&lface).unwrap().get().unwrap();
-///     let face = OcFace::from_shape(&face_shape).unwrap();
+///     let face = OcFace::try_from(&face_shape).unwrap();
 ///
 ///     // do the extrude to make the solid
-///     let solid = face.extrude(OcVec::new(0.0, 0.0, depth.get())).unwrap();
+///     let extrude_shape = face.extrude(OcVec::new(0.0, 0.0, depth.get())).unwrap();
 ///
-///     cmd.name_builder(&lsolid).generated(&face_shape, &solid.as_shape());
+///     cmd.name_builder(&lsolid).generated(&face_shape, &extrude_shape);
 ///
 ///     cmd.commit().unwrap();
 ///     lsolid
 /// };
 ///
 /// let ns = TopoNamingNamedShape::find(&solid_label).unwrap();
-/// assert_eq!(ns.evolution(), Some(TopoNamingEvolution::Primitive));
+/// assert_eq!(ns.evolution(), Some(TopoNamingEvolution::Generated));
 /// assert!(ns.get().is_some());
 /// assert!((OcReal::find(&solid_label).unwrap().get() - 1.0).abs() < 1e-12);
 ///
@@ -224,6 +224,15 @@ impl TopoNamingEvolution {
 /// doc.redo().unwrap();
 /// assert!(TopoNamingNamedShape::find(&solid_label).is_some());
 /// assert!((OcReal::find(&solid_label).unwrap().get() - 1.0).abs() < 1e-12);
+///
+/// // A label with no named shape returns None
+/// let empty_label = {
+///     let cmd = doc.begin_command().unwrap();
+///     let l = main.get_or_create_child(&cmd, 99);
+///     cmd.commit().unwrap();
+///     l
+/// };
+/// assert!(TopoNamingNamedShape::find(&empty_label).is_none());
 /// ```
 ///
 /// [`Primitive`]: TopoNamingEvolution::Primitive
@@ -410,7 +419,7 @@ impl TopoNamingNamedShape {
 /// ```rust,ignore
 /// // NOTE: this example is incomplete pending two missing bindings:
 /// //
-/// // 1. OcFace::from_shape — needed to retrieve the face from the document
+/// // 1. OcFace::try_from — needed to retrieve the face from the document
 /// //    and rebuild from new parameters after a sketch edit.
 /// //
 /// // 2. The solve() demonstration requires a full rebuild cycle:
@@ -437,11 +446,10 @@ impl TopoNamingNamedShape {
 ///     // snipped: the other 3 points
 /// ]).unwrap();
 ///
-/// let solid = OcFace::from_wire(&wire, true).unwrap()
+/// let face_shape = OcFace::from_wire(&wire, true).unwrap()
 ///     .extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
-/// let solid_shape = solid.as_shape();
 ///
-/// let pre_faces: Vec<_> = solid_shape.faces().collect();
+/// let pre_faces: Vec<_> = face_shape.faces().collect();
 ///
 /// // setup label 0:1:3 (body) and the first solid child
 /// {
@@ -449,7 +457,7 @@ impl TopoNamingNamedShape {
 ///     let lsolid = main.get_or_create_child(&cmd, 3)
 ///                      .get_or_create_child(&cmd, 1);
 ///     OcReal::set(&cmd, &lsolid, 1.0).unwrap();
-///     cmd.name_builder(&lsolid).primitive(&solid_shape);
+///     cmd.name_builder(&lsolid).primitive(&face_shape);
 ///     cmd.commit().unwrap();
 /// }
 ///
@@ -460,8 +468,8 @@ impl TopoNamingNamedShape {
 ///                        .get_or_create_child(&cmd, 2);
 ///
 ///     let distance = OcReal::set(&cmd, &lchamfer, 0.05).unwrap();
-///     let edge = solid_shape.edges().next().unwrap();
-///     let mut cb = ChamferBuilder::new(&solid_shape).unwrap();
+///     let edge = face_shape.edges().next().unwrap();
+///     let mut cb = ChamferBuilder::new(&face_shape).unwrap();
 ///     cb.add_edge(distance.get(), &edge).unwrap();
 ///     let mut built = cb.build_with_history().unwrap();
 ///     let chamfer_shape = built.shape().clone();
