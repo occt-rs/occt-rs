@@ -25,6 +25,14 @@ pub struct OcVertex {
     _not_send: PhantomData<*mut ()>,
 }
 
+impl std::fmt::Debug for OcVertex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcVertex")
+            .field("pnt", &self.pnt())
+            .finish_non_exhaustive()
+    }
+}
+
 impl OcVertex {
     /// Returns `None` if `inner` is a null `UniquePtr` or the `TopoDS_Vertex`
     /// has a null TShape handle (`IsNull()`).

@@ -13,6 +13,12 @@ pub struct OcWire {
     _not_send: PhantomData<*mut ()>,
 }
 
+impl std::fmt::Debug for OcWire {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OcWire").finish_non_exhaustive()
+    }
+}
+
 impl OcWire {
     pub fn edges(&self) -> impl Iterator<Item = OcEdge> {
         WireEdgeIter::new(ffi::new_wire_edge_explorer(&self.inner))

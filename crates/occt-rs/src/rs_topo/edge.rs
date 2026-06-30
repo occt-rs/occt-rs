@@ -29,7 +29,10 @@ pub struct OcEdge {
 
 impl std::fmt::Debug for OcEdge {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OcEdge").finish_non_exhaustive()
+        f.debug_struct("OcEdge")
+            .field("start", &self.start_vertex().pnt())
+            .field("end", &self.end_vertex().pnt())
+            .finish_non_exhaustive()
     }
 }
 
