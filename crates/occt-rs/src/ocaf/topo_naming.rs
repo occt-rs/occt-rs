@@ -202,9 +202,9 @@ impl TopoNamingEvolution {
 ///     let face = OcFace::try_from(&face_shape).unwrap();
 ///
 ///     // do the extrude to make the solid
-///     let solid = face.extrude(OcVec::new(0.0, 0.0, depth.get())).unwrap();
+///     let extrude_shape = face.extrude(OcVec::new(0.0, 0.0, depth.get())).unwrap();
 ///
-///     cmd.name_builder(&lsolid).generated(&face_shape, &solid.as_shape());
+///     cmd.name_builder(&lsolid).generated(&face_shape, &extrude_shape);
 ///
 ///     cmd.commit().unwrap();
 ///     lsolid
@@ -437,11 +437,10 @@ impl TopoNamingNamedShape {
 ///     // snipped: the other 3 points
 /// ]).unwrap();
 ///
-/// let solid = OcFace::from_wire(&wire, true).unwrap()
+/// let face_shape = OcFace::from_wire(&wire, true).unwrap()
 ///     .extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
-/// let solid_shape = solid.as_shape();
 ///
-/// let pre_faces: Vec<_> = solid_shape.faces().collect();
+/// let pre_faces: Vec<_> = face_shape.faces().collect();
 ///
 /// // setup label 0:1:3 (body) and the first solid child
 /// {
@@ -449,7 +448,7 @@ impl TopoNamingNamedShape {
 ///     let lsolid = main.get_or_create_child(&cmd, 3)
 ///                      .get_or_create_child(&cmd, 1);
 ///     OcReal::set(&cmd, &lsolid, 1.0).unwrap();
-///     cmd.name_builder(&lsolid).primitive(&solid_shape);
+///     cmd.name_builder(&lsolid).primitive(&face_shape);
 ///     cmd.commit().unwrap();
 /// }
 ///
@@ -460,8 +459,8 @@ impl TopoNamingNamedShape {
 ///                        .get_or_create_child(&cmd, 2);
 ///
 ///     let distance = OcReal::set(&cmd, &lchamfer, 0.05).unwrap();
-///     let edge = solid_shape.edges().next().unwrap();
-///     let mut cb = ChamferBuilder::new(&solid_shape).unwrap();
+///     let edge = face_shape.edges().next().unwrap();
+///     let mut cb = ChamferBuilder::new(&face_shape).unwrap();
 ///     cb.add_edge(distance.get(), &edge).unwrap();
 ///     let mut built = cb.build_with_history().unwrap();
 ///     let chamfer_shape = built.shape().clone();
