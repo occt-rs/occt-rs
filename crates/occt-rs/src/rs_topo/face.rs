@@ -8,7 +8,7 @@
 use crate::error::{OcctError, OcctErrorKind};
 use crate::gp::{OcDir, OcPnt, OcVec};
 use crate::rs_topo::shape::ShapeKey;
-use crate::rs_topo::{OcShape, OcSolid, OcWire};
+use crate::rs_topo::{OcShape, OcWire};
 use occt_sys::ffi;
 use std::marker::PhantomData;
 
@@ -40,7 +40,7 @@ impl OcFace {
     pub fn shape_key(&self) -> ShapeKey {
         ShapeKey(ffi::shape_key(ffi::face_as_shape(&self.inner)))
     }
-    /// Extrudes this face along `vec` to produce a solid.
+    /// Extrudes this face along `vec`, returning the resulting shape.
     ///
     /// Calls `BRepPrimAPI_MakePrism(face, vec)`.
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_prim_a_p_i___make_prism.html>
@@ -53,13 +53,13 @@ impl OcFace {
     /// `BRepPrimAPI_MakePrism` exposes `Modified`, `Generated`, and
     /// `IsDeleted` for shape history queries.  History access is not yet
     /// bound — if you need it, hold on to the builder (work in progress).
-    pub fn extrude(&self, vec: OcVec) -> Result<OcSolid, OcctError> {
+    pub fn extrude(&self, vec: OcVec) -> Result<OcShape, OcctError> {
         let mut builder = ffi::new_make_prism_from_face(self.as_ffi(), vec.x, vec.y, vec.z)
             .map_err(OcctError::from)?;
         if builder.is_done() {
-            // Safety: MakePrismBuilder::solid() returns make_unique<TopdsSolid>
+            // Safety: MakePrismBuilder::shape() returns make_unique<TopoDS_Shape>
             // on a completed builder — non-null.
-            Ok(unsafe { OcSolid::from_ffi_unchecked(builder.pin_mut().solid()) })
+            Ok(unsafe { OcShape::from_ffi_unchecked(builder.pin_mut().shape()) })
         } else {
             Err(OcctError {
                 kind: OcctErrorKind::ConstructionError,

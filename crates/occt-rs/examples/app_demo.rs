@@ -114,8 +114,8 @@ fn main() -> Result<(), AppError> {
         AppCommand::Extrude { depth: 1.0 },
         AppCommand::Chamfer {
             distance: 0.05,
-            solid_label_path: "0:1:3:1".to_string(),
-            edge_index: 0, // user clicked the first edge — in a real app this is a pick result
+            _solid_label_path: "0:1:3:1".to_string(),
+            _edge_index: 0, // user clicked the first edge — in a real app this is a pick result
         },
         AppCommand::SelectChamferFace,
         AppCommand::PrintTree,
@@ -163,7 +163,7 @@ impl From<occt_rs::error::OcctError> for AppError {
 }
 
 struct AppState {
-    app: OcApplication,
+    _app: OcApplication,
     doc: OcDocument,
 }
 
@@ -171,7 +171,7 @@ impl AppState {
     fn new() -> Result<Self, AppError> {
         let mut app = OcApplication::new();
         let doc = app.new_document("BinXCAF")?;
-        let mut res = Self { app, doc };
+        let mut res = Self { _app: app, doc };
         res.add_base_planes()?;
         Ok(res)
     }
@@ -336,7 +336,7 @@ impl AppState {
             OcEdge::from_pnts(a, b)?,
         ])?;
         let face = OcFace::from_wire(&wire, true)?;
-        let solid = face.extrude(OcVec::new(0.0, 0.0, depth))?;
+        let solid_shape = face.extrude(OcVec::new(0.0, 0.0, depth))?;
 
         let main = self.doc.main();
         let cmd = self.doc.begin_command()?;
@@ -348,7 +348,7 @@ impl AppState {
         // When OcFace::from_shape is available, this value drives the extrusion
         // directly: `face.extrude(OcVec::new(0.0, 0.0, depth_attr.get()))`.
         OcReal::set(&cmd, &lsolid, depth)?;
-        cmd.name_builder(&lsolid).primitive(&solid.as_shape());
+        cmd.name_builder(&lsolid).primitive(&solid_shape);
 
         cmd.commit()?;
         println!("  → solid recorded at 0:1:3:1 (depth = {depth})");
@@ -416,8 +416,8 @@ enum AppCommand {
     /// Chamfer one edge of the solid by `distance`.
     Chamfer {
         distance: f64,
-        solid_label_path: String,
-        edge_index: usize, // or a ShapeKey, once that's exposed publicly
+        _solid_label_path: String,
+        _edge_index: usize, // or a ShapeKey, once that's exposed publicly
     },
     /// Record a stable reference to the chamfer face for the second sketch.
     SelectChamferFace,
@@ -559,7 +559,7 @@ fn dispatch(state: &mut AppState, command: AppCommand) -> Result<(), AppError> {
             sketch_tag,
         } => state.add_sketch_face(point_paths, sketch_tag),
         AppCommand::Extrude { depth } => state.extrude(depth),
-        AppCommand::Chamfer { distance, solid_label_path, edge_index } => handle_chamfer(state, distance),
+        AppCommand::Chamfer { distance, .. } => handle_chamfer(state, distance),
         AppCommand::SelectChamferFace => handle_select_chamfer_face(state),
         AppCommand::Undo => state.undo(),
         AppCommand::Redo => state.redo(),

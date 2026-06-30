@@ -5,7 +5,7 @@
 // and throws Standard_Failure on failure — construction must be wrapped in
 // try/catch.
 //
-// Shape() is non-const in BRepBuilderAPI_MakeShape; the solid() accessor
+// Shape() is non-const in BRepBuilderAPI_MakeShape; the shape() accessor
 // therefore takes a mutable reference (Pin<&mut MakePrismBuilder> on the
 // Rust side).
 //
@@ -14,8 +14,7 @@
 //
 // Reference:
 //   BRepPrimAPI_MakePrism — https://dev.opencascade.org/doc/refman/html/class_b_rep_prim_a_p_i___make_prism.html
-//   TopoDS_Solid          — https://dev.opencascade.org/doc/refman/html/class_topo_d_s___solid.html
-//   TopoDS (downcast)     — https://dev.opencascade.org/doc/refman/html/class_topo_d_s.html
+//   TopoDS_Shape          — https://dev.opencascade.org/doc/refman/html/class_topo_d_s___shape.html
 //
 // Sourced from OCCT 7.9 documentation.
 // No derivation from any other binding crate.
@@ -24,7 +23,6 @@
 
 #include <memory>
 #include <BRepPrimAPI_MakePrism.hxx>
-#include <TopoDS.hxx>
 #include <TopoDS_Solid.hxx>
 #include <TopoDS_Shape.hxx>
 #include <TopoDS_Iterator.hxx>
@@ -39,8 +37,8 @@ struct MakePrismBuilder {
     MakePrismBuilder(const TopoDS_Face& face, double vx, double vy, double vz)
         : inner(face, gp_Vec(vx, vy, vz)) {}
     bool is_done() const { return inner.IsDone(); }
-    std::unique_ptr<TopoDS_Solid> solid() {
-        return std::make_unique<TopoDS_Solid>(TopoDS::Solid(inner.Shape()));
+    std::unique_ptr<TopoDS_Shape> shape() {
+        return std::make_unique<TopoDS_Shape>(inner.Shape());
     }
 };
 

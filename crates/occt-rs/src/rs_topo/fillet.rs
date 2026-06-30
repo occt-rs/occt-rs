@@ -151,19 +151,18 @@ mod history_tests {
                 b.build().unwrap()
             })
             .unwrap();
-        let solid = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
-        let shape = solid.as_shape();
+        let solid_shape = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
 
         // Collect unique faces and edges before the operation
         let pre_faces: Vec<_> = {
-            let all = shape.faces();
+            let all = solid_shape.faces();
             let mut seen = std::collections::HashSet::new();
             all.into_iter()
                 .filter(|f| seen.insert(f.shape_key()))
                 .collect()
         };
         let pre_edges: Vec<_> = {
-            let all = shape.edges();
+            let all = solid_shape.edges();
             let mut seen = std::collections::HashSet::new();
             all.into_iter()
                 .filter(|e| seen.insert(e.shape_key()))
@@ -171,7 +170,7 @@ mod history_tests {
         };
 
         // Fillet all edges with radius 0.05
-        let mut builder = FilletBuilder::new(&shape).unwrap();
+        let mut builder = FilletBuilder::new(&solid_shape).unwrap();
         for edge in &pre_edges {
             let _ = builder.add_edge(0.05, edge); // ignore individual errors
         }
