@@ -39,7 +39,7 @@ mod integration_sketch_extrude {
     use occt_rs::ocaf::application::OcApplication;
     use occt_rs::ocaf::document::OcDocument;
     use occt_rs::ocaf::tdata_xtd::{OcPlaneAttr, OcPointAttr};
-    use occt_rs::ocaf::tnaming::{TnamingBuilder, TnamingNamedShape};
+    use occt_rs::ocaf::topo_naming::{TopoNamingBuilder, TopoNamingNamedShape};
     use occt_rs::ocaf::OcInteger;
     use occt_rs::rs_topo::{OcEdge, OcFace, OcWire};
 
@@ -219,8 +219,8 @@ mod integration_sketch_extrude {
             let lface = sketch.get_or_create_child(&cmd, 5);
             let face = make_square_face();
             let face_shape = face.as_shape();
-            let mut face_builder = TnamingBuilder::new(&lface);
-            face_builder.generated_fresh(&face_shape);
+            let mut face_builder = TopoNamingBuilder::new(&lface);
+            face_builder.primitive(&face_shape);
             let _face_ns = face_builder.named_shape();
 
             cmd.commit().unwrap();
@@ -245,7 +245,7 @@ mod integration_sketch_extrude {
             "point D missing after sketch cmd"
         );
         assert!(
-            TnamingNamedShape::find(&face_label).is_some(),
+            TopoNamingNamedShape::find(&face_label).is_some(),
             "face named shape missing after sketch cmd"
         );
 
@@ -272,8 +272,8 @@ mod integration_sketch_extrude {
             let solid = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
             let solid_shape = solid.as_shape();
 
-            let mut builder = TnamingBuilder::new(&lsolid);
-            builder.generated_fresh(&solid_shape);
+            let mut builder = TopoNamingBuilder::new(&lsolid);
+            builder.primitive(&solid_shape);
             let _ns = builder.named_shape();
 
             cmd.commit().unwrap();
@@ -282,7 +282,7 @@ mod integration_sketch_extrude {
 
         // Solid label has a NamedShape after the extrude command.
         assert!(
-            TnamingNamedShape::find(&solid_label).is_some(),
+            TopoNamingNamedShape::find(&solid_label).is_some(),
             "solid named shape missing after extrude"
         );
         assert_eq!(doc.available_undos(), 3, "should have 3 undoable commands");
@@ -296,7 +296,7 @@ mod integration_sketch_extrude {
         // reversed.  The label itself may still exist as an empty node; we
         // assert on the NamedShape attribute, not the label.
         assert!(
-            TnamingNamedShape::find(&solid_label).is_none(),
+            TopoNamingNamedShape::find(&solid_label).is_none(),
             "solid named shape should be absent after undo of extrude"
         );
 
@@ -312,7 +312,7 @@ mod integration_sketch_extrude {
         assert!(did_redo, "redo should report success");
 
         assert!(
-            TnamingNamedShape::find(&solid_label).is_some(),
+            TopoNamingNamedShape::find(&solid_label).is_some(),
             "solid named shape should be restored after redo"
         );
 
@@ -364,7 +364,7 @@ mod integration_sketch_extrude {
 
         // Solid is still present (undo of the point edit didn't touch it).
         assert!(
-            TnamingNamedShape::find(&solid_label).is_some(),
+            TopoNamingNamedShape::find(&solid_label).is_some(),
             "solid named shape should survive undo of point edit"
         );
     }

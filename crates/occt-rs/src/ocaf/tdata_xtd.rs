@@ -1,7 +1,5 @@
-//! OCAF attribute bindings for `TDataXtd_Geometry` and `TDataXtd_Constraint`.
+//! Extended attribute bindings.
 //!
-//! These two attributes work together to express sketch geometry and
-//! constraints in a `TDF_Data` document:
 //!
 //! - [`OcGeometryAttr`] — a qualifier tag that labels a `TNaming_NamedShape`
 //!   with a geometry kind (point, line, circle, …).  It lives on the **same
@@ -10,9 +8,9 @@
 //!
 //! - [`OcConstraintAttr`] — records a constraint between 1–4 geometry
 //!   participants.  Each participant is referenced by its
-//!   [`TnamingNamedShape`](crate::ocaf::tnaming::TnamingNamedShape) handle —
+//!   [`TopoNamingNamedShape`] handle —
 //!   the topology record — not by an [`OcGeometryAttr`] handle.  Dimensional
-//!   constraints additionally carry an [`OcReal`](crate::ocaf::attributes::OcReal)
+//!   constraints additionally carry an [`OcReal`]
 //!   value attached via a sub-label.
 //!
 //! ## Constraint kind
@@ -42,8 +40,8 @@ use crate::gp::{OcAx1, OcAx2, OcPnt};
 use crate::ocaf::attributes::OcReal;
 use crate::ocaf::document::Command;
 use crate::ocaf::label::OcLabel;
-use crate::ocaf::tnaming::TnamingBuilder;
-use crate::ocaf::tnaming::TnamingNamedShape;
+use crate::ocaf::topo_naming::TopoNamingBuilder;
+use crate::ocaf::topo_naming::TopoNamingNamedShape;
 use crate::rs_topo::OcShape;
 
 // ── GeometryKind ─────────────────────────────────────────────────────────────
@@ -51,7 +49,7 @@ use crate::rs_topo::OcShape;
 /// The kind of geometric construction a label represents.
 ///
 /// Maps `TDataXtd_GeometryEnum`.  Attached to a label alongside a
-/// [`TnamingNamedShape`] to qualify what kind of geometry the stored shape is.
+/// [`TopoNamingNamedShape`] to qualify what kind of geometry the stored shape is.
 ///
 /// Reference: <https://dev.opencascade.org/doc/refman/html/group__enum__t_data_xtd.html>
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -84,9 +82,11 @@ impl GeometryKind {
 
 // ── OcGeometryAttr ───────────────────────────────────────────────────────────
 
-/// A `TDataXtd_Geometry` attribute handle — tags a label with a geometry kind.
+/// Extends [`TopoNamingNamedShape`] to also include geometry kind
 ///
-/// Attach to the **same label** as a [`TnamingNamedShape`] to declare what
+/// Binds to `TDataXtd_Geometry`
+///
+/// Add to an [`OcLabel`] that already has [`TopoNamingNamedShape`] to declare what
 /// kind of geometry the stored shape represents.  The attribute carries no
 /// geometry data itself; the shape lives in the named-shape attribute.
 ///
@@ -97,20 +97,15 @@ impl GeometryKind {
 /// let mut geom = OcGeometryAttr::set(&cmd, &label)?;
 /// geom.set_type(&cmd, GeometryKind::Circle);
 /// ```
-///
-/// `set` and `set_type` are separated to match the OCCT API, where
-/// `TDataXtd_Geometry::Set(label)` creates the attribute with `ANY_GEOM` and
-/// `SetType(T)` updates it.  Both may be called in the same command.
 pub struct OcGeometryAttr {
     inner: cxx::UniquePtr<ffi::TDataXtdGeometryHandle>,
     _not_send: PhantomData<*mut ()>,
 }
 
 impl OcGeometryAttr {
-    /// Finds or creates a `TDataXtd_Geometry` attribute on `label` with the
-    /// given `kind` set atomically.
+    /// Upsert-get this value-attribute on `label` with the value provided
     ///
-    /// The type is applied before the attribute is registered with the label,
+    /// The kind is applied before the attribute is registered with the label,
     /// so the single `AddAttribute` operation is the complete undo delta.
     /// This means undo cleanly removes the attribute rather than reverting it
     /// to a default state.
@@ -132,6 +127,9 @@ impl OcGeometryAttr {
     /// to snapshot correctly.  For new attributes, pass the kind to [`set`]
     /// directly.
     ///
+    /// TODO: make invalid usage unrepresentable somehow. Maybe require usage of the existing
+    /// committed attribute
+    ///
     /// Must be called inside an open [`Command`] scope.
     ///
     /// [`set`]: Self::set
@@ -139,12 +137,12 @@ impl OcGeometryAttr {
         ffi::tdataxtd_geometry_set_type(self.inner.pin_mut(), kind as i32);
     }
 
-    /// Reads the geometry kind from this handle.
+    /// Reads the kind-value from this attribute handle
     pub fn kind(&self) -> GeometryKind {
         GeometryKind::from_raw(ffi::tdataxtd_geometry_get_type(&self.inner))
     }
 
-    /// Probes for a `TDataXtd_Geometry` attribute on `label`.
+    /// Probes for this attribute on `label`.
     ///
     /// Returns `None` when the attribute is not present.
     pub fn find(label: &OcLabel) -> Option<Self> {
@@ -159,7 +157,7 @@ impl OcGeometryAttr {
         }
     }
 
-    /// Removes the `TDataXtd_Geometry` attribute from `label`.
+    /// Removes this attribute from `label`.
     ///
     /// Returns `false` if the attribute was not present.
     /// Must be called inside an open [`Command`] scope.
@@ -167,7 +165,7 @@ impl OcGeometryAttr {
         ffi::tdataxtd_geometry_forget(&label.inner)
     }
     /// Infers the geometry kind of `label` by inspecting its
-    /// [`TnamingNamedShape`] topology.
+    /// [`TopoNamingNamedShape`] topology.
     ///
     /// This is the OCCT-prescribed read path for Point, Axis, and Plane labels:
     /// rather than reading the `TDataXtd_Geometry` qualifier attribute, it
@@ -175,7 +173,7 @@ impl OcGeometryAttr {
     /// linear edge → [`GeometryKind::Line`], planar face →
     /// [`GeometryKind::Plane`], and so on.
     ///
-    /// Returns `Err` when no `TNaming_NamedShape` is present on the label.
+    /// Returns `Err` when [`TopoNamingNamedShape`] is present on the label.
     ///
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___geometry.html>
     pub fn type_on_label(label: &OcLabel) -> Result<GeometryKind, OcctError> {
@@ -265,16 +263,16 @@ impl ConstraintKind {
 
 // ── OcConstraintAttr ─────────────────────────────────────────────────────────
 
-/// A `TDataXtd_Constraint` attribute handle.
+/// `TDataXtd_Constraint` attribute handle.
 ///
 /// Records a constraint on a label: its kind, references to 1–4
-/// [`TnamingNamedShape`] topology attributes, and optionally an associated
+/// [`TopoNamingNamedShape`] topology attributes, and optionally an associated
 /// [`OcReal`] dimension value.
 ///
 /// # Geometry participants
 ///
 /// Each geometry slot holds a `Handle(TNaming_NamedShape)`.  You pass
-/// [`TnamingNamedShape`] handles — **not** [`OcGeometryAttr`] handles.
+/// [`TopoNamingNamedShape`] handles — **not** [`OcGeometryAttr`] handles.
 /// `TDataXtd_Geometry` is a qualifier tag on a label; `TDataXtd_Constraint`
 /// binds to the shape topology.
 ///
@@ -290,7 +288,7 @@ pub struct OcConstraintAttr {
 }
 
 impl OcConstraintAttr {
-    /// Attaches a constraint referencing 1–4 [`TnamingNamedShape`] geometry
+    /// Attaches a constraint referencing 1–4 [`TopoNamingNamedShape`] geometry
     /// participants.
     ///
     /// Must be called inside an open [`Command`] scope.
@@ -302,7 +300,7 @@ impl OcConstraintAttr {
         _cmd: &Command<'_>,
         label: &OcLabel,
         kind: ConstraintKind,
-        geoms: &[&TnamingNamedShape],
+        geoms: &[&TopoNamingNamedShape],
     ) -> Result<Self, OcctError> {
         let inner = match geoms {
             [g1] => ffi::tdataxtd_constraint_set1(&label.inner, kind as i32, g1.inner()),
@@ -337,7 +335,7 @@ impl OcConstraintAttr {
     /// Sets or replaces a geometry reference at `index` (1-based).
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn set_geometry(&mut self, _cmd: &Command<'_>, index: i32, ns: &TnamingNamedShape) {
+    pub fn set_geometry(&mut self, _cmd: &Command<'_>, index: i32, ns: &TopoNamingNamedShape) {
         ffi::tdataxtd_constraint_set_geometry(self.inner.pin_mut(), index, ns.inner());
     }
 
@@ -369,12 +367,12 @@ impl OcConstraintAttr {
     /// Returns the geometry reference at `index` (1-based).
     ///
     /// Returns `None` when `index` is out of range or the slot is null.
-    pub fn geometry(&self, index: i32) -> Option<TnamingNamedShape> {
+    pub fn geometry(&self, index: i32) -> Option<TopoNamingNamedShape> {
         let inner = ffi::tdataxtd_constraint_get_geometry(&self.inner, index);
         if inner.is_null() {
             None
         } else {
-            Some(TnamingNamedShape::from_ffi(inner))
+            Some(TopoNamingNamedShape::from_ffi(inner))
         }
     }
 
@@ -415,19 +413,19 @@ impl OcConstraintAttr {
     /// Returns the plane's named-shape reference for a 2D constraint.
     ///
     /// Returns `None` when [`Self::is_planar`] is false.
-    pub fn plane(&self) -> Option<TnamingNamedShape> {
+    pub fn plane(&self) -> Option<TopoNamingNamedShape> {
         let inner = ffi::tdataxtd_constraint_get_plane(&self.inner);
         if inner.is_null() {
             None
         } else {
-            Some(TnamingNamedShape::from_ffi(inner))
+            Some(TopoNamingNamedShape::from_ffi(inner))
         }
     }
 
     /// Sets the plane of a 2D constraint.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn set_plane(&mut self, _cmd: &Command<'_>, plane: &TnamingNamedShape) {
+    pub fn set_plane(&mut self, _cmd: &Command<'_>, plane: &TopoNamingNamedShape) {
         ffi::tdataxtd_constraint_set_plane(self.inner.pin_mut(), plane.inner());
     }
 
@@ -475,8 +473,8 @@ impl std::fmt::Debug for OcConstraintAttr {
 ///
 /// # Undo ordering
 ///
-/// [`set`] applies the position before `AddAttribute`, so the single
-/// `AddAttribute` operation is the complete undo delta.  [`set_position`] is
+/// [`Self::set`] applies the position before `AddAttribute`, so the single
+/// `AddAttribute` operation is the complete undo delta.  [`Self::set_position`] is
 /// for updating a position that was committed in a **prior** command; calling
 /// it on a freshly-created, not-yet-committed attribute is unsound.
 ///
@@ -568,27 +566,134 @@ impl std::fmt::Debug for OcPositionAttr {
     }
 }
 
-// ── OcPointAttr ──────────────────────────────────────────────────────────────
-
-/// A `TDataXtd_Point` attribute handle — semantic tag marking a label as a point.
+/// Marker attribute. Indicates a [`TopoNamingNamedShape`] is attached to an [`OcPnt`]
 ///
-/// The geometry lives in a [`TnamingNamedShape`] on the **same label** as a
-/// vertex produced by [`TnamingBuilder::generated_fresh`].  This attribute is
-/// a zero-byte marker that declares the shape's semantic role.
+/// OCAF provides the means to fold a [`OcPnt`] geometry primitive, such as a user-authored sketch
+/// point, into the topo-naming system. For this to happen:
 ///
-/// Because the geometry is a TNaming entity, the point can be referenced as a
-/// geometry participant in [`OcConstraintAttr`] and survives topology
-/// operations via the naming graph.  Use [`OcPositionAttr`] instead when you
-/// only need a raw coordinate that participates in undo/redo but not in
-/// topological naming.
+/// - [`TopoNamingBuilder::primitive`] wraps the [`OcPnt`] coordinate in a
+///   [`TopoNamingNamedShape`] vertex gives it a place in the naming graph.
+///   This provides rebuild-stability
+/// - [`OcPointAttr`] tags the label as a point: Constraint solvers, and other
+///   topo-naming machinery can identify it by role without inspecting the
+///   shape topology.
+/// - Both live on the same label, in the same [`Command`]: All info (coordinate,
+///   naming record, and semantic tag ) are grouped to a single undo/redo.
 ///
-/// # Usage pattern
+/// Effectively: [`OcPnt`] can participate as a TopoNaming entity, the point.
+/// It can be referenced as a geometry participant in [`OcConstraintAttr`], and
+/// survives topology operations through the OCAF topo-naming-problem machinery.
 ///
-/// ```ignore
-/// // Inside an open command — shape first, then tag:
-/// let ns = OcPointAttr::record_shape(&cmd, &label, OcPnt::new(1.0, 2.0, 3.0))?;
-/// let attr = OcPointAttr::set(&cmd, &label)?;
-/// // ns can now be passed to OcConstraintAttr::set as a geometry participant.
+/// Use [`OcPositionAttr`] instead when you only need a raw coordinate that
+/// participates in undo/redo but not in topological naming.
+///
+/// # Example
+///
+/// We will create a tree that looks as follows:
+///
+/// ```text
+/// main (0:1)
+/// └── 1 (0:1:1)   sketch
+///     ├── 1 (0:1:1:1)   point A (0.0, 1.0, 0.0)
+///     │       TopoNamingNamedShape (Primitive, vertex_a)
+///     │       OcPointAttr
+///     ├── 2 (0:1:1:2)   point B (0.0, 0.0, 0.0)
+///     │       TopoNamingNamedShape (Primitive, vertex_b)
+///     │       OcPointAttr
+///     ├── 3 (0:1:1:3)   point C (1.0, 0.0, 0.0)
+///     │       TopoNamingNamedShape (Primitive, vertex_c)
+///     │       OcPointAttr
+///     └── 4 (0:1:1:4)   point D (1.0, 1.0, 0.0)
+///     │       TopoNamingNamedShape (Primitive, vertex_d)
+///     │       OcPointAttr
+///     └── 5 (0:1:1:5)   point A edited
+///             TopoNamingNamedShape (Modify, (vertex_a, vertex_e))
+///             OcPointAttr
+/// ```
+///
+/// You can think of the example as an application handling a user adding the points while doing a
+/// sketch
+///
+/// ```
+/// use occt_rs::gp::OcPnt;
+/// use occt_rs::ocaf::OcApplication;
+/// use occt_rs::ocaf::tdata_xtd::OcPointAttr;
+/// use occt_rs::ocaf::topo_naming::{TopoNamingEvolution, TopoNamingNamedShape};
+///
+/// let mut app = OcApplication::new();
+/// let mut doc = app.new_document("BinXCAF").unwrap();
+/// doc.set_undo_limit(10);
+///
+/// let main = doc.main();
+/// let (pt_a, pt_b, pt_c, pt_d) = {
+///     let cmd = doc.begin_command().unwrap();
+///     let sketch = main.get_or_create_child(&cmd, 1);
+///
+///     let la = sketch.get_or_create_child(&cmd, 1);
+///     OcPointAttr::record_shape(&cmd, &la, OcPnt::new(0.0, 1.0, 0.0)).unwrap();
+///     OcPointAttr::set(&cmd, &la).unwrap();
+///
+///     let lb = sketch.get_or_create_child(&cmd, 2);
+///     OcPointAttr::record_shape(&cmd, &lb, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
+///     OcPointAttr::set(&cmd, &lb).unwrap();
+///
+///     let lc = sketch.get_or_create_child(&cmd, 3);
+///     OcPointAttr::record_shape(&cmd, &lc, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+///     OcPointAttr::set(&cmd, &lc).unwrap();
+///
+///     let ld = sketch.get_or_create_child(&cmd, 4);
+///     OcPointAttr::record_shape(&cmd, &ld, OcPnt::new(1.0, 1.0, 0.0)).unwrap();
+///     OcPointAttr::set(&cmd, &ld).unwrap();
+///
+///     cmd.commit().unwrap();
+///     (la, lb, lc, ld)
+/// };
+///
+/// // Coordinates round-trip through the document
+/// let p = OcPointAttr::get(&pt_a).unwrap().unwrap();
+/// assert!((p.x - 0.0).abs() < 1e-12);
+/// assert!((p.y - 1.0).abs() < 1e-12);
+/// assert!((p.z - 0.0).abs() < 1e-12);
+///
+/// // And let's use the topo-naming system to make a new point that evolved from an old one:
+///
+/// let pt_a_edited = {
+///     let cmd = doc.begin_command().unwrap();
+///     let sketch = main.get_or_create_child(&cmd, 1);
+///     let l = sketch.get_or_create_child(&cmd, 5);
+///
+///     // Retrieve the current shape before overwriting it
+///     let old_shape = TopoNamingNamedShape::find(&pt_a).unwrap().get().unwrap();
+///
+///     // Record the new coordinate
+///     OcPointAttr::record_shape(&cmd, &l, OcPnt::new(0.5, 1.0, 0.0)).unwrap();
+///     OcPointAttr::set(&cmd, &l).unwrap();
+///
+///     // Retrieve the new shape and record the evolution explicitly
+///     let new_shape = TopoNamingNamedShape::find(&l).unwrap().get().unwrap();
+///     cmd.name_builder(&l).modified(&old_shape, &new_shape);
+///
+///     cmd.commit().unwrap();
+///     l
+/// };
+///
+/// // The original label is unchanged
+/// assert_eq!(
+///     TopoNamingNamedShape::find(&pt_a).unwrap().evolution(),
+///     Some(TopoNamingEvolution::Primitive),
+/// );
+/// assert!((OcPointAttr::get(&pt_a).unwrap().unwrap().x - 0.0).abs() < 1e-12);
+///
+/// // The new label records the modification
+/// assert_eq!(
+///     TopoNamingNamedShape::find(&pt_a_edited).unwrap().evolution(),
+///     Some(TopoNamingEvolution::Modify),
+/// );
+/// assert!((OcPointAttr::get(&pt_a_edited).unwrap().unwrap().x - 0.5).abs() < 1e-12);
+///
+/// // Undo removes the edit label's attributes
+/// doc.undo().unwrap();
+/// assert!(TopoNamingNamedShape::find(&pt_a_edited).is_none());
 /// ```
 ///
 /// Reference: <https://dev.opencascade.org/doc/refman/html/class_t_data_xtd___point.html>
@@ -613,7 +718,7 @@ impl OcPointAttr {
     ///
     /// This is the shape half of the Option B pattern.  Call this first, then
     /// call [`set`] to attach the semantic tag in the same command.  The
-    /// returned [`TnamingNamedShape`] can be passed directly to
+    /// returned [`TopoNamingNamedShape`] can be passed directly to
     /// [`OcConstraintAttr::set`].
     ///
     /// Must be called inside an open [`Command`] scope.
@@ -623,21 +728,21 @@ impl OcPointAttr {
         _cmd: &Command<'_>,
         label: &OcLabel,
         pos: OcPnt,
-    ) -> Result<TnamingNamedShape, OcctError> {
+    ) -> Result<TopoNamingNamedShape, OcctError> {
         let vertex =
             ffi::tdataxtd_make_vertex_shape(pos.x, pos.y, pos.z).map_err(OcctError::from)?;
         // Safety: vertex_as_shape is a zero-cost upcast; clone_shape is
         // make_unique<TopoDS_Shape> — non-null.
         let shape =
             unsafe { OcShape::from_ffi_unchecked(ffi::clone_shape(ffi::vertex_as_shape(&vertex))) };
-        let mut builder = TnamingBuilder::new(label);
-        builder.generated_fresh(&shape);
+        let mut builder = TopoNamingBuilder::new(label);
+        builder.primitive(&shape);
         Ok(builder.named_shape())
     }
 
     /// Finds or creates the `TDataXtd_Point` tag attribute on `label`.
     ///
-    /// The vertex [`TnamingNamedShape`] must already be present on the label —
+    /// The vertex [`TopoNamingNamedShape`] must already be present on the label —
     /// call [`record_shape`] first in the same command.
     ///
     /// Must be called inside an open [`Command`] scope.
@@ -672,7 +777,7 @@ impl OcPointAttr {
                 })
             }
         }
-        let ns = TnamingNamedShape::find(label).ok_or_else(|| OcctError {
+        let ns = TopoNamingNamedShape::find(label).ok_or_else(|| OcctError {
             kind: crate::error::OcctErrorKind::DomainError,
             message: "OcPointAttr::get: TNaming_NamedShape absent despite type_on_label succeeding"
                 .to_owned(),
@@ -724,8 +829,8 @@ impl std::fmt::Debug for OcPointAttr {
 
 /// A `TDataXtd_Axis` attribute handle — semantic tag marking a label as an axis.
 ///
-/// The geometry lives in a [`TnamingNamedShape`] on the **same label** as an
-/// infinite linear edge produced by [`TnamingBuilder::generated_fresh`].
+/// The geometry lives in a [`TopoNamingNamedShape`] on the **same label** as an
+/// infinite linear edge produced by [`TopoNamingBuilder::generated`].
 ///
 /// The input to [`record_shape`] is an [`OcAx1`] (origin + direction).
 /// Internally this constructs a `gp_Lin` (structurally identical to `gp_Ax1`)
@@ -764,7 +869,7 @@ impl OcAxisAttr {
         _cmd: &Command<'_>,
         label: &OcLabel,
         axis: OcAx1,
-    ) -> Result<TnamingNamedShape, OcctError> {
+    ) -> Result<TopoNamingNamedShape, OcctError> {
         let loc = axis.location();
         let dir = axis.direction();
         let edge = ffi::tdataxtd_make_infinite_edge_from_ax1(
@@ -780,14 +885,14 @@ impl OcAxisAttr {
         // make_unique<TopoDS_Shape> — non-null.
         let shape =
             unsafe { OcShape::from_ffi_unchecked(ffi::clone_shape(ffi::edge_as_shape(&edge))) };
-        let mut builder = TnamingBuilder::new(label);
-        builder.generated_fresh(&shape);
+        let mut builder = TopoNamingBuilder::new(label);
+        builder.primitive(&shape);
         Ok(builder.named_shape())
     }
 
     /// Finds or creates the `TDataXtd_Axis` tag attribute on `label`.
     ///
-    /// The linear edge [`TnamingNamedShape`] must already be present on the
+    /// The linear edge [`TopoNamingNamedShape`] must already be present on the
     /// label — call [`record_shape`] first in the same command.
     ///
     /// Must be called inside an open [`Command`] scope.
@@ -801,7 +906,7 @@ impl OcAxisAttr {
     /// Returns the geometry kind and named shape of the axis on `label`.
     ///
     /// Returns the [`GeometryKind`] inferred from the shape topology (Line,
-    /// Circle, Ellipse, Spline, etc.) alongside the [`TnamingNamedShape`]
+    /// Circle, Ellipse, Spline, etc.) alongside the [`TopoNamingNamedShape`]
     /// handle.  The caller uses the kind to decide how to interpret the shape —
     /// for a [`GeometryKind::Line`] they might extract an `OcAx1` via
     /// BRep_Tool; for a circle they would extract the axis differently.
@@ -810,12 +915,12 @@ impl OcAxisAttr {
     /// identifies what the shape is; the caller does the geometry extraction.
     ///
     /// Returns `None` when no `TNaming_NamedShape` is present.
-    pub fn get(label: &OcLabel) -> Result<Option<(GeometryKind, TnamingNamedShape)>, OcctError> {
+    pub fn get(label: &OcLabel) -> Result<Option<(GeometryKind, TopoNamingNamedShape)>, OcctError> {
         let kind = match OcGeometryAttr::type_on_label(label) {
             Err(_) | Ok(GeometryKind::Any) => return Ok(None),
             Ok(k) => k,
         };
-        let ns = TnamingNamedShape::find(label)
+        let ns = TopoNamingNamedShape::find(label)
             .expect("NamedShape must be present: type_on_label returned non-Any");
         Ok(Some((kind, ns)))
     }
@@ -851,12 +956,10 @@ impl std::fmt::Debug for OcAxisAttr {
     }
 }
 
-// ── OcPlaneAttr ──────────────────────────────────────────────────────────────
-
 /// A `TDataXtd_Plane` attribute handle — semantic tag marking a label as a plane.
 ///
-/// The geometry lives in a [`TnamingNamedShape`] on the **same label** as an
-/// infinite planar face produced by [`TnamingBuilder::generated_fresh`].
+/// The geometry lives in a [`TopoNamingNamedShape`] on the **same label** as an
+/// infinite planar face produced by [`TopoNamingBuilder::generated`].
 ///
 /// The input to [`record_shape`] is an [`OcAx2`] (origin + normal + X direction).
 /// Internally this constructs a `gp_Pln` via `gp_Ax3(gp_Ax2)` and passes it
@@ -890,7 +993,7 @@ impl OcPlaneAttr {
         _cmd: &Command<'_>,
         label: &OcLabel,
         frame: OcAx2,
-    ) -> Result<TnamingNamedShape, OcctError> {
+    ) -> Result<TopoNamingNamedShape, OcctError> {
         let loc = frame.location();
         let n = frame.direction();
         let x = frame.x_direction();
@@ -910,14 +1013,14 @@ impl OcPlaneAttr {
         // make_unique<TopoDS_Shape> — non-null.
         let shape =
             unsafe { OcShape::from_ffi_unchecked(ffi::clone_shape(ffi::face_as_shape(&face))) };
-        let mut builder = TnamingBuilder::new(label);
-        builder.generated_fresh(&shape);
+        let mut builder = TopoNamingBuilder::new(label);
+        builder.primitive(&shape);
         Ok(builder.named_shape())
     }
 
     /// Finds or creates the `TDataXtd_Plane` tag attribute on `label`.
     ///
-    /// The planar face [`TnamingNamedShape`] must already be present on the
+    /// The planar face [`TopoNamingNamedShape`] must already be present on the
     /// label — call [`record_shape`] first in the same command.
     ///
     /// Must be called inside an open [`Command`] scope.
@@ -931,17 +1034,17 @@ impl OcPlaneAttr {
     /// Returns the geometry kind and named shape of the plane on `label`.
     ///
     /// Returns the [`GeometryKind`] inferred from the shape topology alongside
-    /// the [`TnamingNamedShape`] handle.  For a well-formed plane label the
+    /// the [`TopoNamingNamedShape`] handle.  For a well-formed plane label the
     /// kind will be [`GeometryKind::Plane`]; the caller extracts the `gp_Pln`
     /// frame via BRep_Tool on the face in the named shape.
     ///
     /// Returns `None` when no `TNaming_NamedShape` is present.
-    pub fn get(label: &OcLabel) -> Result<Option<(GeometryKind, TnamingNamedShape)>, OcctError> {
+    pub fn get(label: &OcLabel) -> Result<Option<(GeometryKind, TopoNamingNamedShape)>, OcctError> {
         let kind = match OcGeometryAttr::type_on_label(label) {
             Err(_) | Ok(GeometryKind::Any) => return Ok(None),
             Ok(k) => k,
         };
-        let ns = TnamingNamedShape::find(label)
+        let ns = TopoNamingNamedShape::find(label)
             .expect("NamedShape must be present: type_on_label returned non-Any");
         Ok(Some((kind, ns)))
     }
@@ -989,7 +1092,7 @@ mod tests {
     use crate::gp::{OcDir, OcPnt};
     use crate::ocaf::application::OcApplication;
     use crate::ocaf::document::OcDocument;
-    use crate::ocaf::tnaming::TnamingBuilder;
+    use crate::ocaf::topo_naming::TopoNamingBuilder;
     use crate::rs_topo::{OcEdge, OcFace, OcWire};
 
     fn new_doc() -> (OcApplication, OcDocument) {
@@ -999,9 +1102,9 @@ mod tests {
     }
 
     /// Build a unit square face and record it as a primitive named shape on
-    /// `label` using the already-open `cmd`.  Returns the `TnamingNamedShape`
+    /// `label` using the already-open `cmd`.  Returns the `TopoNamingNamedShape`
     /// handle.  Does not open or close any command.
-    fn record_named_shape(_cmd: &Command<'_>, label: &OcLabel) -> TnamingNamedShape {
+    fn record_named_shape(_cmd: &Command<'_>, label: &OcLabel) -> TopoNamingNamedShape {
         let edges = [
             OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
             OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(1.0, 1.0, 0.0)).unwrap(),
@@ -1011,8 +1114,8 @@ mod tests {
         let wire = OcWire::from_edges(&edges).unwrap();
         let face = OcFace::from_wire(&wire, true).unwrap();
         let shape = face.as_shape();
-        let mut builder = TnamingBuilder::new(&label);
-        builder.generated_fresh(&shape);
+        let mut builder = TopoNamingBuilder::new(&label);
+        builder.primitive(&shape);
         builder.named_shape()
     }
 
@@ -1437,7 +1540,7 @@ mod tests {
 
     #[test]
     fn point_record_shape_returns_named_shape() {
-        // The returned TnamingNamedShape must be non-null and usable as a
+        // The returned TopoNamingNamedShape must be non-null and usable as a
         // constraint geometry participant.
         let (_app, mut doc) = new_doc();
         let label = {

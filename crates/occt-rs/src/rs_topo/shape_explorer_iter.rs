@@ -26,7 +26,7 @@ impl Iterator for ShapeFaceIter {
         }
         // Safety: current_owned returns make_unique<TopoDS_Shape>(inner.Current())
         // while more() is true; shape_as_face downcasts a shape already confirmed
-        // to be a face by TopExp_Explorer — non-null by OCCT contract.
+        // to be a face by TopExp_Explorer: non-null by OCCT contract.
         let face = unsafe {
             OcFace::from_ffi_unchecked(ffi::shape_as_face(
                 self.inner.current_owned().as_ref().unwrap(),
