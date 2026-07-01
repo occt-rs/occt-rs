@@ -1570,7 +1570,7 @@ pub fn register_raw(uuid: uuid::Uuid, driver: Box<dyn FunctionDriverRaw>) -> Opt
 //   the duration of the call.
 
 // Safety: see module-level safety contract above.
-pub(crate) unsafe fn rust_driver_execute(id: u64, log: usize) -> i32 {
+pub unsafe fn rust_driver_execute(id: u64, log: usize) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         REGISTRY.with(|r| {
             let r = r.borrow();
@@ -1599,7 +1599,7 @@ pub(crate) unsafe fn rust_driver_execute(id: u64, log: usize) -> i32 {
 }
 
 // Safety: see module-level safety contract above.
-pub(crate) unsafe fn rust_driver_must_execute(id: u64, log: usize) -> bool {
+pub unsafe fn rust_driver_must_execute(id: u64, log: usize) -> bool {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         REGISTRY.with(|r| {
             let r = r.borrow();
@@ -1626,7 +1626,7 @@ pub(crate) unsafe fn rust_driver_must_execute(id: u64, log: usize) -> bool {
 }
 
 // Safety: see module-level safety contract above.
-pub(crate) unsafe fn rust_driver_validate(id: u64, log: usize) {
+pub unsafe fn rust_driver_validate(id: u64, log: usize) {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         REGISTRY.with(|r| {
             let r = r.borrow();
@@ -1648,7 +1648,7 @@ pub(crate) unsafe fn rust_driver_validate(id: u64, log: usize) {
 }
 
 // Safety: see module-level safety contract above.
-pub(crate) unsafe fn rust_driver_arguments(id: u64, list: usize) {
+pub unsafe fn rust_driver_arguments(id: u64, list: usize) {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         REGISTRY.with(|r| {
             let r = r.borrow();
@@ -1670,7 +1670,7 @@ pub(crate) unsafe fn rust_driver_arguments(id: u64, list: usize) {
 }
 
 // Safety: see module-level safety contract above.
-pub(crate) unsafe fn rust_driver_results(id: u64, list: usize) {
+pub unsafe fn rust_driver_results(id: u64, list: usize) {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         REGISTRY.with(|r| {
             let r = r.borrow();
@@ -1730,16 +1730,6 @@ mod tests {
     // Null stand-in for log/list pointers in tests where the driver does not
     // dereference them. Not valid for drivers that touch the pointer.
     const UNUSED_PTR: usize = 0;
-
-    #[test]
-    fn registration_valid_guid_succeeds() {
-        // Ok(Some(_)) on first run; Ok(None) if OCCT table already has this GUID
-        // from a previous test run in the same process. Either is not an error.
-        let result = register_raw(
-            Uuid::try_from("a3f8c2d1-4e5b-6f70-8192-a3b4c5d6e7f8").unwrap(),
-            Box::new(CountingDriver::new(0)),
-        );
-    }
 
     #[test]
     fn registration_duplicate_guid_returns_none() {

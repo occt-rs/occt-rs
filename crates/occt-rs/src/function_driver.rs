@@ -328,4 +328,84 @@ mod tests {
     // called through real OCCT machinery) requires TFunction_Function attribute
     // binding so that a rebuild can be triggered on a document label. Add once
     // TFunction_Function::Set and TFunction_Iterator are bound.
+    #[test]
+    fn driver_creates_labels_under_captured_parent() {
+        use occt_sys::ffi;
+        use occt_sys::sys_topo::{register_raw, rust_driver_execute, FunctionDriverRaw};
+        use uuid::Uuid;
+
+        // ── Setup ────────────────────────────────────────────────────────────────
+
+        let mut app = crate::ocaf::OcApplication::new();
+        let mut doc = app.new_document("BinXCAF").unwrap();
+        let main = doc.main();
+
+        // Create the parent label at main/1 in its own command.
+        let parent = {
+            let cmd = doc.begin_command().unwrap();
+            let l = main.get_or_create_child(&cmd, 1);
+            cmd.commit().unwrap();
+            l
+        };
+
+        // ── Driver definition ────────────────────────────────────────────────────
+        //
+        // Captures a clone of `parent`. On execute, creates children at tags
+        // 2, 4, 8, 16 directly via ffi (no Command<'_> proof token needed —
+        // the test opens a transaction before calling rust_driver_execute).
+        // Does not touch the logbook (called with a null stand-in in this test).
+
+        struct LabelCreatingDriver {
+            parent: OcLabel,
+        }
+
+        unsafe impl FunctionDriverRaw for LabelCreatingDriver {
+            unsafe fn execute_raw(&self, _log: *mut ffi::TFunctionLogbookHandle) -> i32 {
+                for tag in [2i32, 4, 8, 16] {
+                    // Safety: a transaction is open in the test body; the label
+                    // pointer is valid for the document's lifetime.
+                    let _ =
+                        ffi::tdf_label_find_child(self.parent.inner.as_ref().unwrap(), tag, true);
+                }
+                0
+            }
+            unsafe fn must_execute_raw(&self, _: *mut ffi::TFunctionLogbookHandle) -> bool {
+                true
+            }
+            unsafe fn validate_raw(&self, _: *mut ffi::TFunctionLogbookHandle) {}
+            unsafe fn arguments_raw(&self, _: *mut ffi::TFunctionLabelListShim) {}
+            unsafe fn results_raw(&self, _: *mut ffi::TFunctionLabelListShim) {}
+        }
+
+        // ── Registration ─────────────────────────────────────────────────────────
+
+        let id = register_raw(
+            Uuid::try_from("a1b2c3d4-e5f6-7890-abcd-ef1234567890").unwrap(),
+            Box::new(LabelCreatingDriver {
+                parent: parent.clone(),
+            }),
+        )
+        .expect("GUID already taken — use a unique UUID for this test");
+
+        // ── Invocation ───────────────────────────────────────────────────────────
+        //
+        // Open a command so that label creation is part of a transaction, matching
+        // how OCCT's TFunction machinery would call Execute.
+
+        {
+            let cmd = doc.begin_command().unwrap();
+            let code = unsafe { rust_driver_execute(id, 0) };
+            assert_eq!(code, 0, "driver returned non-zero exit code");
+            cmd.commit().unwrap();
+        }
+
+        // ── Verification ─────────────────────────────────────────────────────────
+
+        for tag in [2i32, 4, 8, 16] {
+            assert!(
+                parent.find_child(tag).is_some(),
+                "child at tag {tag} was not created by the driver"
+            );
+        }
+    }
 }
