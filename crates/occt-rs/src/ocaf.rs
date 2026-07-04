@@ -30,7 +30,7 @@ pub mod tdata_xtd;
 pub mod topo_naming;
 pub use application::OcApplication;
 pub use attributes::{OcInteger, OcName, OcReal};
-pub use document::{Command as OcCommand, OcDocument};
+pub use document::OcDocument;
 pub use label::{OcChildIterator, OcLabel};
 pub use tdata_xtd::{
     ConstraintKind, GeometryKind, OcAxisAttr, OcConstraintAttr, OcGeometryAttr, OcPlaneAttr,

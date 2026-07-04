@@ -116,61 +116,61 @@ impl TopoNamingEvolution {
 ///
 /// // planes command
 /// {
-///     let cmd = doc.begin_command().unwrap();
-///     let planes = main.get_or_create_child(&cmd, 1);
+///     doc.begin_command().unwrap();
+///     let planes = main.get_or_create_child(1);
 ///
-///     # let xy = planes.get_or_create_child(&cmd, 1);
-///     # OcPlaneAttr::record_shape(&cmd, &xy, OcAx2::new(
+///     # let xy = planes.get_or_create_child(1);
+///     # OcPlaneAttr::record_shape(&xy, OcAx2::new(
 ///     #     OcPnt::new(0.0, 0.0, 0.0),
 ///     #     OcDir::new(0.0, 0.0, 1.0).unwrap(),
 ///     #     OcDir::new(1.0, 0.0, 0.0).unwrap(),
 ///     # ).unwrap()).unwrap();
-///     # OcPlaneAttr::set(&cmd, &xy).unwrap();
+///     # OcPlaneAttr::set(&xy).unwrap();
 ///
-///     # let yz = planes.get_or_create_child(&cmd, 2);
-///     # OcPlaneAttr::record_shape(&cmd, &yz, OcAx2::new(
+///     # let yz = planes.get_or_create_child(2);
+///     # OcPlaneAttr::record_shape(&yz, OcAx2::new(
 ///     #     OcPnt::new(0.0, 0.0, 0.0),
 ///     #     OcDir::new(1.0, 0.0, 0.0).unwrap(),
 ///     #     OcDir::new(0.0, 1.0, 0.0).unwrap(),
 ///     # ).unwrap()).unwrap();
-///     # OcPlaneAttr::set(&cmd, &yz).unwrap();
+///     # OcPlaneAttr::set(&yz).unwrap();
 ///     // snipped: making xy and yz
 ///
-///     let xz = planes.get_or_create_child(&cmd, 3);
-///     OcPlaneAttr::record_shape(&cmd, &xz, OcAx2::new(
+///     let xz = planes.get_or_create_child(3);
+///     OcPlaneAttr::record_shape(&xz, OcAx2::new(
 ///         OcPnt::new(0.0, 0.0, 0.0),
 ///         OcDir::new(0.0, 1.0, 0.0).unwrap(),
 ///         OcDir::new(1.0, 0.0, 0.0).unwrap(),
 ///     ).unwrap()).unwrap();
-///     OcPlaneAttr::set(&cmd, &xz).unwrap();
+///     OcPlaneAttr::set(&xz).unwrap();
 ///
-///     cmd.commit().unwrap();
+///     doc.commit().unwrap();
 /// }
 ///
 /// // sketch command
 /// {
-///     let cmd = doc.begin_command().unwrap();
-///     let sketch = main.get_or_create_child(&cmd, 2);
+///     doc.begin_command().unwrap();
+///     let sketch = main.get_or_create_child(2);
 ///
-///     # let la = sketch.get_or_create_child(&cmd, 1);
-///     # OcPointAttr::record_shape(&cmd, &la, OcPnt::new(0.0, 1.0, 0.0)).unwrap();
-///     # OcPointAttr::set(&cmd, &la).unwrap();
+///     # let la = sketch.get_or_create_child(1);
+///     # OcPointAttr::record_shape(&la, OcPnt::new(0.0, 1.0, 0.0)).unwrap();
+///     # OcPointAttr::set(&la).unwrap();
 ///
-///     # let lb = sketch.get_or_create_child(&cmd, 2);
-///     # OcPointAttr::record_shape(&cmd, &lb, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
-///     # OcPointAttr::set(&cmd, &lb).unwrap();
+///     # let lb = sketch.get_or_create_child(2);
+///     # OcPointAttr::record_shape(&lb, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
+///     # OcPointAttr::set(&lb).unwrap();
 ///
-///     # let lc = sketch.get_or_create_child(&cmd, 3);
-///     # OcPointAttr::record_shape(&cmd, &lc, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
-///     # OcPointAttr::set(&cmd, &lc).unwrap();
+///     # let lc = sketch.get_or_create_child(3);
+///     # OcPointAttr::record_shape(&lc, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+///     # OcPointAttr::set(&lc).unwrap();
 ///     // snipped: maing la, lb and lc
 ///
-///     let ld = sketch.get_or_create_child(&cmd, 4);
-///     OcPointAttr::record_shape(&cmd, &ld, OcPnt::new(1.0, 1.0, 0.0)).unwrap();
-///     OcPointAttr::set(&cmd, &ld).unwrap();
+///     let ld = sketch.get_or_create_child(4);
+///     OcPointAttr::record_shape(&ld, OcPnt::new(1.0, 1.0, 0.0)).unwrap();
+///     OcPointAttr::set(&ld).unwrap();
 ///
 ///     // Record the square face — the extrude input
-///     let lface = sketch.get_or_create_child(&cmd, 5);
+///     let lface = sketch.get_or_create_child(5);
 ///     let wire = OcWire::from_edges(&[
 ///         OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
 ///         OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(1.0, 1.0, 0.0)).unwrap(),
@@ -178,9 +178,9 @@ impl TopoNamingEvolution {
 ///         OcEdge::from_pnts(OcPnt::new(0.0, 1.0, 0.0), OcPnt::new(0.0, 0.0, 0.0)).unwrap(),
 ///     ]).unwrap();
 ///     let face = OcFace::from_wire(&wire, true).unwrap();
-///     cmd.name_builder(&lface).primitive(&face.as_shape());
+///     doc.name_builder(&lface).primitive(&face.as_shape());
 ///
-///     cmd.commit().unwrap();
+///     doc.commit().unwrap();
 /// }
 ///
 /// // extrude command
@@ -189,24 +189,24 @@ impl TopoNamingEvolution {
 /// // The extrude depth is stored alongside it as OcReal so that editing
 /// // the depth and rebuilding the solid can be undone as a single step.
 /// let solid_label = {
-///     let cmd = doc.begin_command().unwrap();
-///     let body   = main.get_or_create_child(&cmd, 3);
-///     let lsolid = body.get_or_create_child(&cmd, 1);
+///     doc.begin_command().unwrap();
+///     let body   = main.get_or_create_child(3);
+///     let lsolid = body.get_or_create_child(1);
 ///
-///     let depth = OcReal::set(&cmd, &lsolid, 1.0).unwrap();
+///     let depth = OcReal::set(&lsolid, 1.0).unwrap();
 ///
 ///     // Read the face from the sketch label.
-///     let sketch = main.get_or_create_child(&cmd, 2);
-///     let lface  = sketch.get_or_create_child(&cmd, 5);
+///     let sketch = main.get_or_create_child(2);
+///     let lface  = sketch.get_or_create_child(5);
 ///     let face_shape = TopoNamingNamedShape::find(&lface).unwrap().get().unwrap();
 ///     let face = OcFace::try_from(&face_shape).unwrap();
 ///
 ///     // do the extrude to make the solid
 ///     let extrude_shape = face.extrude(OcVec::new(0.0, 0.0, depth.get())).unwrap();
 ///
-///     cmd.name_builder(&lsolid).generated(&face_shape, &extrude_shape);
+///     doc.name_builder(&lsolid).generated(&face_shape, &extrude_shape);
 ///
-///     cmd.commit().unwrap();
+///     doc.commit().unwrap();
 ///     lsolid
 /// };
 ///
@@ -227,9 +227,9 @@ impl TopoNamingEvolution {
 ///
 /// // A label with no named shape returns None
 /// let empty_label = {
-///     let cmd = doc.begin_command().unwrap();
-///     let l = main.get_or_create_child(&cmd, 99);
-///     cmd.commit().unwrap();
+///     doc.begin_command().unwrap();
+///     let l = main.get_or_create_child(99);
+///     doc.commit().unwrap();
 ///     l
 /// };
 /// assert!(TopoNamingNamedShape::find(&empty_label).is_none());
@@ -453,21 +453,21 @@ impl TopoNamingNamedShape {
 ///
 /// // setup label 0:1:3 (body) and the first solid child
 /// {
-///     let cmd = doc.begin_command().unwrap();
-///     let lsolid = main.get_or_create_child(&cmd, 3)
-///                      .get_or_create_child(&cmd, 1);
-///     OcReal::set(&cmd, &lsolid, 1.0).unwrap();
-///     cmd.name_builder(&lsolid).primitive(&face_shape);
-///     cmd.commit().unwrap();
+///     doc.begin_command().unwrap();
+///     let lsolid = main.get_or_create_child(3)
+///                      .get_or_create_child(1);
+///     OcReal::set(&lsolid, 1.0).unwrap();
+///     doc.name_builder(&lsolid).primitive(&face_shape);
+///     doc.commit().unwrap();
 /// }
 ///
 /// // Apply chamfer, record result and modified faces on body/2
 /// let (chamfer_shape, chamfer_face) = {
-///     let cmd = doc.begin_command().unwrap();
-///     let lchamfer = main.get_or_create_child(&cmd, 3)
-///                        .get_or_create_child(&cmd, 2);
+///     doc.begin_command().unwrap();
+///     let lchamfer = main.get_or_create_child(3)
+///                        .get_or_create_child(2);
 ///
-///     let distance = OcReal::set(&cmd, &lchamfer, 0.05).unwrap();
+///     let distance = OcReal::set(&lchamfer, 0.05).unwrap();
 ///     let edge = face_shape.edges().next().unwrap();
 ///     let mut cb = ChamferBuilder::new(&face_shape).unwrap();
 ///     cb.add_edge(distance.get(), &edge).unwrap();
@@ -477,14 +477,14 @@ impl TopoNamingNamedShape {
 ///     // Capture the generated chamfer face while built is still live
 ///     let chamfer_face = built.generated(&edge.as_shape()).next().unwrap();
 ///
-///     let mut nb = cmd.name_builder(&lchamfer);
+///     let mut nb = doc.name_builder(&lchamfer);
 ///     for face in &pre_faces {
 ///         for modified in built.modified(&face.as_shape()) {
 ///             nb.modified(&face.as_shape(), &modified);
 ///         }
 ///     }
 ///
-///     cmd.commit().unwrap();
+///     doc.commit().unwrap();
 ///     (chamfer_shape, chamfer_face)
 /// };
 ///
@@ -493,15 +493,15 @@ impl TopoNamingNamedShape {
 /// // so that after rebuild, solve() can re-find it by naming description
 /// // rather than by pointer identity.
 /// let ref_face_label = {
-///     let cmd = doc.begin_command().unwrap();
-///     let sketch2 = main.get_or_create_child(&cmd, 4);
-///     let ref_face = sketch2.get_or_create_child(&cmd, 5);
+///     doc.begin_command().unwrap();
+///     let sketch2 = main.get_or_create_child(4);
+///     let ref_face = sketch2.get_or_create_child(5);
 ///
 ///
-///     let mut selector = cmd.selector(&ref_face);
-///     selector.select(&cmd, &chamfer_face, &chamfer_shape);
+///     let mut selector = doc.selector(&ref_face);
+///     selector.select(&chamfer_face, &chamfer_shape);
 ///
-///     cmd.commit().unwrap();
+///     doc.commit().unwrap();
 ///     ref_face
 /// };
 ///
@@ -547,12 +547,7 @@ impl TopoNamingSelector {
     /// open; it is not used at runtime.
     ///
     /// [`Command`]: crate::ocaf::document::Command
-    pub fn select(
-        &mut self,
-        _cmd: &crate::ocaf::document::Command<'_>,
-        shape: &OcShape,
-        context: &OcShape,
-    ) -> bool {
+    pub fn select(&mut self, shape: &OcShape, context: &OcShape) -> bool {
         ffi::tnaming_selector_select(self.inner.pin_mut(), shape.as_ffi(), context.as_ffi())
     }
 
@@ -614,21 +609,21 @@ mod test {
 
         // Command 1: create the label and record shape_a as primitive
         let (label, named_shape) = {
-            let cmd = doc.begin_command().unwrap();
-            let label = root.get_or_create_child(&cmd, 1);
+            doc.begin_command().unwrap();
+            let label = root.get_or_create_child(1);
             let mut b = TopoNamingBuilder::new(&label);
             b.primitive(&shape_a);
             let ns = b.named_shape();
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
             (label, ns)
         };
 
         // Command 2: modify to shape_b
         {
-            let cmd = doc.begin_command().unwrap();
+            doc.begin_command().unwrap();
             let mut b = TopoNamingBuilder::new(&label);
             b.modified(&shape_a, &shape_b);
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
         }
 
         // After command 2, get() should return shape_b

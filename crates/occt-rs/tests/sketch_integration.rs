@@ -86,43 +86,43 @@ mod integration_sketch_extrude {
         // Allocate the planes container label (tag 1) and three plane labels
         // (tags 1, 2, 3) in a single command.
         let (xy_label, yz_label, xz_label) = {
-            let cmd = doc.begin_command().unwrap();
-            let planes = main.get_or_create_child(&cmd, 1);
+            doc.begin_command().unwrap();
+            let planes = main.get_or_create_child(1);
 
             // XY plane: normal +Z, X direction +X
-            let xy_label = planes.get_or_create_child(&cmd, 1);
+            let xy_label = planes.get_or_create_child(1);
             let xy_frame = OcAx2::new(
                 OcPnt::origin(),
                 OcDir::new(0.0, 0.0, 1.0).unwrap(),
                 OcDir::new(1.0, 0.0, 0.0).unwrap(),
             )
             .unwrap();
-            OcPlaneAttr::record_shape(&cmd, &xy_label, xy_frame).unwrap();
-            OcPlaneAttr::set(&cmd, &xy_label).unwrap();
+            OcPlaneAttr::record_shape(&xy_label, xy_frame).unwrap();
+            OcPlaneAttr::set(&xy_label).unwrap();
 
             // YZ plane: normal +X, X direction +Y
-            let yz_label = planes.get_or_create_child(&cmd, 2);
+            let yz_label = planes.get_or_create_child(2);
             let yz_frame = OcAx2::new(
                 OcPnt::origin(),
                 OcDir::new(1.0, 0.0, 0.0).unwrap(),
                 OcDir::new(0.0, 1.0, 0.0).unwrap(),
             )
             .unwrap();
-            OcPlaneAttr::record_shape(&cmd, &yz_label, yz_frame).unwrap();
-            OcPlaneAttr::set(&cmd, &yz_label).unwrap();
+            OcPlaneAttr::record_shape(&yz_label, yz_frame).unwrap();
+            OcPlaneAttr::set(&yz_label).unwrap();
 
             // XZ plane: normal +Y, X direction +X
-            let xz_label = planes.get_or_create_child(&cmd, 3);
+            let xz_label = planes.get_or_create_child(3);
             let xz_frame = OcAx2::new(
                 OcPnt::origin(),
                 OcDir::new(0.0, 1.0, 0.0).unwrap(),
                 OcDir::new(1.0, 0.0, 0.0).unwrap(),
             )
             .unwrap();
-            OcPlaneAttr::record_shape(&cmd, &xz_label, xz_frame).unwrap();
-            OcPlaneAttr::set(&cmd, &xz_label).unwrap();
+            OcPlaneAttr::record_shape(&xz_label, xz_frame).unwrap();
+            OcPlaneAttr::set(&xz_label).unwrap();
 
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
             (xy_label, yz_label, xz_label)
         };
 
@@ -138,43 +138,43 @@ mod integration_sketch_extrude {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
 
-        // ── cmd 1: base planes ────────────────────────────────────────────
+        // First command
 
         let planes_label = {
-            let cmd = doc.begin_command().unwrap();
-            let planes = main.get_or_create_child(&cmd, 1);
+            doc.begin_command().unwrap();
+            let planes = main.get_or_create_child(1);
 
-            let xy_label = planes.get_or_create_child(&cmd, 1);
+            let xy_label = planes.get_or_create_child(1);
             let xy_frame = OcAx2::new(
                 OcPnt::origin(),
                 OcDir::new(0.0, 0.0, 1.0).unwrap(),
                 OcDir::new(1.0, 0.0, 0.0).unwrap(),
             )
             .unwrap();
-            OcPlaneAttr::record_shape(&cmd, &xy_label, xy_frame).unwrap();
-            OcPlaneAttr::set(&cmd, &xy_label).unwrap();
+            OcPlaneAttr::record_shape(&xy_label, xy_frame).unwrap();
+            OcPlaneAttr::set(&xy_label).unwrap();
 
-            let yz_label = planes.get_or_create_child(&cmd, 2);
+            let yz_label = planes.get_or_create_child(2);
             let yz_frame = OcAx2::new(
                 OcPnt::origin(),
                 OcDir::new(1.0, 0.0, 0.0).unwrap(),
                 OcDir::new(0.0, 1.0, 0.0).unwrap(),
             )
             .unwrap();
-            OcPlaneAttr::record_shape(&cmd, &yz_label, yz_frame).unwrap();
-            OcPlaneAttr::set(&cmd, &yz_label).unwrap();
+            OcPlaneAttr::record_shape(&yz_label, yz_frame).unwrap();
+            OcPlaneAttr::set(&yz_label).unwrap();
 
-            let xz_label = planes.get_or_create_child(&cmd, 3);
+            let xz_label = planes.get_or_create_child(3);
             let xz_frame = OcAx2::new(
                 OcPnt::origin(),
                 OcDir::new(0.0, 1.0, 0.0).unwrap(),
                 OcDir::new(1.0, 0.0, 0.0).unwrap(),
             )
             .unwrap();
-            OcPlaneAttr::record_shape(&cmd, &xz_label, xz_frame).unwrap();
-            OcPlaneAttr::set(&cmd, &xz_label).unwrap();
+            OcPlaneAttr::record_shape(&xz_label, xz_frame).unwrap();
+            OcPlaneAttr::set(&xz_label).unwrap();
 
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
             planes
         };
 
@@ -182,15 +182,15 @@ mod integration_sketch_extrude {
         let xy_label = planes_label.find_child(1).expect("XY plane label");
         assert!(OcPlaneAttr::find(&xy_label).is_some());
 
-        // ── cmd 2: sketch — four corner points + square face ──────────────
+        // ── Second command — four corner points + square face ──────────────
         //
         // Corner layout (unit square in XY):
         //   A (0,1,0)   B (0,0,0)   C (1,0,0)   D (1,1,0)
         // Tags: sketch/1=A, sketch/2=B, sketch/3=C, sketch/4=D, sketch/5=face
 
         let (_sketch_label, pt_a_label, pt_b_label, pt_c_label, pt_d_label, face_label) = {
-            let cmd = doc.begin_command().unwrap();
-            let sketch = main.get_or_create_child(&cmd, 2);
+            doc.begin_command().unwrap();
+            let sketch = main.get_or_create_child(2);
 
             let pnt_a = OcPnt::new(0.0, 1.0, 0.0);
             let pnt_b = OcPnt::new(0.0, 0.0, 0.0);
@@ -198,55 +198,55 @@ mod integration_sketch_extrude {
             let pnt_d = OcPnt::new(1.0, 1.0, 0.0);
 
             // Point labels — record_shape first (shape), then set (tag).
-            let la = sketch.get_or_create_child(&cmd, 1);
-            OcPointAttr::record_shape(&cmd, &la, pnt_a).unwrap();
-            OcPointAttr::set(&cmd, &la).unwrap();
+            let la = sketch.get_or_create_child(1);
+            OcPointAttr::record_shape(&la, pnt_a).unwrap();
+            OcPointAttr::set(&la).unwrap();
 
-            let lb = sketch.get_or_create_child(&cmd, 2);
-            OcPointAttr::record_shape(&cmd, &lb, pnt_b).unwrap();
-            OcPointAttr::set(&cmd, &lb).unwrap();
+            let lb = sketch.get_or_create_child(2);
+            OcPointAttr::record_shape(&lb, pnt_b).unwrap();
+            OcPointAttr::set(&lb).unwrap();
 
-            let lc = sketch.get_or_create_child(&cmd, 3);
-            OcPointAttr::record_shape(&cmd, &lc, pnt_c).unwrap();
-            OcPointAttr::set(&cmd, &lc).unwrap();
+            let lc = sketch.get_or_create_child(3);
+            OcPointAttr::record_shape(&lc, pnt_c).unwrap();
+            OcPointAttr::set(&lc).unwrap();
 
-            let ld = sketch.get_or_create_child(&cmd, 4);
-            OcPointAttr::record_shape(&cmd, &ld, pnt_d).unwrap();
-            OcPointAttr::set(&cmd, &ld).unwrap();
+            let ld = sketch.get_or_create_child(4);
+            OcPointAttr::record_shape(&ld, pnt_d).unwrap();
+            OcPointAttr::set(&ld).unwrap();
 
             // Face label — record the square face shape as a primitive.
             // This is the geometry input to the extrude step.
-            let lface = sketch.get_or_create_child(&cmd, 5);
+            let lface = sketch.get_or_create_child(5);
             let face = make_square_face();
             let face_shape = face.as_shape();
             let mut face_builder = TopoNamingBuilder::new(&lface);
             face_builder.primitive(&face_shape);
             let _face_ns = face_builder.named_shape();
 
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
             (sketch, la, lb, lc, ld, lface)
         };
 
         // Verify all four point attributes are present after the sketch command.
         assert!(
             OcPointAttr::find(&pt_a_label).is_some(),
-            "point A missing after sketch cmd"
+            "point A missing after sketch command"
         );
         assert!(
             OcPointAttr::find(&pt_b_label).is_some(),
-            "point B missing after sketch cmd"
+            "point B missing after sketch command"
         );
         assert!(
             OcPointAttr::find(&pt_c_label).is_some(),
-            "point C missing after sketch cmd"
+            "point C missing after sketch command"
         );
         assert!(
             OcPointAttr::find(&pt_d_label).is_some(),
-            "point D missing after sketch cmd"
+            "point D missing after sketch command"
         );
         assert!(
             TopoNamingNamedShape::find(&face_label).is_some(),
-            "face named shape missing after sketch cmd"
+            "face named shape missing after sketch command"
         );
 
         // Verify point A coordinates round-trip correctly.
@@ -257,16 +257,16 @@ mod integration_sketch_extrude {
         assert!((p.y - 1.0).abs() < 1e-12, "A.y");
         assert!((p.z - 0.0).abs() < 1e-12, "A.z");
 
-        // ── cmd 3: extrude ────────────────────────────────────────────────
+        // ── Third command ────────────────────────────────────────────────
         //
         // Rebuild the square face from geometry (the face label's NamedShape
         // holds the shape reference; for the actual extrude we reconstruct
         // the OcFace so we can call extrude() on it).
 
         let solid_label = {
-            let cmd = doc.begin_command().unwrap();
-            let body = main.get_or_create_child(&cmd, 3);
-            let lsolid = body.get_or_create_child(&cmd, 1);
+            doc.begin_command().unwrap();
+            let body = main.get_or_create_child(3);
+            let lsolid = body.get_or_create_child(1);
 
             let face = make_square_face();
             let solid_shape = face.extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
@@ -275,7 +275,7 @@ mod integration_sketch_extrude {
             builder.primitive(&solid_shape);
             let _ns = builder.named_shape();
 
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
             lsolid
         };
 
@@ -323,10 +323,10 @@ mod integration_sketch_extrude {
         let new_a = OcPnt::new(0.5, 1.0, 0.0);
 
         {
-            let cmd = doc.begin_command().unwrap();
+            doc.begin_command().unwrap();
             // record_shape on an already-named label records a Modify delta.
-            OcPointAttr::record_shape(&cmd, &pt_a_label, new_a).unwrap();
-            cmd.commit().unwrap();
+            OcPointAttr::record_shape(&pt_a_label, new_a).unwrap();
+            doc.commit().unwrap();
         }
 
         // Verify the new coordinates are visible.
@@ -379,22 +379,20 @@ mod integration_sketch_extrude {
 
         assert_eq!(doc.available_undos(), 0);
 
-        // cmd 1
-        {
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
-            OcInteger::set(&cmd, &l, 0).unwrap();
-            eprintln!("commit: {}", cmd.commit().unwrap());
-        }
+        // First command
+        doc.begin_command().unwrap();
+        let l = main.get_or_create_child(1);
+        OcInteger::set(&l, 0).unwrap();
+        eprintln!("commit: {}", doc.commit().unwrap());
         assert_eq!(doc.available_undos(), 1);
 
-        // cmd 2
-        {
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 2);
-            OcInteger::set(&cmd, &l, 0).unwrap();
-            eprintln!("commit: {}", cmd.commit().unwrap());
-        }
+        // second command
+
+        doc.begin_command().unwrap();
+        let l = main.get_or_create_child(2);
+        OcInteger::set(&l, 0).unwrap();
+        eprintln!("commit: {}", doc.commit().unwrap());
+
         assert_eq!(doc.available_undos(), 2);
 
         doc.undo().unwrap();

@@ -15,7 +15,7 @@ use std::marker::PhantomData;
 
 use occt_sys::ffi;
 
-use crate::error::{OcctError, OcctErrorKind};
+use crate::error::OcctError;
 use crate::ocaf::label::LabelPath;
 use crate::ocaf::label::OcLabel;
 use crate::ocaf::topo_naming::{TopoNamingBuilder, TopoNamingSelector};
@@ -80,12 +80,12 @@ use crate::ocaf::topo_naming::{TopoNamingBuilder, TopoNamingSelector};
 /// // Create the top-level container nodes in a single command.
 /// // In the scenario these are: planes (1), sketch (2), body (3), sketch2 (4).
 /// let planes = {
-///     let cmd = doc.begin_command().unwrap();
-///     let planes  = main.get_or_create_child(&cmd, 1);
-///     let _sketch  = main.get_or_create_child(&cmd, 2);
-///     let _body    = main.get_or_create_child(&cmd, 3);
-///     let _sketch2 = main.get_or_create_child(&cmd, 4);
-///     cmd.commit().unwrap();
+///     doc.begin_command().unwrap();
+///     let planes  = main.get_or_create_child(1);
+///     let _sketch  = main.get_or_create_child(2);
+///     let _body    = main.get_or_create_child(3);
+///     let _sketch2 = main.get_or_create_child(4);
+///     doc.commit().unwrap();
 ///     planes
 /// };
 ///
@@ -96,8 +96,8 @@ use crate::ocaf::topo_naming::{TopoNamingBuilder, TopoNamingSelector};
 /// // └── 4 (0:1:4)   sketch2
 ///
 /// let (xy, xy_frame) = {
-///     let cmd = doc.begin_command().unwrap();
-///     let xy = planes.get_or_create_child(&cmd, 1);
+///     doc.begin_command().unwrap();
+///     let xy = planes.get_or_create_child(1);
 ///     let xy_frame = OcAx2::new(
 ///         OcPnt::new(0.0, 0.0, 0.0),
 ///         OcDir::new(0.0, 0.0, 1.0).unwrap(),
@@ -109,31 +109,30 @@ use crate::ocaf::topo_naming::{TopoNamingBuilder, TopoNamingSelector};
 ///
 /// // you can also retreive planes by the label address
 /// let planes_gotten = doc.label_at(&"1:1".parse().unwrap()).unwrap();
-/// let cmd = doc.begin_command().unwrap();
+/// doc.begin_command().unwrap();
 ///
-/// // see [`Command`] for details about the usage of &cmd and its commit method
-/// OcPlaneAttr::record_shape(&cmd, &xy, xy_frame).unwrap();
-/// OcPlaneAttr::set(&cmd, &xy).unwrap();
+/// OcPlaneAttr::record_shape(&xy, xy_frame).unwrap();
+/// OcPlaneAttr::set(&xy).unwrap();
 ///
-/// let yz = planes_gotten.get_or_create_child(&cmd, 2);
+/// let yz = planes_gotten.get_or_create_child(2);
 /// let yz_frame = OcAx2::new(
 ///     OcPnt::new(0.0, 0.0, 0.0),
 ///     OcDir::new(1.0, 0.0, 0.0).unwrap(),
 ///     OcDir::new(0.0, 1.0, 0.0).unwrap(),
 /// ).unwrap();
-/// OcPlaneAttr::record_shape(&cmd, &yz, yz_frame).unwrap();
-/// OcPlaneAttr::set(&cmd, &yz).unwrap();
+/// OcPlaneAttr::record_shape(&yz, yz_frame).unwrap();
+/// OcPlaneAttr::set(&yz).unwrap();
 ///
-/// let xz = planes_gotten.get_or_create_child(&cmd, 3);
+/// let xz = planes_gotten.get_or_create_child(3);
 /// let xz_frame = OcAx2::new(
 ///     OcPnt::new(0.0, 0.0, 0.0),
 ///     OcDir::new(0.0, 1.0, 0.0).unwrap(),
 ///     OcDir::new(1.0, 0.0, 0.0).unwrap(),
 /// ).unwrap();
-/// OcPlaneAttr::record_shape(&cmd, &xz, xz_frame).unwrap();
-/// OcPlaneAttr::set(&cmd, &xz).unwrap();
+/// OcPlaneAttr::record_shape(&xz, xz_frame).unwrap();
+/// OcPlaneAttr::set(&xz).unwrap();
 ///
-/// cmd.commit().unwrap();
+/// doc.commit().unwrap();
 ///
 /// assert!(OcPlaneAttr::find(&xy).is_some());
 /// assert!(OcPlaneAttr::find(&yz).is_some());
@@ -169,39 +168,29 @@ impl OcDocument {
     ///
     /// Returns `None` if any segment of the path does not exist.
     pub fn label_at(&self, path: &LabelPath) -> Option<OcLabel> {
-        let mut tags = path.0.iter();
-        // The first segment is the framework root tag (0) — skip it,
-        // since we already start there.
-        tags.next();
-        let mut current = self.main().root();
-        for &tag in tags {
-            current = current.find_child(tag)?;
-        }
-        Some(current)
+        OcLabel::from_ffi(ffi::tdf_label_from_entry(
+            &self.main().root().inner,
+            &path.to_string(),
+        ))
     }
 
-    /// Opens a new [`Command`] RAII guard.
-    ///
-    /// On drop, the command is aborted
-    ///
-    /// The document is exclusively borrowed for the lifetime of the returned
-    /// [`Command`]; no other mutable access is possible while it is live.
-    ///
-    pub fn begin_command(&mut self) -> Result<Command<'_>, OcctError> {
-        if ffi::document_has_open_command(&self.inner) {
-            return Err(OcctError {
-                kind: OcctErrorKind::Other("document".into()),
-                message: "begin_command called while a command is already open; \
-                      commit or abort the current command first"
-                    .into(),
-            });
-        }
-        let mut pinned = self.inner.pin_mut();
-        ffi::document_new_command(pinned.as_mut()).map_err(OcctError::from)?;
-        Ok(Command {
-            inner: pinned,
-            done: false,
-        })
+    /// Pure wrapper around TDocStd_Document::Command
+    pub fn begin_command(&mut self) -> Result<(), OcctError> {
+        ffi::document_new_command(self.inner.pin_mut().as_mut()).map_err(OcctError::from)
+    }
+    /// Pure wrapper around TDataStd_Document::CommitCommand
+    pub fn commit(&mut self) -> Result<bool, OcctError> {
+        ffi::document_commit_command(self.inner.pin_mut()).map_err(OcctError::from)
+    }
+    pub fn abort(&mut self) -> Result<(), OcctError> {
+        ffi::document_abort_command(self.inner.pin_mut().as_mut()).map_err(OcctError::from)
+    }
+    /// Creates a [`TopoNamingSelector`] bound to `label`.
+    pub fn selector(&self, label: &OcLabel) -> TopoNamingSelector {
+        TopoNamingSelector::new(ffi::new_tnaming_selector(label.inner.as_ref().unwrap()))
+    }
+    pub fn name_builder<'doc>(&'doc self, label: &OcLabel) -> TopoNamingBuilder<'doc> {
+        TopoNamingBuilder::new(label)
     }
 
     pub fn available_undos(&self) -> i32 {
@@ -241,18 +230,18 @@ impl OcDocument {
     /// // Create the label — structural, produces no undo delta.
     /// let main = doc.main();
     /// let label = {
-    ///     let cmd = doc.begin_command().unwrap();
-    ///     let l = main.get_or_create_child(&cmd, 1);
-    ///     cmd.commit().unwrap();
+    ///     doc.begin_command().unwrap();
+    ///     let l = main.get_or_create_child(1);
+    ///     doc.commit().unwrap();
     ///     l
     /// };
     /// assert_eq!(doc.available_undos(), 0);
     ///
     /// // Write an attribute — this produces a delta.
     /// {
-    ///     let cmd = doc.begin_command().unwrap();
-    ///     OcInteger::set(&cmd, &label, 42).unwrap();
-    ///     cmd.commit().unwrap();
+    ///     doc.begin_command().unwrap();
+    ///     OcInteger::set(&label, 42).unwrap();
+    ///     doc.commit().unwrap();
     /// }
     /// assert_eq!(doc.available_undos(), 1);
     /// assert_eq!(doc.available_redos(), 0);
@@ -330,123 +319,6 @@ impl std::fmt::Debug for OcDocument {
     }
 }
 
-/// RAII guard for a `TDF_Command` scope.
-///
-/// Constructed by [`OcDocument::begin_command`].  The document is exclusively
-/// borrowed for the guard's lifetime.
-///
-/// On drop: if neither [`commit`] nor [`abort`] has been called, the command
-/// is aborted.  Abort errors in drop are silently discarded (cannot propagate
-/// from `Drop`).
-///
-/// The example below will create a tree that looks as follows:
-///
-/// ```text
-/// main (0:1)
-/// └──  (0:1:1)
-///      - OcInteger = 99
-/// ```
-///
-/// ```
-/// use occt_rs::ocaf::OcApplication;
-/// use occt_rs::ocaf::attributes::OcInteger;
-///
-/// let mut app = OcApplication::new();
-/// let mut doc = app.new_document("BinXCAF").unwrap();
-/// doc.set_undo_limit(10);
-///
-/// // Label nodes are permanent — create them in a setup command.
-/// // They will survive abort and undo; only their attributes change.
-/// let main = doc.main();
-/// let label = {
-///     let cmd = doc.begin_command().unwrap();
-///     let l = main.get_or_create_child(&cmd, 1);
-///     cmd.commit().unwrap();
-///     l
-/// };
-///
-/// // Data tree now looks like this:
-/// // main (0:1)
-/// // └──  (0:1:1)
-/// //      <no attributes>
-///
-/// // Write an attribute, but abort the command
-/// {
-///     let cmd = doc.begin_command().unwrap();
-///     OcInteger::set(&cmd, &label, 99).unwrap();
-///     // Though not commited, the attribute is attached to the label
-///     assert_eq!(OcInteger::find(&label).unwrap().get(), 99);
-///     cmd.abort(); // could also just let `cmd` fall out of scope
-///     // aported => revert to pre-command state
-///     assert!(OcInteger::find(&label).is_none());
-/// }
-///
-/// // Write an attribute and commit
-/// let cmd = doc.begin_command().unwrap();
-/// OcInteger::set(&cmd, &label, 99).unwrap();
-/// cmd.commit().unwrap();
-/// // Committed command: attribute attached to label
-/// assert_eq!(OcInteger::find(&label).unwrap().get(), 99);
-///
-/// // Data tree now looks like this:
-/// // main (0:1)
-/// // └──  (0:1:1)
-/// //      - OcInteger = 99
-/// ```
-///
-/// [`commit`]: Command::commit
-/// [`abort`]: Command::abort
-pub struct Command<'doc> {
-    inner: cxx::core::pin::Pin<&'doc mut ffi::DocumentHandle>,
-    done: bool,
-}
-
-impl<'doc> Command<'doc> {
-    /// Commits the command, recording the changes as an undoable delta.
-    ///
-    /// Returns `true` when at least one change was recorded.
-    ///
-    /// Consumes `self`; the document borrow is released on return.
-    pub fn commit(mut self) -> Result<bool, OcctError> {
-        let result = ffi::document_commit_command(self.inner.as_mut()).map_err(OcctError::from)?;
-        self.done = true;
-        Ok(result)
-    }
-
-    /// Aborts the command, discarding all changes since the scope was opened.
-    ///
-    /// Consumes `self`; the document borrow is released on return.
-    pub fn abort(mut self) -> Result<(), OcctError> {
-        ffi::document_abort_command(self.inner.as_mut()).map_err(OcctError::from)?;
-        self.done = true;
-        Ok(())
-    }
-    pub fn name_builder<'cmd>(&'cmd self, label: &OcLabel) -> TopoNamingBuilder<'cmd> {
-        TopoNamingBuilder::new(label)
-    }
-    /// Creates a [`TopoNamingSelector`] bound to `label`.
-    ///
-    /// Call [`TopoNamingSelector::select`] within an open [`Command`] to record
-    /// how a sub-shape should be re-found.  Call [`TopoNamingSelector::solve`]
-    /// after subsequent history-generating operations to re-evaluate the
-    /// selection.
-    pub fn selector(&self, label: &OcLabel) -> TopoNamingSelector {
-        TopoNamingSelector::new(ffi::new_tnaming_selector(label.inner.as_ref().unwrap()))
-    }
-}
-
-impl Drop for Command<'_> {
-    /// Aborts the command if neither `commit` nor `abort` was called.
-    fn drop(&mut self) {
-        if !self.done {
-            // Errors here cannot be propagated; discard silently.
-            // The abort prevents leaving the document in a partially-modified
-            // state if the Command is dropped without explicit resolution.
-            let _ = ffi::document_abort_command(self.inner.as_mut());
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::ocaf::OcApplication;
@@ -481,12 +353,8 @@ mod tests {
     fn command_commit_records_delta() {
         let (_app, mut doc) = new_doc();
         doc.set_undo_limit(10);
-        {
-            let cmd = doc.begin_command().unwrap();
-            // No actual attribute writes yet — but a well-formed empty commit
-            // is still valid.
-            let _ = cmd.commit().unwrap();
-        }
+        doc.begin_command().unwrap();
+        doc.commit().unwrap();
         // After one committed command, one undo should be available.
         // (OCCT may not record empty commands; acceptable either way.)
         let undos = doc.available_undos();
@@ -494,23 +362,10 @@ mod tests {
     }
 
     #[test]
-    fn command_abort_on_drop() {
-        let (_app, mut doc) = new_doc();
-        doc.set_undo_limit(10);
-        {
-            let _cmd = doc.begin_command().unwrap();
-            // Drop without commit or explicit abort → abort-on-drop.
-        }
-        // Document should still be usable.
-        let root = doc.main();
-        assert_eq!(root.tag(), 1);
-    }
-
-    #[test]
     fn command_explicit_abort() {
         let (_app, mut doc) = new_doc();
-        let cmd = doc.begin_command().unwrap();
-        cmd.abort().unwrap();
+        doc.begin_command().unwrap();
+        doc.abort().unwrap();
         // Document should still be usable after abort.
         assert_eq!(doc.main().tag(), 1);
     }

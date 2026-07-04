@@ -873,6 +873,7 @@ pub mod ffi {
         fn tdf_label_nb_attributes(l: &TdfLabel) -> i32;
         // Entry string, e.g. "0:1:2:3".
         fn tdf_label_entry(l: &TdfLabel) -> String;
+        fn tdf_label_from_entry(l: &TdfLabel, entry: &str) -> UniquePtr<TdfLabel>;
         // ForgetAllAttributes — const on TDF_Label, compatible with
         // Transaction & Delta. Rust side requires &Command<'_> (see
         // OcLabel::forget_all_attributes).
