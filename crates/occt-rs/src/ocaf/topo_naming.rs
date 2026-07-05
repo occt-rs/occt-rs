@@ -241,18 +241,16 @@ impl TopoNamingEvolution {
 /// [`Delete`]: TopoNamingEvolution::Delete
 /// [`OcPointAttr`]: crate::ocaf::tdata_xtd::OcPointAttr
 /// [`OcPlaneAttr`]: crate::ocaf::tdata_xtd::OcPlaneAttr
-pub struct TopoNamingBuilder<'cmd> {
+pub struct TopoNamingBuilder {
     inner: UniquePtr<ffi::TopoNamingBuilderShim>,
     _not_send: PhantomData<*mut ()>,
-    _cmd: PhantomData<&'cmd ()>,
 }
 
-impl<'cmd> TopoNamingBuilder<'cmd> {
+impl TopoNamingBuilder {
     pub fn new(label: &OcLabel) -> Self {
         Self {
             inner: new_tnaming_builder(&label.inner),
             _not_send: PhantomData,
-            _cmd: PhantomData,
         }
     }
 
@@ -542,9 +540,6 @@ impl TopoNamingSelector {
     /// Records that `shape` (a sub-shape of `context`) should be re-findable
     /// after model changes.  Returns `false` if the selection cannot be named
     /// unambiguously.
-    ///
-    /// The `_cmd` parameter is a compile-time proof that a [`Command`] is
-    /// open; it is not used at runtime.
     ///
     /// [`Command`]: crate::ocaf::document::Command
     pub fn select(&mut self, shape: &OcShape, context: &OcShape) -> bool {

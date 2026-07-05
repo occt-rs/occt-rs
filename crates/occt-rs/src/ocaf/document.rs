@@ -189,7 +189,7 @@ impl OcDocument {
     pub fn selector(&self, label: &OcLabel) -> TopoNamingSelector {
         TopoNamingSelector::new(ffi::new_tnaming_selector(label.inner.as_ref().unwrap()))
     }
-    pub fn name_builder<'doc>(&'doc self, label: &OcLabel) -> TopoNamingBuilder<'doc> {
+    pub fn name_builder(&self, label: &OcLabel) -> TopoNamingBuilder {
         TopoNamingBuilder::new(label)
     }
 
