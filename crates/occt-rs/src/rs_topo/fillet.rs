@@ -168,9 +168,14 @@ mod history_tests {
         };
         let pre_edges: Vec<_> = {
             let all = solid_shape.edges();
+            // Deduplicate by PlacedShapeKey, not OrientedShapeKey — a solid's
+            // internal edges are shared by exactly two faces, read in opposite
+            // Orientation by ordinary BRep convention (same TShape, same
+            // Location). The oriented tier would not collapse the two
+            // occurrences into one.
             let mut seen = std::collections::HashSet::new();
             all.into_iter()
-                .filter(|e| seen.insert(e.shape_key()))
+                .filter(|e| seen.insert(e.placed_shape_key()))
                 .collect()
         };
 

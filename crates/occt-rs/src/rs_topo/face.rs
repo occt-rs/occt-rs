@@ -7,7 +7,7 @@
 
 use crate::error::{OcctError, OcctErrorKind};
 use crate::gp::{OcDir, OcPnt, OcVec};
-use crate::rs_topo::shape::ShapeKey;
+use crate::rs_topo::shape::{OrientedShapeKey, PlacedShapeKey};
 use crate::rs_topo::{OcShape, OcWire};
 use occt_sys::ffi;
 use std::marker::PhantomData;
@@ -39,8 +39,21 @@ impl OcFace {
     ///
     /// Encodes TShape pointer, Location, and Orientation — sufficient to
     /// distinguish all placed face instances within a session.
-    pub fn shape_key(&self) -> ShapeKey {
-        ShapeKey(ffi::same_oriented_shape_key(ffi::face_as_shape(&self.inner)))
+    pub fn shape_key(&self) -> OrientedShapeKey {
+        OrientedShapeKey(ffi::same_oriented_shape_key(ffi::face_as_shape(
+            &self.inner,
+        )))
+    }
+
+    /// Placed-tier (`IsSame`) identity key: TShape + Location, Orientation
+    /// ignored. Distinct from [`Self::shape_key`], which also encodes
+    /// Orientation. Note: unlike edges, faces shared between shells are not
+    /// generally read in opposite Orientation, so [`Self::shape_key`] is
+    /// usually the correct tier for face dedup — use this one only when a
+    /// caller has confirmed it actually needs Orientation-independent
+    /// identity.
+    pub fn placed_shape_key(&self) -> PlacedShapeKey {
+        PlacedShapeKey(ffi::same_placed_shape_key(ffi::face_as_shape(&self.inner)))
     }
     /// Extrudes this face along `vec`, returning the resulting shape.
     ///

@@ -35,9 +35,24 @@
 //!
 //! # Deduplication
 //!
-//! `TopExp_Explorer` does not deduplicate.  A vertex shared by N edges appears
-//! N times in `result.vertices`.  Callers that need unique entries should
-//! filter on [`ShapeKey`].
+//! `TopExp_Explorer` does not deduplicate. A vertex shared by N edges appears
+//! N times in `result.vertices`.
+//!
+//! `TessFace.key`, `TessEdge.key`, `TessVertex.key`, and
+//! `TessFace.bounding_edge_keys` are all [`OrientedShapeKey`] — the
+//! strictest identity tier (TShape + Location + Orientation). That tier is
+//! correct for what this module uses it for: occurrence-identity joins,
+//! such as matching a face's own boundary-edge lookup against the flat
+//! `edges` list. It is **not** correct for collapsing occurrences into
+//! unique sub-shapes — an edge shared by two adjacent faces is read in
+//! opposite Orientation by ordinary BRep convention, so its two occurrences
+//! get different `OrientedShapeKey` values and won't collapse under it.
+//!
+//! True uniqueness needs the placed tier (`PlacedShapeKey` in
+//! `rs_topo::shape`), which this module does not currently expose on
+//! `TessEdge`/`TessVertex`. Callers needing unique edges or vertices should
+//! recompute placed-tier keys from the originating `OcShape` (see
+//! `OcShape::edges`) rather than filtering on the keys returned here.
 //!
 //! Reference:
 //!   `BRep_Mesh_IncrementalMesh`       — <https://dev.opencascade.org/doc/refman/html/class_b_rep_mesh___incremental_mesh.html>
@@ -45,7 +60,7 @@
 //!   `TopExp_Explorer`                 — <https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html>
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::rs_topo::shape::ShapeKey;
+use crate::rs_topo::shape::OrientedShapeKey;
 use crate::rs_topo::OcShape;
 use occt_sys::ffi;
 
@@ -80,7 +95,7 @@ pub struct TriMesh {
 #[derive(Debug, Clone)]
 pub struct TessFace {
     /// Session-scoped identity of the originating `TopoDS_Face`.
-    pub key: ShapeKey,
+    pub key: OrientedShapeKey,
     /// Triangle mesh for this face.
     pub mesh: TriMesh,
     /// Keys of the `TopoDS_Edge` sub-shapes bounding this face, in
@@ -88,7 +103,7 @@ pub struct TessFace {
     ///
     /// These keys correspond to entries in [`TessellationResult::edges`] and
     /// can be used by callers to map face ↔ edge adjacency without re-traversal.
-    pub bounding_edge_keys: Vec<ShapeKey>,
+    pub bounding_edge_keys: Vec<OrientedShapeKey>,
     pub placement: Option<Affine3>,
     pub reversed: bool,
 }
@@ -102,7 +117,7 @@ pub struct Affine3 {
 #[derive(Debug, Clone)]
 pub struct TessEdge {
     /// Session-scoped identity of the originating `TopoDS_Edge`.
-    pub key: ShapeKey,
+    pub key: OrientedShapeKey,
     /// Polyline points in model space, transformed by `TopLoc_Location`.
     /// Each point is `[x, y, z]`.  Returned as `f64` to preserve polygon precision.
     pub points: Vec<[f64; 3]>,
@@ -112,7 +127,7 @@ pub struct TessEdge {
 #[derive(Debug, Clone)]
 pub struct TessVertex {
     /// Session-scoped identity of the originating `TopoDS_Vertex`.
-    pub key: ShapeKey,
+    pub key: OrientedShapeKey,
     pub point: [f64; 3],
 }
 
@@ -179,7 +194,7 @@ pub fn compute(
     let mut face_exp = ffi::new_shape_explorer(shape.as_ffi(), TOP_ABS_FACE);
     while face_exp.more() {
         let shape_ref = face_exp.current();
-        let key = ShapeKey(ffi::same_oriented_shape_key(shape_ref));
+        let key = OrientedShapeKey(ffi::same_oriented_shape_key(shape_ref));
         let face = ffi::shape_as_face(shape_ref);
 
         let tri = ffi::face_triangulation(&face);
@@ -228,7 +243,7 @@ pub fn compute(
             let mut bound_exp = ffi::new_shape_explorer(shape_ref, TOP_ABS_EDGE);
             while bound_exp.more() {
                 let e_ref = bound_exp.current();
-                bounding_edge_keys.push(ShapeKey(ffi::same_oriented_shape_key(e_ref)));
+                bounding_edge_keys.push(OrientedShapeKey(ffi::same_oriented_shape_key(e_ref)));
                 bound_exp.pin_mut().next();
             }
 
@@ -284,7 +299,7 @@ pub fn compute(
     let mut edge_exp = ffi::new_shape_explorer(shape.as_ffi(), TOP_ABS_EDGE);
     while edge_exp.more() {
         let shape_ref = edge_exp.current();
-        let key = ShapeKey(ffi::same_oriented_shape_key(shape_ref));
+        let key = OrientedShapeKey(ffi::same_oriented_shape_key(shape_ref));
         let edge_topo = ffi::shape_as_edge(shape_ref);
 
         if let Some(points) = try_polygon3d(&edge_topo) {
@@ -299,7 +314,7 @@ pub fn compute(
     let mut vtx_exp = ffi::new_shape_explorer(shape.as_ffi(), TOP_ABS_VERTEX);
     while vtx_exp.more() {
         let shape_ref = vtx_exp.current();
-        let key = ShapeKey(ffi::same_oriented_shape_key(shape_ref));
+        let key = OrientedShapeKey(ffi::same_oriented_shape_key(shape_ref));
         let vertex = ffi::shape_as_vertex(shape_ref);
 
         vertices.push(TessVertex {

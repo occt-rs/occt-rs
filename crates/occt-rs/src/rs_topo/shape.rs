@@ -24,7 +24,8 @@ use crate::rs_topo::{OcEdge, ShapeType};
 const TOP_ABS_FACE: i32 = 4;
 const TOP_ABS_EDGE: i32 = 6;
 
-/// Within-session identity for a placed topological sub-shape instance.
+/// Within-session identity for a placed topological sub-shape instance,
+/// at the strictest (oriented) tier.
 ///
 /// Encodes TShape (geometry), Location (placement), and Orientation — the
 /// three components that together distinguish a placed instance in OCCT.
@@ -37,10 +38,23 @@ const TOP_ABS_EDGE: i32 = 6;
 ///
 /// **Not persistent.** Keys are meaningless across serialise/deserialise
 /// cycles and process restarts.  When the TDF attribute layer is added,
-/// `ShapeKey` values will compose with `TDF_Label` identifiers for
+/// `OrientedShapeKey` values will compose with `TDF_Label` identifiers for
 /// persistent identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ShapeKey(pub usize);
+pub struct OrientedShapeKey(pub usize);
+
+/// Within-session identity for a *placed* topological sub-shape instance.
+///
+/// Encodes TShape (geometry) and Location (placement) only — Orientation is
+/// ignored. Two occurrences of the same edge read in opposite directions
+/// (the ordinary case for an edge shared by two adjacent faces) receive the
+/// **same** key here, unlike [`OrientedShapeKey`], which distinguishes them.
+///
+/// Use this tier for true deduplication of sub-shapes (e.g. `unique_edges`);
+/// use [`OrientedShapeKey`] for occurrence-identity joins (e.g. matching a
+/// face's own boundary-edge lookup against a flat edge list).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PlacedShapeKey(pub usize);
 
 /// A polymorphic BRep topological shape.
 ///
@@ -108,7 +122,7 @@ impl OcShape {
     /// Traverses using `TopExp_Explorer` with `TopAbs_FACE`.  Results are in
     /// exploration order; `TopExp_Explorer` does not deduplicate — a face
     /// shared by multiple shells may appear more than once.  Filter on
-    /// [`ShapeKey`] if unique faces are required.
+    /// [`OrientedShapeKey`] if unique faces are required.
     ///
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html>
     pub fn faces(&self) -> impl Iterator<Item = OcFace> {
@@ -119,8 +133,11 @@ impl OcShape {
     ///
     /// Traverses using `TopExp_Explorer` with `TopAbs_EDGE`.  Results are in
     /// exploration order; `TopExp_Explorer` does not deduplicate — an edge
-    /// shared by two faces appears twice.  Filter on [`ShapeKey`] if unique
-    /// edges are required.
+    /// shared by two faces appears twice, read in opposite directions by
+    /// ordinary BRep convention (same TShape and Location, different
+    /// Orientation). Filter on [`PlacedShapeKey`], not [`OrientedShapeKey`],
+    /// if unique edges are required — the oriented tier will not collapse
+    /// these two occurrences into one.
     ///
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html>
     pub fn edges(&self) -> impl Iterator<Item = OcEdge> {
@@ -564,9 +581,12 @@ mod tests {
     fn fillet_box_edges_succeeds() {
         let s = box_solid(0.0);
         let edges = s.edges();
-        // Deduplicate by ShapeKey — edges() returns each edge once per adjacent face.
+        // Deduplicate by PlacedShapeKey — edges() returns each edge once per
+        // adjacent face, read in opposite Orientation each time.
         let mut seen = std::collections::HashSet::new();
-        let unique_edges: Vec<_> = edges.filter(|e| seen.insert(e.shape_key())).collect();
+        let unique_edges: Vec<_> = edges
+            .filter(|e| seen.insert(e.placed_shape_key()))
+            .collect();
         let result = s.fillet(&unique_edges.iter().map(|e| (0.05, e)).collect::<Vec<_>>());
         assert!(result.is_ok(), "fillet should succeed: {:?}", result.err());
     }
@@ -577,7 +597,9 @@ mod tests {
         let s = box_solid(0.0);
         let edges = s.edges();
         let mut seen = std::collections::HashSet::new();
-        let unique_edges: Vec<_> = edges.filter(|e| seen.insert(e.shape_key())).collect();
+        let unique_edges: Vec<_> = edges
+            .filter(|e| seen.insert(e.placed_shape_key()))
+            .collect();
         let mut builder = FilletBuilder::new(&s).unwrap();
         for e in &unique_edges {
             builder.add_edge(0.05, e).unwrap();
@@ -591,7 +613,9 @@ mod tests {
         let s = box_solid(0.0);
         let edges = s.edges();
         let mut seen = std::collections::HashSet::new();
-        let unique_edges: Vec<_> = edges.filter(|e| seen.insert(e.shape_key())).collect();
+        let unique_edges: Vec<_> = edges
+            .filter(|e| seen.insert(e.placed_shape_key()))
+            .collect();
         let filleted = s
             .fillet(&unique_edges.iter().map(|e| (0.05, e)).collect::<Vec<_>>())
             .unwrap();
@@ -603,7 +627,7 @@ mod tests {
         shape
             .edges()
             .into_iter()
-            .filter(|e| seen.insert(e.shape_key()))
+            .filter(|e| seen.insert(e.placed_shape_key()))
             .collect()
     }
 

@@ -7,6 +7,7 @@
 
 use crate::error::{OcctError, OcctErrorKind};
 use crate::gp::OcPnt;
+use crate::rs_topo::shape::{OrientedShapeKey, PlacedShapeKey};
 use crate::rs_topo::OcShape;
 use occt_sys::ffi;
 use std::marker::PhantomData;
@@ -34,6 +35,23 @@ impl std::fmt::Debug for OcVertex {
 }
 
 impl OcVertex {
+    /// Returns the session-scoped identity of this vertex, at the strictest
+    /// (oriented) tier: TShape + Location + Orientation.
+    pub fn shape_key(&self) -> OrientedShapeKey {
+        OrientedShapeKey(ffi::same_oriented_shape_key(ffi::vertex_as_shape(
+            &self.inner,
+        )))
+    }
+
+    /// Placed-tier (`IsSame`) identity key: TShape + Location, Orientation
+    /// ignored. Distinct from [`Self::shape_key`], which also encodes
+    /// Orientation.
+    pub fn placed_shape_key(&self) -> PlacedShapeKey {
+        PlacedShapeKey(ffi::same_placed_shape_key(ffi::vertex_as_shape(
+            &self.inner,
+        )))
+    }
+
     /// Returns `None` if `inner` is a null `UniquePtr` or the `TopoDS_Vertex`
     /// has a null TShape handle (`IsNull()`).
     #[allow(dead_code)]
