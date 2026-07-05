@@ -85,30 +85,14 @@ inline std::unique_ptr<TopoDS_Shape> clone_shape(const TopoDS_Shape& s) {
 // The key is a hash; collisions are astronomically unlikely in practice for
 // any reasonable number of shapes in a session.
 inline std::size_t shape_key(const TopoDS_Shape& s) {
-    // Seed with TShape pointer.
-    std::size_t h = reinterpret_cast<std::size_t>(s.TShape().get());
+    // TShape + Location, via OCCT's own hash.
+    std::size_t h = std::hash<TopoDS_Shape>{}(s);
 
-    // Mix in Orientation (0=FORWARD, 1=REVERSED, 2=INTERNAL, 3=EXTERNAL).
-    h ^= static_cast<std::size_t>(s.Orientation()) * 6364136223846793005ULL;
-
-    // Mix in all 12 entries of the Location's 3×4 transform matrix.
-    // gp_Trsf::Value(row, col) is 1-based: rows 1..3, columns 1..4.
-    // Identity Location contributes nothing so the key equals shape_tshape_ptr
-    // for unplaced shapes.
-    if (!s.Location().IsIdentity()) {
-        const gp_Trsf& t = s.Location().Transformation();
-        std::uint64_t bits;
-        std::uint64_t m = 2654435761ULL;
-        for (int r = 1; r <= 3; ++r) {
-            for (int c = 1; c <= 4; ++c) {
-                double v = t.Value(r, c);
-                std::memcpy(&bits, &v, sizeof bits);
-                h ^= bits * m;
-                m = (m << 13) | (m >> 51); // rotate multiplier each step
-            }
-        }
-    }
-    return h;
+    // Combine in Orientation using the same combine primitive
+    // std::hash<TopoDS_Shape> itself uses for TShape+Location
+    // (see TopoDS_Shape.hxx's std::hash specialization).
+    TopAbs_Orientation orient = s.Orientation();
+    return opencascade::MurmurHash::hash_combine(&orient, sizeof(orient), h);
 }
 inline bool face_is_reversed(const TopoDS_Face& f) {
     return f.Orientation() == TopAbs_REVERSED;
