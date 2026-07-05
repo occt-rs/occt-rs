@@ -18,8 +18,13 @@
 //! # History
 //!
 //! `BRepFilletAPI_MakeFillet` exposes `Modified` and `Generated` for shape
-//! history queries.  These are deferred to Milestone F (`ShapeHistory` trait).
-//! Do not drop `FilletBuilder` before history is read when that work lands.
+//! history queries. Use [`build_with_history`] to keep the builder alive and
+//! query history via [`HistoryProvider`]/[`BuiltWithHistory`]; use [`build`]
+//! when history is not needed. Do not drop `FilletBuilder` before history
+//! queries made through `BuiltWithHistory` are complete.
+//!
+//! [`build_with_history`]: FilletBuilder::build_with_history
+//! [`build`]: FilletBuilder::build
 //!
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_fillet_a_p_i___make_fillet.html>
 

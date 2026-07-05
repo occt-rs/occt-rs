@@ -1202,15 +1202,18 @@ pub mod ffi {
         // Clone (ref-count bump only — no geometry copy).
         fn clone_shape(s: &TopodsShape) -> UniquePtr<TopodsShape>;
 
-        // Placed-instance identity key: hashes TShape ptr + Location + Orientation.
-        // Use this for ShapeKey derivation; distinct faces of a MakePrism solid
-        // that share a TShape (top/bottom caps) are distinguished by their Location.
-        fn shape_key(s: &TopodsShape) -> usize;
+        // Identity tiers — direct mirrors of TopoDS_Shape::IsPartner/IsSame/IsEqual.
+        // See shape.hxx for the full tier writeup.
+        fn same_shape(a: &TopodsShape, b: &TopodsShape) -> bool;
+        fn same_placed_shape(a: &TopodsShape, b: &TopodsShape) -> bool;
+        fn same_oriented_shape(a: &TopodsShape, b: &TopodsShape) -> bool;
 
-        // Geometry-only identity: raw TShape pointer.
-        // Useful for deduplication of instances sharing the same underlying surface.
-        // Not suitable as a unique per-face key — use shape_key() for that.
-        fn shape_tshape_ptr(s: &TopodsShape) -> usize;
+        // Hash key for the IsSame (placed) tier. Use for SamePlacedShapeKey.
+        fn same_placed_shape_key(s: &TopodsShape) -> usize;
+        // Hash key for the IsEqual (oriented) tier. Use for SameOrientedShapeKey;
+        // distinct faces of a MakePrism solid that share a TShape (top/bottom
+        // caps) are distinguished by their Location. Renamed from shape_key.
+        fn same_oriented_shape_key(s: &TopodsShape) -> usize;
 
         // Null predicates
         // TopoDS_Shape::IsNull() and its per-subtype shims.

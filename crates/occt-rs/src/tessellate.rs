@@ -179,7 +179,7 @@ pub fn compute(
     let mut face_exp = ffi::new_shape_explorer(shape.as_ffi(), TOP_ABS_FACE);
     while face_exp.more() {
         let shape_ref = face_exp.current();
-        let key = ShapeKey(ffi::shape_key(shape_ref));
+        let key = ShapeKey(ffi::same_oriented_shape_key(shape_ref));
         let face = ffi::shape_as_face(shape_ref);
 
         let tri = ffi::face_triangulation(&face);
@@ -228,7 +228,7 @@ pub fn compute(
             let mut bound_exp = ffi::new_shape_explorer(shape_ref, TOP_ABS_EDGE);
             while bound_exp.more() {
                 let e_ref = bound_exp.current();
-                bounding_edge_keys.push(ShapeKey(ffi::shape_key(e_ref)));
+                bounding_edge_keys.push(ShapeKey(ffi::same_oriented_shape_key(e_ref)));
                 bound_exp.pin_mut().next();
             }
 
@@ -284,7 +284,7 @@ pub fn compute(
     let mut edge_exp = ffi::new_shape_explorer(shape.as_ffi(), TOP_ABS_EDGE);
     while edge_exp.more() {
         let shape_ref = edge_exp.current();
-        let key = ShapeKey(ffi::shape_key(shape_ref));
+        let key = ShapeKey(ffi::same_oriented_shape_key(shape_ref));
         let edge_topo = ffi::shape_as_edge(shape_ref);
 
         if let Some(points) = try_polygon3d(&edge_topo) {
@@ -299,7 +299,7 @@ pub fn compute(
     let mut vtx_exp = ffi::new_shape_explorer(shape.as_ffi(), TOP_ABS_VERTEX);
     while vtx_exp.more() {
         let shape_ref = vtx_exp.current();
-        let key = ShapeKey(ffi::shape_key(shape_ref));
+        let key = ShapeKey(ffi::same_oriented_shape_key(shape_ref));
         let vertex = ffi::shape_as_vertex(shape_ref);
 
         vertices.push(TessVertex {

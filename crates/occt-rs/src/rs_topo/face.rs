@@ -40,7 +40,7 @@ impl OcFace {
     /// Encodes TShape pointer, Location, and Orientation — sufficient to
     /// distinguish all placed face instances within a session.
     pub fn shape_key(&self) -> ShapeKey {
-        ShapeKey(ffi::shape_key(ffi::face_as_shape(&self.inner)))
+        ShapeKey(ffi::same_oriented_shape_key(ffi::face_as_shape(&self.inner)))
     }
     /// Extrudes this face along `vec`, returning the resulting shape.
     ///

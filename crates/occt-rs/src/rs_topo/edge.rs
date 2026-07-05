@@ -38,7 +38,7 @@ impl std::fmt::Debug for OcEdge {
 
 impl OcEdge {
     pub fn shape_key(&self) -> ShapeKey {
-        ShapeKey(ffi::shape_key(ffi::edge_as_shape(&self.inner)))
+        ShapeKey(ffi::same_oriented_shape_key(ffi::edge_as_shape(&self.inner)))
     }
     /// Constructs a straight-line edge between two existing vertices.
     ///
