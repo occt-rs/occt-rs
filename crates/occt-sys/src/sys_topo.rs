@@ -6,9 +6,19 @@
 //!
 //! # Builder lifetime
 //!
-//! Builder types that expose `Modified()`, `Generated()`, or `IsDeleted()`
-//! (currently `MakePrismBuilder`) must not be dropped before shape history
-//! queries are complete.
+//! `Modified()`, `Generated()`, and `IsDeleted()` are non-static methods on
+//! `BRepBuilderAPI_MakeShape` that read history state (a shape → list-of-shapes
+//! map) owned by the builder instance itself, populated during `Build()`/
+//! `Perform()`. This is not an OCCT-documented lifetime rule — it is the
+//! ordinary consequence of these being instance methods over instance-owned
+//! data, expressed here as `Pin<&mut Self>` receivers (see e.g.
+//! `fillet_modified_iter`, `chamfer_generated_iter`).
+//!
+//! Builders currently exposing this surface: `MakePrismBuilder`,
+//! `MakeFilletBuilder`, `MakeChamferBuilder`, `MakeOffsetShapeBuilder`,
+//! `MakeThickSolidBuilder`. For each, the underlying `UniquePtr<Builder>`
+//! must stay alive on the Rust side for as long as history queries are
+//! outstanding; dropping it frees the C++-side history the methods read.
 //!
 //! Generated using LLMs from information in:
 //!   - OCCT 7.9 reference: <https://dev.opencascade.org/doc/refman/html/>
@@ -875,8 +885,7 @@ pub mod ffi {
         fn tdf_label_entry(l: &TdfLabel) -> String;
         fn tdf_label_from_entry(l: &TdfLabel, entry: &str) -> UniquePtr<TdfLabel>;
         // ForgetAllAttributes — const on TDF_Label, compatible with
-        // Transaction & Delta. Rust side requires &Command<'_> (see
-        // OcLabel::forget_all_attributes).
+        // Transaction & Delta.
         fn tdf_label_forget_all_attributes(l: &TdfLabel, clear_children: bool);
 
         // ── TdfChildIteratorShim ──────────────────────────────────────────────────
