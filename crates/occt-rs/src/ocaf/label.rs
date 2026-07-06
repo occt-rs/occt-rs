@@ -8,8 +8,6 @@ use std::str::FromStr;
 
 use occt_sys::ffi;
 
-use crate::ocaf::document::Command;
-
 /// A non-owning ref-counted node in an [`OcDocument`] label tree.
 ///
 /// Binds OCCTs `TDF_Label`
@@ -54,12 +52,12 @@ use crate::ocaf::document::Command;
 /// let mut doc = app.new_document("BinXCAF").unwrap();
 ///
 /// let main = doc.main();
-/// let cmd = doc.begin_command().unwrap();
-/// let sketch = main.get_or_create_child(&cmd, 1);
-/// let pt_a   = sketch.get_or_create_child(&cmd, 1);
-/// OcName::set(&cmd, &sketch, "Sketch_001").unwrap();
-/// OcName::set(&cmd, &pt_a, "Point_001").unwrap();
-/// cmd.commit().unwrap();
+/// doc.begin_command().unwrap();
+/// let sketch = main.get_or_create_child(1);
+/// let pt_a   = sketch.get_or_create_child(1);
+/// OcName::set(&sketch, "Sketch_001").unwrap();
+/// OcName::set(&pt_a, "Point_001").unwrap();
+/// doc.commit().unwrap();
 ///
 /// // Tag identifies a label among its siblings
 /// assert_eq!(sketch.tag(), 1);
@@ -89,9 +87,9 @@ use crate::ocaf::document::Command;
 /// // Setting the same attribute type twice updates the value in place.
 ///
 /// assert_eq!(OcName::find(&sketch).unwrap().get(), "Sketch_001");
-/// let cmd2 = doc.begin_command().unwrap();
-/// OcName::set(&cmd2, &sketch, "Sketch_002").unwrap();
-/// cmd2.commit().unwrap();
+/// doc.begin_command().unwrap();
+/// OcName::set(&sketch, "Sketch_002").unwrap();
+/// doc.commit().unwrap();
 ///
 /// assert_eq!(OcName::find(&sketch).unwrap().get(), "Sketch_002");
 /// assert_eq!(sketch.nb_attributes(), 1); // still just one OcName
@@ -163,7 +161,7 @@ impl OcLabel {
     /// Always succeeds.
     ///
     /// Label creation must occur within a [`Command`].
-    pub fn get_or_create_child(&self, _cmd: &Command<'_>, tag: i32) -> OcLabel {
+    pub fn get_or_create_child(&self, tag: i32) -> OcLabel {
         // safe: The assumed pre-condition is self.inner is non-null. At time of writing this
         // comment, this is not bullet-proofed, but that's the direction we are heading
         unsafe { OcLabel::from_ffi_unchecked(ffi::tdf_label_find_child(&self.inner, tag, true)) }
@@ -209,16 +207,16 @@ impl OcLabel {
     ///
     /// Captured by OCAF's Backup/Delta mechanism — requires an open
     /// [`Command`].
-    pub fn forget_all_attributes(&self, _cmd: &Command<'_>, clear_children: bool) {
+    pub fn forget_all_attributes(&self, clear_children: bool) {
         ffi::tdf_label_forget_all_attributes(&self.inner, clear_children);
     }
 
     /// Resolves `path` relative to `self`, creating any missing descendant
     /// labels along the way. Always succeeds.
-    pub fn get_or_create_descendant(&self, cmd: &Command<'_>, path: &LabelPath) -> OcLabel {
+    pub fn get_or_create_descendant(&self, path: &LabelPath) -> OcLabel {
         let mut current = self.clone();
         for &tag in &path.0 {
-            current = current.get_or_create_child(cmd, tag);
+            current = current.get_or_create_child(tag);
         }
         current
     }

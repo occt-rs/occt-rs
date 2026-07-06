@@ -100,6 +100,20 @@ inline rust::String tdf_label_entry(const TdfLabel& l) {
     TDF_Tool::Entry(l.inner, entry);
     return rust::String(entry.ToCString());
 }
+
+// TDF_Tool::Label(aDF, anEntry, aLabel, create) — resolves a label from a
+// colon-delimited entry string, the same format TDF_Tool::Entry produces
+// (see tdf_label_entry). create=false: result.IsNull() on no match.
+inline std::unique_ptr<TdfLabel> tdf_label_from_entry(
+    const TdfLabel& l, rust::Str entry)
+{
+    Handle(TDF_Data) df = l.inner.Data();
+    TDF_Label result;
+    TDF_Tool::Label(df, TCollection_AsciiString(std::string(entry).c_str()),
+                    result, Standard_False);
+    return std::make_unique<TdfLabel>(TdfLabel{result});
+}
+
 // TDF_Label::ForgetAllAttributes(clearChildren) — const on TDF_Label,
 // compatible with Transaction & Delta. Forgets all attributes on this
 // label, and on every descendant if clear_children is true.

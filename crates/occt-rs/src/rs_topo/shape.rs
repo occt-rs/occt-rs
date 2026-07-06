@@ -16,7 +16,13 @@ use occt_sys::ffi;
 use crate::error::OcctError;
 use crate::rs_topo::offset::{OffsetShapeBuilder, ThickSolidBuilder};
 use crate::rs_topo::shape_explorer_iter::{ShapeEdgeIter, ShapeFaceIter};
-use crate::rs_topo::{chamfer::ChamferBuilder, face::OcFace, fillet::FilletBuilder};
+use crate::rs_topo::{
+    bool_op::{CommonBuilder, CutBuilder, FuseBuilder},
+    chamfer::ChamferBuilder,
+    face::OcFace,
+    fillet::FilletBuilder,
+    transform::TransformBuilder,
+};
 use crate::rs_topo::{OcEdge, ShapeType};
 
 /// TopAbs_ShapeEnum::TopAbs_FACE.
@@ -24,7 +30,8 @@ use crate::rs_topo::{OcEdge, ShapeType};
 const TOP_ABS_FACE: i32 = 4;
 const TOP_ABS_EDGE: i32 = 6;
 
-/// Within-session identity for a placed topological sub-shape instance.
+/// Within-session identity for a placed topological sub-shape instance,
+/// at the strictest (oriented) tier.
 ///
 /// Encodes TShape (geometry), Location (placement), and Orientation — the
 /// three components that together distinguish a placed instance in OCCT.
@@ -37,10 +44,23 @@ const TOP_ABS_EDGE: i32 = 6;
 ///
 /// **Not persistent.** Keys are meaningless across serialise/deserialise
 /// cycles and process restarts.  When the TDF attribute layer is added,
-/// `ShapeKey` values will compose with `TDF_Label` identifiers for
+/// `OrientedShapeKey` values will compose with `TDF_Label` identifiers for
 /// persistent identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ShapeKey(pub usize);
+pub struct OrientedShapeKey(pub usize);
+
+/// Within-session identity for a *placed* topological sub-shape instance.
+///
+/// Encodes TShape (geometry) and Location (placement) only — Orientation is
+/// ignored. Two occurrences of the same edge read in opposite directions
+/// (the ordinary case for an edge shared by two adjacent faces) receive the
+/// **same** key here, unlike [`OrientedShapeKey`], which distinguishes them.
+///
+/// Use this tier for true deduplication of sub-shapes (e.g. `unique_edges`);
+/// use [`OrientedShapeKey`] for occurrence-identity joins (e.g. matching a
+/// face's own boundary-edge lookup against a flat edge list).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PlacedShapeKey(pub usize);
 
 /// A polymorphic BRep topological shape.
 ///
@@ -108,7 +128,7 @@ impl OcShape {
     /// Traverses using `TopExp_Explorer` with `TopAbs_FACE`.  Results are in
     /// exploration order; `TopExp_Explorer` does not deduplicate — a face
     /// shared by multiple shells may appear more than once.  Filter on
-    /// [`ShapeKey`] if unique faces are required.
+    /// [`OrientedShapeKey`] if unique faces are required.
     ///
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html>
     pub fn faces(&self) -> impl Iterator<Item = OcFace> {
@@ -119,8 +139,11 @@ impl OcShape {
     ///
     /// Traverses using `TopExp_Explorer` with `TopAbs_EDGE`.  Results are in
     /// exploration order; `TopExp_Explorer` does not deduplicate — an edge
-    /// shared by two faces appears twice.  Filter on [`ShapeKey`] if unique
-    /// edges are required.
+    /// shared by two faces appears twice, read in opposite directions by
+    /// ordinary BRep convention (same TShape and Location, different
+    /// Orientation). Filter on [`PlacedShapeKey`], not [`OrientedShapeKey`],
+    /// if unique edges are required — the oriented tier will not collapse
+    /// these two occurrences into one.
     ///
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html>
     pub fn edges(&self) -> impl Iterator<Item = OcEdge> {
@@ -128,74 +151,47 @@ impl OcShape {
     }
     /// Fuse (union) this shape with `other`, returning a new `OcShape`.
     ///
-    /// Wraps `BRepAlgoAPI_Fuse` via the preferred SetArguments/SetTools/Build
-    /// pattern. The builder and its history are not preserved; if Modified/
-    /// Generated/IsDeleted are needed in future, promote to an explicit FuseBuilder.
+    /// Wraps [`FuseBuilder`] via its `build()`. History is not preserved; if
+    /// Modified/Generated/IsDeleted are needed, use `FuseBuilder` directly
+    /// via `build_with_history()`.
     pub fn oc_fuse(&self, other: &OcShape) -> Result<OcShape, OcctError> {
-        let result =
-            occt_sys::ffi::fuse_shapes(self.as_ffi(), other.as_ffi()).map_err(OcctError::from)?;
-        // Safety: fuse_shapes returns Ok(UniquePtr) via make_unique on success;
-        // the Ok branch is never null.
-        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
+        FuseBuilder::new().build(self, other)
     }
     /// Subtract `tool` from `self`, returning a new `OcShape`.
     ///
-    /// Wraps `BRepAlgoAPI_Cut` via the preferred SetArguments/SetTools/Build
-    /// pattern. `self` is the "object" (left operand); `tool` is subtracted from it.
+    /// Wraps [`CutBuilder`] via its `build()`. `self` is the "object" (left
+    /// operand); `tool` is subtracted from it. History is not preserved; use
+    /// `CutBuilder` directly via `build_with_history()` if needed.
     ///
     /// For disjoint inputs, OCCT returns `self` unchanged as a solid — this is
     /// a valid `Ok` result. No compound detection is needed.
     pub fn oc_cut(&self, tool: &OcShape) -> Result<OcShape, OcctError> {
-        let result =
-            occt_sys::ffi::cut_shapes(self.as_ffi(), tool.as_ffi()).map_err(OcctError::from)?;
-        // Safety: cut_shapes returns Ok(UniquePtr) via make_unique on success.
-        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
+        CutBuilder::new().build(self, tool)
     }
-    /// Applies `trsf` to a copy of this shape, returning a new independent `OcShape`.
+    /// Applies `trsf` to this shape, returning the transformed `OcShape`.
     ///
-    /// Wraps `BRepBuilderAPI_Transform(shape, trsf, copy=true)`.  The result
-    /// geometry is fully independent of `self`; no TShape handles are shared.
-    ///
-    /// Scaling (scale ≠ 1) is handled correctly here because the transform is
-    /// applied at the geometry level — `BRepBuilderAPI_Transform` rewrites
-    /// underlying curves and surfaces.  This is the correct path for scaling;
-    /// `TopLoc_Location` rejects scale ≠ 1 since OCCT 7.6.
+    /// Wraps [`TransformBuilder`] with `copy=false`. Per OCCT semantics: for
+    /// a direct isometry, the result shares `self`'s TShape with a new
+    /// Location — no geometry duplication. This is not full independence;
+    /// callers needing a fully independent copy (duplicated curves/surfaces,
+    /// no shared TShape) should use `TransformBuilder::new` directly with
+    /// `copy=true`.
     ///
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___transform.html>
     pub fn transformed(&self, trsf: &crate::gp::OcTrsf) -> Result<OcShape, OcctError> {
-        let result = occt_sys::ffi::transform_shape(
-            self.as_ffi(),
-            trsf.value(1, 1).unwrap(),
-            trsf.value(1, 2).unwrap(),
-            trsf.value(1, 3).unwrap(),
-            trsf.value(1, 4).unwrap(),
-            trsf.value(2, 1).unwrap(),
-            trsf.value(2, 2).unwrap(),
-            trsf.value(2, 3).unwrap(),
-            trsf.value(2, 4).unwrap(),
-            trsf.value(3, 1).unwrap(),
-            trsf.value(3, 2).unwrap(),
-            trsf.value(3, 3).unwrap(),
-            trsf.value(3, 4).unwrap(),
-        )
-        .map_err(OcctError::from)?;
-        // Safety: transform_shape returns Ok(UniquePtr) via make_unique on success.
-        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
+        TransformBuilder::new(self, trsf, false)?.build()
     }
 
     /// Intersect `self` with `other`, returning a new `OcShape`.
     ///
-    /// Wraps `BRepAlgoAPI_Common` via the preferred SetArguments/SetTools/Build
-    /// pattern.
+    /// Wraps [`CommonBuilder`] via its `build()`. History is not preserved;
+    /// use `CommonBuilder` directly via `build_with_history()` if needed.
     ///
     /// For non-intersecting inputs, OCCT returns an empty `TopoDS_Compound`
     /// (`IsDone()==true`); this is returned as `Ok`. Use `shape_type()` and
     /// content queries on the result if the intersection's presence matters.
     pub fn oc_common(&self, other: &OcShape) -> Result<OcShape, OcctError> {
-        let result =
-            occt_sys::ffi::common_shapes(self.as_ffi(), other.as_ffi()).map_err(OcctError::from)?;
-        // Safety: common_shapes returns Ok(UniquePtr) via make_unique on success.
-        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
+        CommonBuilder::new().build(self, other)
     }
     /// Applies constant-radius fillets to the given edges and returns the
     /// resulting shape.
@@ -564,9 +560,12 @@ mod tests {
     fn fillet_box_edges_succeeds() {
         let s = box_solid(0.0);
         let edges = s.edges();
-        // Deduplicate by ShapeKey — edges() returns each edge once per adjacent face.
+        // Deduplicate by PlacedShapeKey — edges() returns each edge once per
+        // adjacent face, read in opposite Orientation each time.
         let mut seen = std::collections::HashSet::new();
-        let unique_edges: Vec<_> = edges.filter(|e| seen.insert(e.shape_key())).collect();
+        let unique_edges: Vec<_> = edges
+            .filter(|e| seen.insert(e.placed_shape_key()))
+            .collect();
         let result = s.fillet(&unique_edges.iter().map(|e| (0.05, e)).collect::<Vec<_>>());
         assert!(result.is_ok(), "fillet should succeed: {:?}", result.err());
     }
@@ -577,7 +576,9 @@ mod tests {
         let s = box_solid(0.0);
         let edges = s.edges();
         let mut seen = std::collections::HashSet::new();
-        let unique_edges: Vec<_> = edges.filter(|e| seen.insert(e.shape_key())).collect();
+        let unique_edges: Vec<_> = edges
+            .filter(|e| seen.insert(e.placed_shape_key()))
+            .collect();
         let mut builder = FilletBuilder::new(&s).unwrap();
         for e in &unique_edges {
             builder.add_edge(0.05, e).unwrap();
@@ -591,7 +592,9 @@ mod tests {
         let s = box_solid(0.0);
         let edges = s.edges();
         let mut seen = std::collections::HashSet::new();
-        let unique_edges: Vec<_> = edges.filter(|e| seen.insert(e.shape_key())).collect();
+        let unique_edges: Vec<_> = edges
+            .filter(|e| seen.insert(e.placed_shape_key()))
+            .collect();
         let filleted = s
             .fillet(&unique_edges.iter().map(|e| (0.05, e)).collect::<Vec<_>>())
             .unwrap();
@@ -603,7 +606,7 @@ mod tests {
         shape
             .edges()
             .into_iter()
-            .filter(|e| seen.insert(e.shape_key()))
+            .filter(|e| seen.insert(e.placed_shape_key()))
             .collect()
     }
 

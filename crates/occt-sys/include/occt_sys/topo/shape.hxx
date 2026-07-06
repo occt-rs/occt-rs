@@ -8,15 +8,26 @@
 // or other context that guarantees the correct shape type.  On mismatch, the
 // cxx bridge terminates the process (no UB).
 //
-// shape_key encodes TShape identity + Location + Orientation.
-// shape_tshape_ptr encodes TShape identity only (geometry deduplication).
+// TopoDS_Shape identity is not one relation, it's three, all defined on the
+// class itself:
+//   IsPartner — same TShape only. Locations and Orientations may differ.
+//   IsSame    — same TShape + Location. Orientations may differ.
+//   IsEqual   — same TShape + Location + Orientation (this is operator==).
 //
-// Why shape_key is needed:
+// same_shape / same_placed_shape / same_oriented_shape below are direct 1:1
+// mirrors of those three, in that order. same_placed_shape_key and
+// same_oriented_shape_key are hash keys for the two tiers that have actual
+// consumers (Partner has none — predicate only, no key type).
+//
+// Why the placed (IsSame) tier matters independently of the oriented tier:
 //   BRepPrimAPI_MakePrism creates the top face of a swept solid by calling
 //   TopoDS_Shape::Move() on the input (bottom) face — same TShape pointer,
-//   different Location.  Using the TShape pointer alone as identity incorrectly
-//   equates the top and bottom faces.  shape_key combines all three components
-//   so that every distinct placed instance receives a distinct key.
+//   different Location. same_placed_shape_key still distinguishes them
+//   (different Location), so it remains safe for that case. Separately, a
+//   solid's internal edges are shared by exactly two faces which read that
+//   edge in opposite directions by ordinary BRep convention — same TShape,
+//   same Location, different Orientation. Dedup keyed on the oriented tier
+//   will not collapse these; dedup keyed on the placed tier will.
 //
 // Reference:
 //   TopoDS_Shape     — https://dev.opencascade.org/doc/refman/html/class_topo_d_s___shape.html
@@ -73,53 +84,48 @@ inline std::unique_ptr<TopoDS_Shape> clone_shape(const TopoDS_Shape& s) {
     return std::make_unique<TopoDS_Shape>(s);
 }
 
-// ── Placed-instance identity key ──────────────────────────────────────────────
+// ── Identity tiers ─────────────────────────────────────────────────────────────
 
-// Returns a within-session identity key for a placed shape instance, encoding
-// TShape (geometry), Location (placement), and Orientation.
-//
-// Two shapes that are the "same face" in different positions (e.g. the top and
-// bottom of a prism) have the same TShape pointer but different Locations and
-// will receive different keys from this function.
+// IsPartner: same TShape only. Predicate only — no key type, since there is
+// no current consumer that needs to hash at this tier. Add one only when a
+// real caller needs it.
+inline bool same_shape(const TopoDS_Shape& a, const TopoDS_Shape& b) {
+    return a.IsPartner(b);
+}
+
+// IsSame: same TShape + Location. Orientation may differ.
+inline bool same_placed_shape(const TopoDS_Shape& a, const TopoDS_Shape& b) {
+    return a.IsSame(b);
+}
+
+// IsEqual (operator==): same TShape + Location + Orientation.
+inline bool same_oriented_shape(const TopoDS_Shape& a, const TopoDS_Shape& b) {
+    return a.IsEqual(b);
+}
+
+// Hash key for the IsSame (placed) tier. Body is exactly std::hash<TopoDS_Shape>,
+// which OCCT itself defines over TShape+Location (see TopoDS_Shape.hxx) — the
+// same primitive TopTools_ShapeMapHasher uses internally. No independent
+// hashing scheme is implemented here.
 //
 // The key is a hash; collisions are astronomically unlikely in practice for
 // any reasonable number of shapes in a session.
-inline std::size_t shape_key(const TopoDS_Shape& s) {
-    // Seed with TShape pointer.
-    std::size_t h = reinterpret_cast<std::size_t>(s.TShape().get());
-
-    // Mix in Orientation (0=FORWARD, 1=REVERSED, 2=INTERNAL, 3=EXTERNAL).
-    h ^= static_cast<std::size_t>(s.Orientation()) * 6364136223846793005ULL;
-
-    // Mix in all 12 entries of the Location's 3×4 transform matrix.
-    // gp_Trsf::Value(row, col) is 1-based: rows 1..3, columns 1..4.
-    // Identity Location contributes nothing so the key equals shape_tshape_ptr
-    // for unplaced shapes.
-    if (!s.Location().IsIdentity()) {
-        const gp_Trsf& t = s.Location().Transformation();
-        std::uint64_t bits;
-        std::uint64_t m = 2654435761ULL;
-        for (int r = 1; r <= 3; ++r) {
-            for (int c = 1; c <= 4; ++c) {
-                double v = t.Value(r, c);
-                std::memcpy(&bits, &v, sizeof bits);
-                h ^= bits * m;
-                m = (m << 13) | (m >> 51); // rotate multiplier each step
-            }
-        }
-    }
-    return h;
+inline std::size_t same_placed_shape_key(const TopoDS_Shape& s) {
+    return std::hash<TopoDS_Shape>{}(s);
 }
+
+// Hash key for the IsEqual (oriented) tier. Renamed from shape_key(); logic
+// unchanged. TShape+Location comes from std::hash<TopoDS_Shape>; Orientation
+// is combined on top via the same MurmurHash::hash_combine primitive
+// std::hash<TopoDS_Shape> uses internally for TShape+Location.
+inline std::size_t same_oriented_shape_key(const TopoDS_Shape& s) {
+    std::size_t h = std::hash<TopoDS_Shape>{}(s);
+    TopAbs_Orientation orient = s.Orientation();
+    return opencascade::MurmurHash::hash_combine(&orient, sizeof(orient), h);
+}
+
 inline bool face_is_reversed(const TopoDS_Face& f) {
     return f.Orientation() == TopAbs_REVERSED;
-}
-
-// Returns the raw TShape pointer as a size_t.
-// Useful for geometry-level deduplication (e.g. detecting that two placed
-// instances share the same underlying surface).  Not suitable as a unique
-// key for placed instances — use shape_key() for that.
-inline std::size_t shape_tshape_ptr(const TopoDS_Shape& s) {
-    return reinterpret_cast<std::size_t>(s.TShape().get());
 }
 
 // ── Up-casts (zero-cost; return const reference) ──────────────────────────────

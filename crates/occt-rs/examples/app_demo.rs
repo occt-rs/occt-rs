@@ -209,11 +209,11 @@ impl AppState {
         let face = OcFace::from_wire(&wire, true)?;
 
         let main = self.doc.main();
-        let cmd = self.doc.begin_command()?;
-        let sketch = main.get_or_create_child(&cmd, sketch_label_tag);
-        let lface = sketch.get_or_create_child(&cmd, 5);
-        cmd.name_builder(&lface).primitive(&face.as_shape());
-        cmd.commit()?;
+        self.doc.begin_command()?;
+        let sketch = main.get_or_create_child(sketch_label_tag);
+        let lface = sketch.get_or_create_child(5);
+        self.doc.name_builder(&lface).primitive(&face.as_shape());
+        self.doc.commit()?;
 
         println!("  → sketch face recorded at 0:1:2:5");
         Ok(())
@@ -227,25 +227,24 @@ impl AppState {
         z: f64,
     ) -> Result<(), AppError> {
         let main = self.doc.main();
-        let cmd = self.doc.begin_command()?;
-        let sketch = main.get_or_create_child(&cmd, sketch_tag);
-        let label = sketch.get_or_create_child(&cmd, tag);
+        self.doc.begin_command()?;
+        let sketch = main.get_or_create_child(sketch_tag);
+        let label = sketch.get_or_create_child(tag);
 
-        OcPointAttr::record_shape(&cmd, &label, OcPnt::new(x, y, z))?;
-        OcPointAttr::set(&cmd, &label)?;
+        OcPointAttr::record_shape(&label, OcPnt::new(x, y, z))?;
+        OcPointAttr::set(&label)?;
 
-        cmd.commit()?;
+        self.doc.commit()?;
         println!("  → point ({x}, {y}, {z}) recorded at {}", label.entry());
         Ok(())
     }
     fn add_base_planes(&mut self) -> Result<(), AppError> {
         let main = self.doc.main();
-        let cmd = self.doc.begin_command()?;
-        let planes = main.get_or_create_child(&cmd, 1);
+        self.doc.begin_command()?;
+        let planes = main.get_or_create_child(1);
 
-        let xy = planes.get_or_create_child(&cmd, 1);
+        let xy = planes.get_or_create_child(1);
         OcPlaneAttr::record_shape(
-            &cmd,
             &xy,
             OcAx2::new(
                 OcPnt::new(0.0, 0.0, 0.0),
@@ -253,11 +252,10 @@ impl AppState {
                 OcDir::new(1.0, 0.0, 0.0)?,
             )?,
         )?;
-        OcPlaneAttr::set(&cmd, &xy)?;
+        OcPlaneAttr::set(&xy)?;
 
-        let yz = planes.get_or_create_child(&cmd, 2);
+        let yz = planes.get_or_create_child(2);
         OcPlaneAttr::record_shape(
-            &cmd,
             &yz,
             OcAx2::new(
                 OcPnt::new(0.0, 0.0, 0.0),
@@ -265,11 +263,10 @@ impl AppState {
                 OcDir::new(0.0, 1.0, 0.0)?,
             )?,
         )?;
-        OcPlaneAttr::set(&cmd, &yz)?;
+        OcPlaneAttr::set(&yz)?;
 
-        let xz = planes.get_or_create_child(&cmd, 3);
+        let xz = planes.get_or_create_child(3);
         OcPlaneAttr::record_shape(
-            &cmd,
             &xz,
             OcAx2::new(
                 OcPnt::new(0.0, 0.0, 0.0),
@@ -277,9 +274,9 @@ impl AppState {
                 OcDir::new(1.0, 0.0, 0.0)?,
             )?,
         )?;
-        OcPlaneAttr::set(&cmd, &xz)?;
+        OcPlaneAttr::set(&xz)?;
 
-        cmd.commit()?;
+        self.doc.commit()?;
         println!("  → base planes recorded at 0:1:1, 0:1:1:2, 0:1:1:3");
         Ok(())
     }
@@ -320,17 +317,16 @@ impl AppState {
         let solid_shape = face.extrude(OcVec::new(0.0, 0.0, depth))?;
 
         let main = self.doc.main();
-        let cmd = self.doc.begin_command()?;
-        let lsolid = main
-            .get_or_create_child(&cmd, 3)
-            .get_or_create_child(&cmd, 1);
+        self.doc.begin_command()?;
+        let lsolid = main.get_or_create_child(3).get_or_create_child(1);
 
         // Store the depth first — the authoritative parameter.
-        OcReal::set(&cmd, &lsolid, depth)?;
-        cmd.name_builder(&lsolid)
+        OcReal::set(&lsolid, depth)?;
+        self.doc
+            .name_builder(&lsolid)
             .generated(&face_shape, &solid_shape);
 
-        cmd.commit()?;
+        self.doc.commit()?;
         println!("  → solid recorded at 0:1:3:1 (depth = {depth})");
         Ok(())
     }
@@ -450,24 +446,22 @@ fn handle_chamfer(
     let mut built = cb.build_with_history()?;
 
     let main = state.doc.main();
-    let cmd = state.doc.begin_command()?;
-    let lchamfer = main
-        .get_or_create_child(&cmd, 3)
-        .get_or_create_child(&cmd, 2);
+    state.doc.begin_command()?;
+    let lchamfer = main.get_or_create_child(3).get_or_create_child(2);
 
     // Store the distance first — the authoritative parameter.
-    OcReal::set(&cmd, &lchamfer, distance)?;
+    OcReal::set(&lchamfer, distance)?;
 
     // Record which faces were modified — feeds into the naming graph so
     // TopoNamingSelector::solve() can re-find sub-shapes after rebuild.
-    let mut nb = cmd.name_builder(&lchamfer);
+    let mut nb = state.doc.name_builder(&lchamfer);
     for face in &pre_faces {
         for modified in built.modified(&face.as_shape()) {
             nb.modified(&face.as_shape(), &modified);
         }
     }
 
-    cmd.commit()?;
+    state.doc.commit()?;
 
     println!("  → chamfer recorded at 0:1:3:2 (distance = {distance})");
     Ok(())
@@ -525,14 +519,14 @@ fn handle_select_chamfer_face(
         .ok_or(AppError::MissingShape("chamfer generated face".to_string()))?;
 
     let main = state.doc.main();
-    let cmd = state.doc.begin_command()?;
-    let sketch2 = main.get_or_create_child(&cmd, 4);
-    let lref = sketch2.get_or_create_child(&cmd, 5);
+    state.doc.begin_command()?;
+    let sketch2 = main.get_or_create_child(4);
+    let lref = sketch2.get_or_create_child(5);
 
-    let mut selector = cmd.selector(&lref);
-    selector.select(&cmd, &chamfer_face, &chamfer_shape);
+    let mut selector = state.doc.selector(&lref);
+    selector.select(&chamfer_face, &chamfer_shape);
 
-    cmd.commit()?;
+    state.doc.commit()?;
 
     // TODO(try_from): the full rebuild + solve() cycle belongs here.
     // After a sketch edit, the workflow is:

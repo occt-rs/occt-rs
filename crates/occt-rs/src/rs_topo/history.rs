@@ -91,20 +91,20 @@ pub trait HistoryProvider {
 ///
 /// // Record the solid on body/1
 /// {
-///     # let cmd = doc.begin_command().unwrap();
-///     # let lsolid = main.get_or_create_child(&cmd, 3)
-///     #                  .get_or_create_child(&cmd, 1);
-///     # OcReal::set(&cmd, &lsolid, 1.0).unwrap();
-///     # cmd.name_builder(&lsolid).primitive(&solid_shape);
-///     cmd.commit().unwrap();
+///     # doc.begin_command().unwrap();
+///     # let lsolid = main.get_or_create_child(3)
+///     #                  .get_or_create_child(1);
+///     # OcReal::set(&lsolid, 1.0).unwrap();
+///     # doc.name_builder(&lsolid).primitive(&solid_shape);
+///     doc.commit().unwrap();
 /// }
 ///
 /// // Apply the chamfer and query history
-/// let cmd = doc.begin_command().unwrap();
-/// let lchamfer = main.get_or_create_child(&cmd, 3)
-///                    .get_or_create_child(&cmd, 2);
+/// doc.begin_command().unwrap();
+/// let lchamfer = main.get_or_create_child(3)
+///                    .get_or_create_child(2);
 ///
-/// let distance = OcReal::set(&cmd, &lchamfer, 0.05).unwrap();
+/// let distance = OcReal::set(&lchamfer, 0.05).unwrap();
 /// let edge = solid_shape.edges().next().unwrap();
 /// let mut cb = ChamferBuilder::new(&solid_shape).unwrap();
 /// cb.add_edge(distance.get(), &edge).unwrap();
@@ -113,7 +113,7 @@ pub trait HistoryProvider {
 /// // modified() — which original faces were modified by the chamfer.
 /// // Feed these into TopoNamingBuilder::modified so the naming graph
 /// // records what changed.
-/// let mut nb = cmd.name_builder(&lchamfer);
+/// let mut nb = doc.name_builder(&lchamfer);
 /// let mut modified_count = 0;
 /// for face in &initial_faces {
 ///     for modified in built.modified(&face.as_shape()) {
@@ -133,7 +133,7 @@ pub trait HistoryProvider {
 ///     assert!(!built.is_deleted(&face.as_shape()));
 /// }
 ///
-/// cmd.commit().unwrap();
+/// doc.commit().unwrap();
 ///
 /// assert_eq!(
 ///     TopoNamingNamedShape::find(&lchamfer).unwrap().evolution(),

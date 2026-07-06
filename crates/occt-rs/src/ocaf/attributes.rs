@@ -20,8 +20,7 @@
 //! `append`/`set_value` mutate document state through `&self`, not `&mut self`.
 //! An `Oc*List`/`Oc*Array` handle is a view onto an attribute owned by the
 //! document's `TDF_Data`, not the storage itself — the write lands in the
-//! document, and the `_cmd: &Command<'_>` argument is what gates it to an open
-//! transaction. `&mut self` would falsely imply the handle has exclusive
+//! document. `&mut self` would falsely imply the handle has exclusive
 //! ownership of the attribute (it doesn't; several handles to the same one can
 //! coexist).
 
@@ -30,7 +29,6 @@ use std::marker::PhantomData;
 use std::num::NonZeroI32;
 
 use crate::error::{OcctError, OcctErrorKind};
-use crate::ocaf::document::Command;
 use crate::ocaf::label::OcLabel;
 
 // ── OcName ────────────────────────────────────────────────────────────────────
@@ -43,7 +41,7 @@ pub struct OcName {
 
 impl OcName {
     /// [`Command`]-scoped upsert on `label`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: &str) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel, value: &str) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_name_set(&label.inner, value).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -71,7 +69,7 @@ impl OcName {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_name_forget(&label.inner)
     }
 }
@@ -94,7 +92,7 @@ pub struct OcInteger {
 
 impl OcInteger {
     /// [`Command`]-scoped upsert on `label`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: i32) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel, value: i32) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_integer_set(&label.inner, value).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -122,7 +120,7 @@ impl OcInteger {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_integer_forget(&label.inner)
     }
 }
@@ -145,7 +143,7 @@ pub struct OcReal {
 
 impl OcReal {
     /// [`Command`]-scoped upsert on `label`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: f64) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel, value: f64) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_real_set(&label.inner, value).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -173,7 +171,7 @@ impl OcReal {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_real_forget(&label.inner)
     }
 
@@ -205,7 +203,7 @@ pub struct OcComment {
 
 impl OcComment {
     /// [`Command`]-scoped upsert on `label`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: &str) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel, value: &str) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_comment_set(&label.inner, value).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -233,7 +231,7 @@ impl OcComment {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_comment_forget(&label.inner)
     }
 }
@@ -260,7 +258,7 @@ pub struct OcAsciiString {
 
 impl OcAsciiString {
     /// [`Command`]-scoped upsert on `label`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, value: &str) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel, value: &str) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_asciistring_set(&label.inner, value).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -288,7 +286,7 @@ impl OcAsciiString {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_asciistring_forget(&label.inner)
     }
 }
@@ -316,7 +314,7 @@ pub struct OcReferenceList {
 
 impl OcReferenceList {
     /// [`Command`]-scoped upsert on `label`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_referencelist_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -340,7 +338,7 @@ impl OcReferenceList {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_referencelist_forget(&label.inner)
     }
 
@@ -371,7 +369,7 @@ impl OcReferenceList {
     /// Appends `value` to the end of this list.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn append(&self, _cmd: &Command<'_>, value: &OcLabel) {
+    pub fn append(&self, value: &OcLabel) {
         ffi::tdatastd_referencelist_append(&self.inner, &value.inner);
     }
 
@@ -430,7 +428,7 @@ pub struct OcIntegerList {
 
 impl OcIntegerList {
     /// [`Command`]-scoped upsert on `label`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_integerlist_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -454,7 +452,7 @@ impl OcIntegerList {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_integerlist_forget(&label.inner)
     }
 
@@ -481,7 +479,7 @@ impl OcIntegerList {
     /// Appends `value` to the end of this list.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn append(&self, _cmd: &Command<'_>, value: i32) {
+    pub fn append(&self, value: i32) {
         ffi::tdatastd_integerlist_append(&self.inner, value);
     }
 
@@ -542,7 +540,7 @@ pub struct OcRealList {
 
 impl OcRealList {
     /// [`Command`]-scoped upsert on `label`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_reallist_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -566,7 +564,7 @@ impl OcRealList {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_reallist_forget(&label.inner)
     }
 
@@ -593,7 +591,7 @@ impl OcRealList {
     /// Appends `value` to the end of this list.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn append(&self, _cmd: &Command<'_>, value: f64) {
+    pub fn append(&self, value: f64) {
         ffi::tdatastd_reallist_append(&self.inner, value);
     }
 
@@ -652,7 +650,7 @@ pub struct OcExtStringList {
 
 impl OcExtStringList {
     /// [`Command`]-scoped upsert on `label`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_extstringlist_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -676,7 +674,7 @@ impl OcExtStringList {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_extstringlist_forget(&label.inner)
     }
 
@@ -703,7 +701,7 @@ impl OcExtStringList {
     /// Appends `value` to the end of this list.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn append(&self, _cmd: &Command<'_>, value: &str) {
+    pub fn append(&self, value: &str) {
         ffi::tdatastd_extstringlist_append(&self.inner, value);
     }
 
@@ -764,7 +762,7 @@ pub struct OcBooleanList {
 
 impl OcBooleanList {
     /// [`Command`]-scoped upsert on `label`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_booleanlist_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -788,7 +786,7 @@ impl OcBooleanList {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_booleanlist_forget(&label.inner)
     }
 
@@ -815,7 +813,7 @@ impl OcBooleanList {
     /// Appends `value` to the end of this list.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn append(&self, _cmd: &Command<'_>, value: bool) {
+    pub fn append(&self, value: bool) {
         ffi::tdatastd_booleanlist_append(&self.inner, value);
     }
 
@@ -960,7 +958,7 @@ pub struct OcUAttribute;
 
 impl OcUAttribute {
     /// [`Command`]-scoped upsert on `label`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, guid: OcGuid) -> Result<(), OcctError> {
+    pub fn set(label: &OcLabel, guid: OcGuid) -> Result<(), OcctError> {
         ffi::tdatastd_uattribute_set(
             &label.inner,
             guid.a32b,
@@ -1000,7 +998,7 @@ impl OcUAttribute {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel, guid: OcGuid) -> bool {
+    pub fn forget(label: &OcLabel, guid: OcGuid) -> bool {
         ffi::tdatastd_uattribute_forget(
             &label.inner,
             guid.a32b,
@@ -1049,7 +1047,7 @@ pub struct OcNamedData {
 
 impl OcNamedData {
     /// [`Command`]-scoped upsert on `label`.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_nameddata_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -1073,7 +1071,7 @@ impl OcNamedData {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_nameddata_forget(&label.inner)
     }
 
@@ -1097,7 +1095,7 @@ impl OcNamedData {
     /// Sets the integer value for `name`, creating or overwriting it.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn set_integer(&self, _cmd: &Command<'_>, name: &str, value: i32) {
+    pub fn set_integer(&self, name: &str, value: i32) {
         ffi::tdatastd_nameddata_set_integer(&self.inner, name, value);
     }
 
@@ -1121,7 +1119,7 @@ impl OcNamedData {
     /// Sets the real value for `name`, creating or overwriting it.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn set_real(&self, _cmd: &Command<'_>, name: &str, value: f64) {
+    pub fn set_real(&self, name: &str, value: f64) {
         ffi::tdatastd_nameddata_set_real(&self.inner, name, value);
     }
 
@@ -1145,7 +1143,7 @@ impl OcNamedData {
     /// Sets the string value for `name`, creating or overwriting it.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn set_string(&self, _cmd: &Command<'_>, name: &str, value: &str) {
+    pub fn set_string(&self, name: &str, value: &str) {
         ffi::tdatastd_nameddata_set_string(&self.inner, name, value);
     }
 
@@ -1169,7 +1167,7 @@ impl OcNamedData {
     /// Sets the byte value for `name`, creating or overwriting it.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn set_byte(&self, _cmd: &Command<'_>, name: &str, value: u8) {
+    pub fn set_byte(&self, name: &str, value: u8) {
         ffi::tdatastd_nameddata_set_byte(&self.inner, name, value);
     }
 }
@@ -1210,7 +1208,7 @@ pub struct OcReferenceArray {
 
 impl OcReferenceArray {
     /// [`Command`]-scoped upsert-get on `label`
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: i32) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel, len: i32) -> Result<Self, OcctError> {
         let inner = ffi::tdatastd_referencearray_set(&label.inner, len).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -1234,7 +1232,7 @@ impl OcReferenceArray {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_referencearray_forget(&label.inner)
     }
 
@@ -1266,12 +1264,7 @@ impl OcReferenceArray {
     /// # Errors
     ///
     /// Returns `Err` if `index` is outside `[0, len()-1]`.
-    pub fn set_value(
-        &self,
-        _cmd: &Command<'_>,
-        index: i32,
-        value: &OcLabel,
-    ) -> Result<(), OcctError> {
+    pub fn set_value(&self, index: i32, value: &OcLabel) -> Result<(), OcctError> {
         ffi::tdatastd_referencearray_set_value(&self.inner, index, &value.inner)
             .map_err(OcctError::from)
     }
@@ -1305,7 +1298,7 @@ pub struct OcRealArray {
 
 impl OcRealArray {
     /// [`Command`]-scoped upsert-get on `label`
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
         let inner =
             ffi::tdatastd_realarray_set(&label.inner, len.into()).map_err(OcctError::from)?;
         Ok(Self {
@@ -1330,7 +1323,7 @@ impl OcRealArray {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_realarray_forget(&label.inner)
     }
 
@@ -1360,7 +1353,7 @@ impl OcRealArray {
     /// # Errors
     ///
     /// Returns `Err` if `index` is outside `[0, len()-1]`.
-    pub fn set_value(&self, _cmd: &Command<'_>, index: i32, value: f64) -> Result<(), OcctError> {
+    pub fn set_value(&self, index: i32, value: f64) -> Result<(), OcctError> {
         ffi::tdatastd_realarray_set_value(&self.inner, index, value).map_err(OcctError::from)
     }
 
@@ -1393,7 +1386,7 @@ pub struct OcIntegerArray {
 
 impl OcIntegerArray {
     /// [`Command`]-scoped upsert-get on `label`
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
         let inner =
             ffi::tdatastd_integerarray_set(&label.inner, len.into()).map_err(OcctError::from)?;
         Ok(Self {
@@ -1418,7 +1411,7 @@ impl OcIntegerArray {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_integerarray_forget(&label.inner)
     }
 
@@ -1448,7 +1441,7 @@ impl OcIntegerArray {
     /// # Errors
     ///
     /// Returns `Err` if `index` is outside `[0, len()-1]`.
-    pub fn set_value(&self, _cmd: &Command<'_>, index: i32, value: i32) -> Result<(), OcctError> {
+    pub fn set_value(&self, index: i32, value: i32) -> Result<(), OcctError> {
         ffi::tdatastd_integerarray_set_value(&self.inner, index, value).map_err(OcctError::from)
     }
     pub fn iter(&self) -> impl Iterator<Item = Result<i32, OcctError>> + '_ {
@@ -1480,7 +1473,7 @@ pub struct OcBooleanArray {
 
 impl OcBooleanArray {
     /// [`Command`]-scoped upsert-get on `label`
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
         let inner =
             ffi::tdatastd_booleanarray_set(&label.inner, len.into()).map_err(OcctError::from)?;
         Ok(Self {
@@ -1505,7 +1498,7 @@ impl OcBooleanArray {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_booleanarray_forget(&label.inner)
     }
 
@@ -1552,7 +1545,7 @@ impl OcBooleanArray {
     ///
     /// Returns `Err` if `index` is outside `[0, len()-1]`. See [`value`](Self::value)
     /// for why this is checked on the Rust side rather than relying on OCCT.
-    pub fn set_value(&self, _cmd: &Command<'_>, index: i32, value: bool) -> Result<(), OcctError> {
+    pub fn set_value(&self, index: i32, value: bool) -> Result<(), OcctError> {
         if index < 0 || index >= self.len() {
             return Err(OcctError {
                 kind: OcctErrorKind::OutOfRange,
@@ -1600,7 +1593,7 @@ pub struct OcByteArray {
 
 impl OcByteArray {
     /// [`Command`]-scoped upsert-get on `label`
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
         let inner =
             ffi::tdatastd_bytearray_set(&label.inner, len.into()).map_err(OcctError::from)?;
         Ok(Self {
@@ -1625,7 +1618,7 @@ impl OcByteArray {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_bytearray_forget(&label.inner)
     }
 
@@ -1655,7 +1648,7 @@ impl OcByteArray {
     /// # Errors
     ///
     /// Returns `Err` if `index` is outside `[0, len()-1]`.
-    pub fn set_value(&self, _cmd: &Command<'_>, index: i32, value: u8) -> Result<(), OcctError> {
+    pub fn set_value(&self, index: i32, value: u8) -> Result<(), OcctError> {
         ffi::tdatastd_bytearray_set_value(&self.inner, index, value).map_err(OcctError::from)
     }
 
@@ -1688,7 +1681,7 @@ pub struct OcExtStringArray {
 
 impl OcExtStringArray {
     /// [`Command`]-scoped upsert-get on `label`
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel, len: NonZeroI32) -> Result<Self, OcctError> {
         let inner =
             ffi::tdatastd_extstringarray_set(&label.inner, len.into()).map_err(OcctError::from)?;
         Ok(Self {
@@ -1713,7 +1706,7 @@ impl OcExtStringArray {
     /// [`Command`]-scoped removal of this attribute from `label`, if present.
     ///
     /// Returns `false` if the attribute was not present.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdatastd_extstringarray_forget(&label.inner)
     }
 
@@ -1744,7 +1737,7 @@ impl OcExtStringArray {
     /// # Errors
     ///
     /// Returns `Err` if `index` is outside `[0, len()-1]`.
-    pub fn set_value(&self, _cmd: &Command<'_>, index: i32, value: &str) -> Result<(), OcctError> {
+    pub fn set_value(&self, index: i32, value: &str) -> Result<(), OcctError> {
         ffi::tdatastd_extstringarray_set_value(&self.inner, index, value).map_err(OcctError::from)
     }
 
@@ -1783,10 +1776,10 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcName::set(&cmd, &label, "hello").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcName::set(&label, "hello").unwrap();
+            doc.commit().unwrap();
         }
         let attr = OcName::find(&label).expect("name attribute should be present");
         assert_eq!(attr.get(), "hello");
@@ -1796,9 +1789,9 @@ mod tests {
     fn name_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcName::find(&label).is_none());
     }
 
@@ -1808,15 +1801,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcName::set(&cmd, &label, "first").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcName::set(&label, "first").unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            OcName::set(&cmd, &label, "second").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            OcName::set(&label, "second").unwrap();
+            doc.commit().unwrap();
         }
         assert_eq!(OcName::find(&label).unwrap().get(), "second");
     }
@@ -1827,15 +1820,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcName::set(&cmd, &label, "before").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcName::set(&label, "before").unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            OcName::set(&cmd, &label, "after").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            OcName::set(&label, "after").unwrap();
+            doc.commit().unwrap();
         }
         doc.undo().unwrap();
         assert_eq!(OcName::find(&label).unwrap().get(), "before");
@@ -1846,10 +1839,10 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcName::set(&cmd, &label, "café").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcName::set(&label, "café").unwrap();
+            doc.commit().unwrap();
         }
         assert_eq!(OcName::find(&label).unwrap().get(), "café");
     }
@@ -1859,12 +1852,12 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
             // U+1F600 (4-byte UTF-8) — outside the BMP, exercises any
             // surrogate-pair handling in ExtendedString's UTF-8 decode.
-            OcName::set(&cmd, &label, "😀").unwrap();
-            cmd.commit().unwrap();
+            OcName::set(&label, "😀").unwrap();
+            doc.commit().unwrap();
         }
         assert_eq!(OcName::find(&label).unwrap().get(), "😀");
     }
@@ -1877,10 +1870,10 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcInteger::set(&cmd, &label, 42).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcInteger::set(&label, 42).unwrap();
+            doc.commit().unwrap();
         }
         assert_eq!(OcInteger::find(&label).unwrap().get(), 42);
     }
@@ -1889,9 +1882,9 @@ mod tests {
     fn integer_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcInteger::find(&label).is_none());
     }
 
@@ -1901,15 +1894,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcInteger::set(&cmd, &label, 1).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcInteger::set(&label, 1).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            OcInteger::set(&cmd, &label, 2).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            OcInteger::set(&label, 2).unwrap();
+            doc.commit().unwrap();
         }
         doc.undo().unwrap();
         assert_eq!(OcInteger::find(&label).unwrap().get(), 1);
@@ -1921,15 +1914,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcInteger::set(&cmd, &label, 42).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcInteger::set(&label, 42).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcInteger::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcInteger::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcInteger::find(&label).is_none());
     }
@@ -1938,10 +1931,10 @@ mod tests {
     fn integer_forget_absent_returns_false() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        assert!(!OcInteger::forget(&cmd, &label));
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        assert!(!OcInteger::forget(&label));
+        doc.commit().unwrap();
     }
 
     // ── OcReal ───────────────────────────────────────────────────────────────
@@ -1952,10 +1945,10 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcReal::set(&cmd, &label, 3.14).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcReal::set(&label, 3.14).unwrap();
+            doc.commit().unwrap();
         }
         let v = OcReal::find(&label).unwrap().get();
         assert!((v - 3.14).abs() < 1e-12);
@@ -1965,9 +1958,9 @@ mod tests {
     fn real_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcReal::find(&label).is_none());
     }
     // ── OcComment ────────────────────────────────────────────────────────────
@@ -1978,10 +1971,10 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcComment::set(&cmd, &label, "a comment").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcComment::set(&label, "a comment").unwrap();
+            doc.commit().unwrap();
         }
         assert_eq!(OcComment::find(&label).unwrap().get(), "a comment");
     }
@@ -1990,9 +1983,9 @@ mod tests {
     fn comment_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcComment::find(&label).is_none());
     }
 
@@ -2002,15 +1995,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcComment::set(&cmd, &label, "first").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcComment::set(&label, "first").unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            OcComment::set(&cmd, &label, "second").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            OcComment::set(&label, "second").unwrap();
+            doc.commit().unwrap();
         }
         assert_eq!(OcComment::find(&label).unwrap().get(), "second");
     }
@@ -2021,15 +2014,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcComment::set(&cmd, &label, "before").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcComment::set(&label, "before").unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            OcComment::set(&cmd, &label, "after").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            OcComment::set(&label, "after").unwrap();
+            doc.commit().unwrap();
         }
         doc.undo().unwrap();
         assert_eq!(OcComment::find(&label).unwrap().get(), "before");
@@ -2043,10 +2036,10 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcAsciiString::set(&cmd, &label, "PART-001").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcAsciiString::set(&label, "PART-001").unwrap();
+            doc.commit().unwrap();
         }
         assert_eq!(OcAsciiString::find(&label).unwrap().get(), "PART-001");
     }
@@ -2055,9 +2048,9 @@ mod tests {
     fn asciistring_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcAsciiString::find(&label).is_none());
     }
 
@@ -2067,15 +2060,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcAsciiString::set(&cmd, &label, "first").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcAsciiString::set(&label, "first").unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            OcAsciiString::set(&cmd, &label, "second").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            OcAsciiString::set(&label, "second").unwrap();
+            doc.commit().unwrap();
         }
         assert_eq!(OcAsciiString::find(&label).unwrap().get(), "second");
     }
@@ -2086,15 +2079,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcAsciiString::set(&cmd, &label, "before").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcAsciiString::set(&label, "before").unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            OcAsciiString::set(&cmd, &label, "after").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            OcAsciiString::set(&label, "after").unwrap();
+            doc.commit().unwrap();
         }
         doc.undo().unwrap();
         assert_eq!(OcAsciiString::find(&label).unwrap().get(), "before");
@@ -2106,10 +2099,10 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcAsciiString::set(&cmd, &label, "café").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcAsciiString::set(&label, "café").unwrap();
+            doc.commit().unwrap();
         }
         // TCollection_AsciiString is an unvalidated byte buffer — bytes
         // round-trip unchanged regardless of content.
@@ -2124,12 +2117,12 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcName::set(&cmd, &label, "part_a").unwrap();
-            OcInteger::set(&cmd, &label, 7).unwrap();
-            OcReal::set(&cmd, &label, 1.5).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcName::set(&label, "part_a").unwrap();
+            OcInteger::set(&label, 7).unwrap();
+            OcReal::set(&label, 1.5).unwrap();
+            doc.commit().unwrap();
         }
         assert_eq!(OcName::find(&label).unwrap().get(), "part_a");
         assert_eq!(OcInteger::find(&label).unwrap().get(), 7);
@@ -2143,12 +2136,12 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            let list = OcReferenceList::set(&cmd, &label).unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            let list = OcReferenceList::set(&label).unwrap();
             assert!(list.is_empty());
             assert_eq!(list.extent(), 0);
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
         }
         let found = OcReferenceList::find(&label).expect("reference list should be present");
         assert!(found.is_empty());
@@ -2158,9 +2151,9 @@ mod tests {
     fn referencelist_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcReferenceList::find(&label).is_none());
     }
 
@@ -2170,15 +2163,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcReferenceList::set(&cmd, &label).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcReferenceList::set(&label).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcReferenceList::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcReferenceList::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcReferenceList::find(&label).is_none());
     }
@@ -2190,17 +2183,17 @@ mod tests {
         let tags;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let list_label = main.get_or_create_child(&cmd, 1);
-            let a = main.get_or_create_child(&cmd, 2);
-            let b = main.get_or_create_child(&cmd, 3);
-            let c = main.get_or_create_child(&cmd, 4);
+            doc.begin_command().unwrap();
+            let list_label = main.get_or_create_child(1);
+            let a = main.get_or_create_child(2);
+            let b = main.get_or_create_child(3);
+            let c = main.get_or_create_child(4);
             tags = vec![a.tag(), b.tag(), c.tag()];
-            list = OcReferenceList::set(&cmd, &list_label).unwrap();
-            list.append(&cmd, &a);
-            list.append(&cmd, &b);
-            list.append(&cmd, &c);
-            cmd.commit().unwrap();
+            list = OcReferenceList::set(&list_label).unwrap();
+            list.append(&a);
+            list.append(&b);
+            list.append(&c);
+            doc.commit().unwrap();
         }
         assert_eq!(list.extent(), 3);
         let got: Vec<i32> = list.iter().map(|l| l.tag()).collect();
@@ -2214,20 +2207,20 @@ mod tests {
         let a_tag;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let list_label = main.get_or_create_child(&cmd, 1);
-            let a = main.get_or_create_child(&cmd, 2);
+            doc.begin_command().unwrap();
+            let list_label = main.get_or_create_child(1);
+            let a = main.get_or_create_child(2);
             a_tag = a.tag();
-            list = OcReferenceList::set(&cmd, &list_label).unwrap();
-            list.append(&cmd, &a);
-            cmd.commit().unwrap();
+            list = OcReferenceList::set(&list_label).unwrap();
+            list.append(&a);
+            doc.commit().unwrap();
         }
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let b = main.get_or_create_child(&cmd, 3);
-            list.append(&cmd, &b);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let b = main.get_or_create_child(3);
+            list.append(&b);
+            doc.commit().unwrap();
         }
         assert_eq!(list.extent(), 2);
         doc.undo().unwrap();
@@ -2242,11 +2235,11 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            let arr = OcReferenceArray::set(&cmd, &label, 3).unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            let arr = OcReferenceArray::set(&label, 3).unwrap();
             assert_eq!(arr.len(), 3);
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
         }
         let found = OcReferenceArray::find(&label).expect("reference array should be present");
         assert_eq!(found.len(), 3);
@@ -2256,9 +2249,9 @@ mod tests {
     fn referencearray_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcReferenceArray::find(&label).is_none());
     }
 
@@ -2268,15 +2261,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcReferenceArray::set(&cmd, &label, 2).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcReferenceArray::set(&label, 2).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcReferenceArray::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcReferenceArray::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcReferenceArray::find(&label).is_none());
     }
@@ -2288,15 +2281,15 @@ mod tests {
         let tags;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let arr_label = main.get_or_create_child(&cmd, 1);
-            let a = main.get_or_create_child(&cmd, 2);
-            let b = main.get_or_create_child(&cmd, 3);
+            doc.begin_command().unwrap();
+            let arr_label = main.get_or_create_child(1);
+            let a = main.get_or_create_child(2);
+            let b = main.get_or_create_child(3);
             tags = vec![a.tag(), b.tag()];
-            arr = OcReferenceArray::set(&cmd, &arr_label, 2).unwrap();
-            arr.set_value(&cmd, 0, &a).unwrap();
-            arr.set_value(&cmd, 1, &b).unwrap();
-            cmd.commit().unwrap();
+            arr = OcReferenceArray::set(&arr_label, 2).unwrap();
+            arr.set_value(0, &a).unwrap();
+            arr.set_value(1, &b).unwrap();
+            doc.commit().unwrap();
         }
         let got: Vec<_> = arr.iter().map(|l| l.unwrap().tag()).collect();
         assert_eq!(got, tags);
@@ -2308,10 +2301,10 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcReferenceArray::set(&cmd, &label, 2).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcReferenceArray::set(&label, 2).unwrap();
+            doc.commit().unwrap();
         }
         assert!(arr.value(2).is_err());
         assert!(arr.value(-1).is_err());
@@ -2324,20 +2317,20 @@ mod tests {
         let a_tag;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let arr_label = main.get_or_create_child(&cmd, 1);
-            let a = main.get_or_create_child(&cmd, 2);
+            doc.begin_command().unwrap();
+            let arr_label = main.get_or_create_child(1);
+            let a = main.get_or_create_child(2);
             a_tag = a.tag();
-            arr = OcReferenceArray::set(&cmd, &arr_label, 1).unwrap();
-            arr.set_value(&cmd, 0, &a).unwrap();
-            cmd.commit().unwrap();
+            arr = OcReferenceArray::set(&arr_label, 1).unwrap();
+            arr.set_value(0, &a).unwrap();
+            doc.commit().unwrap();
         }
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let b = main.get_or_create_child(&cmd, 3);
-            arr.set_value(&cmd, 0, &b).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let b = main.get_or_create_child(3);
+            arr.set_value(0, &b).unwrap();
+            doc.commit().unwrap();
         }
         doc.undo().unwrap();
         assert_eq!(arr.value(0).unwrap().tag(), a_tag);
@@ -2347,13 +2340,13 @@ mod tests {
     fn referencearray_zero_length_is_err() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
         // TColStd_Array1 requires Lower <= Upper; len == 0 -> Set(label, 0, -1)
         // raises Standard_RangeError from Init. Use OcReferenceList for
         // possibly-empty collections.
-        assert!(OcReferenceArray::set(&cmd, &label, 0).is_err());
-        cmd.abort().unwrap();
+        assert!(OcReferenceArray::set(&label, 0).is_err());
+        doc.abort().unwrap();
     }
     // ── OcRealArray ──────────────────────────────────────────────────────────
 
@@ -2363,11 +2356,11 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            let arr = OcRealArray::set(&cmd, &label, NonZeroI32::new(3).unwrap()).unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            let arr = OcRealArray::set(&label, NonZeroI32::new(3).unwrap()).unwrap();
             assert_eq!(arr.len(), 3);
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
         }
         let found = OcRealArray::find(&label).expect("real array should be present");
         assert_eq!(found.len(), 3);
@@ -2377,9 +2370,9 @@ mod tests {
     fn realarray_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcRealArray::find(&label).is_none());
     }
 
@@ -2389,15 +2382,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcRealArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcRealArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcRealArray::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcRealArray::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcRealArray::find(&label).is_none());
     }
@@ -2408,12 +2401,12 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcRealArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            arr.set_value(&cmd, 0, 1.5).unwrap();
-            arr.set_value(&cmd, 1, -2.25).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcRealArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            arr.set_value(0, 1.5).unwrap();
+            arr.set_value(1, -2.25).unwrap();
+            doc.commit().unwrap();
         }
         let got = arr.iter().collect::<Result<Vec<_>, _>>().unwrap();
         assert!((got[0] - 1.5).abs() < 1e-12);
@@ -2426,10 +2419,10 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcRealArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcRealArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            doc.commit().unwrap();
         }
         assert!(arr.value(2).is_err());
         assert!(arr.value(-1).is_err());
@@ -2441,16 +2434,16 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcRealArray::set(&cmd, &label, NonZeroI32::new(1).unwrap()).unwrap();
-            arr.set_value(&cmd, 0, 1.0).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcRealArray::set(&label, NonZeroI32::new(1).unwrap()).unwrap();
+            arr.set_value(0, 1.0).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            arr.set_value(&cmd, 0, 2.0).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            arr.set_value(0, 2.0).unwrap();
+            doc.commit().unwrap();
         }
         doc.undo().unwrap();
         assert!((arr.value(0).unwrap() - 1.0).abs() < 1e-12);
@@ -2464,11 +2457,11 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            let arr = OcIntegerArray::set(&cmd, &label, NonZeroI32::new(3).unwrap()).unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            let arr = OcIntegerArray::set(&label, NonZeroI32::new(3).unwrap()).unwrap();
             assert_eq!(arr.len(), 3);
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
         }
         let found = OcIntegerArray::find(&label).expect("integer array should be present");
         assert_eq!(found.len(), 3);
@@ -2478,9 +2471,9 @@ mod tests {
     fn integerarray_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcIntegerArray::find(&label).is_none());
     }
 
@@ -2490,15 +2483,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcIntegerArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcIntegerArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcIntegerArray::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcIntegerArray::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcIntegerArray::find(&label).is_none());
     }
@@ -2509,12 +2502,12 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcIntegerArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            arr.set_value(&cmd, 0, 7).unwrap();
-            arr.set_value(&cmd, 1, -3).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcIntegerArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            arr.set_value(0, 7).unwrap();
+            arr.set_value(1, -3).unwrap();
+            doc.commit().unwrap();
         }
         assert_eq!(
             arr.iter().collect::<Result<Vec<_>, _>>().unwrap(),
@@ -2528,10 +2521,10 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcIntegerArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcIntegerArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            doc.commit().unwrap();
         }
         assert!(arr.value(2).is_err());
         assert!(arr.value(-1).is_err());
@@ -2543,16 +2536,16 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcIntegerArray::set(&cmd, &label, NonZeroI32::new(1).unwrap()).unwrap();
-            arr.set_value(&cmd, 0, 1).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcIntegerArray::set(&label, NonZeroI32::new(1).unwrap()).unwrap();
+            arr.set_value(0, 1).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            arr.set_value(&cmd, 0, 2).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            arr.set_value(0, 2).unwrap();
+            doc.commit().unwrap();
         }
         doc.undo().unwrap();
         assert_eq!(arr.value(0).unwrap(), 1);
@@ -2565,11 +2558,11 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            let arr = OcBooleanArray::set(&cmd, &label, NonZeroI32::new(3).unwrap()).unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            let arr = OcBooleanArray::set(&label, NonZeroI32::new(3).unwrap()).unwrap();
             assert_eq!(arr.len(), 3);
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
         }
         let found = OcBooleanArray::find(&label).expect("boolean array should be present");
         assert_eq!(found.len(), 3);
@@ -2579,9 +2572,9 @@ mod tests {
     fn booleanarray_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcBooleanArray::find(&label).is_none());
     }
 
@@ -2591,15 +2584,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcBooleanArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcBooleanArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcBooleanArray::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcBooleanArray::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcBooleanArray::find(&label).is_none());
     }
@@ -2610,12 +2603,12 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcBooleanArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            arr.set_value(&cmd, 0, true).unwrap();
-            arr.set_value(&cmd, 1, false).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcBooleanArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            arr.set_value(0, true).unwrap();
+            arr.set_value(1, false).unwrap();
+            doc.commit().unwrap();
         }
         assert_eq!(arr.to_vec(), vec![true, false]);
     }
@@ -2626,10 +2619,10 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcBooleanArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcBooleanArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            doc.commit().unwrap();
         }
         assert!(arr.value(2).is_err());
         assert!(arr.value(-1).is_err());
@@ -2643,10 +2636,10 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcBooleanArray::set(&cmd, &label, NonZeroI32::new(9).unwrap()).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcBooleanArray::set(&label, NonZeroI32::new(9).unwrap()).unwrap();
+            doc.commit().unwrap();
         }
         // Last valid index is fine.
         assert!(arr.value(8).is_ok());
@@ -2661,16 +2654,16 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcBooleanArray::set(&cmd, &label, NonZeroI32::new(1).unwrap()).unwrap();
-            arr.set_value(&cmd, 0, true).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcBooleanArray::set(&label, NonZeroI32::new(1).unwrap()).unwrap();
+            arr.set_value(0, true).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            arr.set_value(&cmd, 0, false).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            arr.set_value(0, false).unwrap();
+            doc.commit().unwrap();
         }
         doc.undo().unwrap();
         assert_eq!(arr.value(0).unwrap(), true);
@@ -2684,11 +2677,11 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            let arr = OcByteArray::set(&cmd, &label, NonZeroI32::new(3).unwrap()).unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            let arr = OcByteArray::set(&label, NonZeroI32::new(3).unwrap()).unwrap();
             assert_eq!(arr.len(), 3);
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
         }
         let found = OcByteArray::find(&label).expect("byte array should be present");
         assert_eq!(found.len(), 3);
@@ -2698,9 +2691,9 @@ mod tests {
     fn bytearray_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcByteArray::find(&label).is_none());
     }
 
@@ -2710,15 +2703,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcByteArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcByteArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcByteArray::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcByteArray::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcByteArray::find(&label).is_none());
     }
@@ -2729,12 +2722,12 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcByteArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            arr.set_value(&cmd, 0, 0).unwrap();
-            arr.set_value(&cmd, 1, 255).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcByteArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            arr.set_value(0, 0).unwrap();
+            arr.set_value(1, 255).unwrap();
+            doc.commit().unwrap();
         }
         assert_eq!(
             arr.iter().collect::<Result<Vec<_>, _>>().unwrap(),
@@ -2748,10 +2741,10 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcByteArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcByteArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            doc.commit().unwrap();
         }
         assert!(arr.value(2).is_err());
         assert!(arr.value(-1).is_err());
@@ -2763,16 +2756,16 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcByteArray::set(&cmd, &label, NonZeroI32::new(1).unwrap()).unwrap();
-            arr.set_value(&cmd, 0, 1).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcByteArray::set(&label, NonZeroI32::new(1).unwrap()).unwrap();
+            arr.set_value(0, 1).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            arr.set_value(&cmd, 0, 2).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            arr.set_value(0, 2).unwrap();
+            doc.commit().unwrap();
         }
         doc.undo().unwrap();
         assert_eq!(arr.value(0).unwrap(), 1);
@@ -2786,11 +2779,11 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            let arr = OcExtStringArray::set(&cmd, &label, NonZeroI32::new(3).unwrap()).unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            let arr = OcExtStringArray::set(&label, NonZeroI32::new(3).unwrap()).unwrap();
             assert_eq!(arr.len(), NonZeroI32::new(3).unwrap());
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
         }
         let found = OcExtStringArray::find(&label).expect("ext string array should be present");
         assert_eq!(found.len(), NonZeroI32::new(3).unwrap());
@@ -2800,9 +2793,9 @@ mod tests {
     fn extstringarray_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcExtStringArray::find(&label).is_none());
     }
 
@@ -2812,15 +2805,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcExtStringArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcExtStringArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcExtStringArray::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcExtStringArray::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcExtStringArray::find(&label).is_none());
     }
@@ -2831,12 +2824,12 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcExtStringArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            arr.set_value(&cmd, 0, "first").unwrap();
-            arr.set_value(&cmd, 1, "second").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcExtStringArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            arr.set_value(0, "first").unwrap();
+            arr.set_value(1, "second").unwrap();
+            doc.commit().unwrap();
         }
         assert_eq!(
             arr.iter().collect::<Result<Vec<_>, _>>().unwrap(),
@@ -2850,11 +2843,11 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcExtStringArray::set(&cmd, &label, NonZeroI32::new(1).unwrap()).unwrap();
-            arr.set_value(&cmd, 0, "café 😀").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcExtStringArray::set(&label, NonZeroI32::new(1).unwrap()).unwrap();
+            arr.set_value(0, "café 😀").unwrap();
+            doc.commit().unwrap();
         }
         assert_eq!(arr.value(0).unwrap(), "café 😀");
     }
@@ -2865,10 +2858,10 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcExtStringArray::set(&cmd, &label, NonZeroI32::new(2).unwrap()).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcExtStringArray::set(&label, NonZeroI32::new(2).unwrap()).unwrap();
+            doc.commit().unwrap();
         }
         assert!(arr.value(2).is_err());
         assert!(arr.value(-1).is_err());
@@ -2880,16 +2873,16 @@ mod tests {
         let arr;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            arr = OcExtStringArray::set(&cmd, &label, NonZeroI32::new(1).unwrap()).unwrap();
-            arr.set_value(&cmd, 0, "before").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            arr = OcExtStringArray::set(&label, NonZeroI32::new(1).unwrap()).unwrap();
+            arr.set_value(0, "before").unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            arr.set_value(&cmd, 0, "after").unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            arr.set_value(0, "after").unwrap();
+            doc.commit().unwrap();
         }
         doc.undo().unwrap();
         assert_eq!(arr.value(0).unwrap(), "before");
@@ -2903,12 +2896,12 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            let list = OcIntegerList::set(&cmd, &label).unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            let list = OcIntegerList::set(&label).unwrap();
             assert!(list.is_empty());
             assert_eq!(list.extent(), 0);
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
         }
         let found = OcIntegerList::find(&label).expect("integer list should be present");
         assert!(found.is_empty());
@@ -2918,9 +2911,9 @@ mod tests {
     fn integerlist_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcIntegerList::find(&label).is_none());
     }
 
@@ -2930,15 +2923,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcIntegerList::set(&cmd, &label).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcIntegerList::set(&label).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcIntegerList::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcIntegerList::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcIntegerList::find(&label).is_none());
     }
@@ -2949,13 +2942,13 @@ mod tests {
         let list;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            list = OcIntegerList::set(&cmd, &label).unwrap();
-            list.append(&cmd, 1);
-            list.append(&cmd, 2);
-            list.append(&cmd, 3);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            list = OcIntegerList::set(&label).unwrap();
+            list.append(1);
+            list.append(2);
+            list.append(3);
+            doc.commit().unwrap();
         }
         assert_eq!(list.to_vec(), vec![1, 2, 3]);
     }
@@ -2966,16 +2959,16 @@ mod tests {
         let list;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            list = OcIntegerList::set(&cmd, &label).unwrap();
-            list.append(&cmd, 1);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            list = OcIntegerList::set(&label).unwrap();
+            list.append(1);
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            list.append(&cmd, 2);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            list.append(2);
+            doc.commit().unwrap();
         }
         assert_eq!(list.extent(), 2);
         doc.undo().unwrap();
@@ -2990,12 +2983,12 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            let list = OcRealList::set(&cmd, &label).unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            let list = OcRealList::set(&label).unwrap();
             assert!(list.is_empty());
             assert_eq!(list.extent(), 0);
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
         }
         let found = OcRealList::find(&label).expect("real list should be present");
         assert!(found.is_empty());
@@ -3005,9 +2998,9 @@ mod tests {
     fn reallist_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcRealList::find(&label).is_none());
     }
 
@@ -3017,15 +3010,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcRealList::set(&cmd, &label).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcRealList::set(&label).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcRealList::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcRealList::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcRealList::find(&label).is_none());
     }
@@ -3036,12 +3029,12 @@ mod tests {
         let list;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            list = OcRealList::set(&cmd, &label).unwrap();
-            list.append(&cmd, 1.5);
-            list.append(&cmd, -2.25);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            list = OcRealList::set(&label).unwrap();
+            list.append(1.5);
+            list.append(-2.25);
+            doc.commit().unwrap();
         }
         let mut got = list.iter();
         assert!((got.next().unwrap() - 1.5).abs() < 1e-12);
@@ -3055,16 +3048,16 @@ mod tests {
         let list;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            list = OcRealList::set(&cmd, &label).unwrap();
-            list.append(&cmd, 1.0);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            list = OcRealList::set(&label).unwrap();
+            list.append(1.0);
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            list.append(&cmd, 2.0);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            list.append(2.0);
+            doc.commit().unwrap();
         }
         assert_eq!(list.extent(), 2);
         doc.undo().unwrap();
@@ -3079,12 +3072,12 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            let list = OcExtStringList::set(&cmd, &label).unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            let list = OcExtStringList::set(&label).unwrap();
             assert!(list.is_empty());
             assert_eq!(list.extent(), 0);
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
         }
         let found = OcExtStringList::find(&label).expect("ext string list should be present");
         assert!(found.is_empty());
@@ -3094,9 +3087,9 @@ mod tests {
     fn extstringlist_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcExtStringList::find(&label).is_none());
     }
 
@@ -3106,15 +3099,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcExtStringList::set(&cmd, &label).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcExtStringList::set(&label).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcExtStringList::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcExtStringList::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcExtStringList::find(&label).is_none());
     }
@@ -3125,12 +3118,12 @@ mod tests {
         let list;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            list = OcExtStringList::set(&cmd, &label).unwrap();
-            list.append(&cmd, "first");
-            list.append(&cmd, "second");
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            list = OcExtStringList::set(&label).unwrap();
+            list.append("first");
+            list.append("second");
+            doc.commit().unwrap();
         }
         assert_eq!(
             list.iter().collect::<Vec<_>>(),
@@ -3144,11 +3137,11 @@ mod tests {
         let list;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            list = OcExtStringList::set(&cmd, &label).unwrap();
-            list.append(&cmd, "café 😀");
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            list = OcExtStringList::set(&label).unwrap();
+            list.append("café 😀");
+            doc.commit().unwrap();
         }
         assert_eq!(list.at(0), "café 😀");
     }
@@ -3159,16 +3152,16 @@ mod tests {
         let list;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            list = OcExtStringList::set(&cmd, &label).unwrap();
-            list.append(&cmd, "before");
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            list = OcExtStringList::set(&label).unwrap();
+            list.append("before");
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            list.append(&cmd, "after");
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            list.append("after");
+            doc.commit().unwrap();
         }
         assert_eq!(list.extent(), 2);
         doc.undo().unwrap();
@@ -3183,12 +3176,12 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            let list = OcBooleanList::set(&cmd, &label).unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            let list = OcBooleanList::set(&label).unwrap();
             assert!(list.is_empty());
             assert_eq!(list.extent(), 0);
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
         }
         let found = OcBooleanList::find(&label).expect("boolean list should be present");
         assert!(found.is_empty());
@@ -3198,9 +3191,9 @@ mod tests {
     fn booleanlist_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcBooleanList::find(&label).is_none());
     }
 
@@ -3210,15 +3203,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcBooleanList::set(&cmd, &label).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcBooleanList::set(&label).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcBooleanList::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcBooleanList::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcBooleanList::find(&label).is_none());
     }
@@ -3229,13 +3222,13 @@ mod tests {
         let list;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            list = OcBooleanList::set(&cmd, &label).unwrap();
-            list.append(&cmd, true);
-            list.append(&cmd, false);
-            list.append(&cmd, true);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            list = OcBooleanList::set(&label).unwrap();
+            list.append(true);
+            list.append(false);
+            list.append(true);
+            doc.commit().unwrap();
         }
         assert_eq!(list.iter().collect::<Vec<_>>(), vec![true, false, true]);
     }
@@ -3246,16 +3239,16 @@ mod tests {
         let list;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            list = OcBooleanList::set(&cmd, &label).unwrap();
-            list.append(&cmd, true);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            list = OcBooleanList::set(&label).unwrap();
+            list.append(true);
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            list.append(&cmd, false);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            list.append(false);
+            doc.commit().unwrap();
         }
         assert_eq!(list.extent(), 2);
         doc.undo().unwrap();
@@ -3302,10 +3295,10 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcUAttribute::set(&cmd, &label, TEST_GUID).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcUAttribute::set(&label, TEST_GUID).unwrap();
+            doc.commit().unwrap();
         }
         assert!(OcUAttribute::is_present(&label, TEST_GUID));
     }
@@ -3314,9 +3307,9 @@ mod tests {
     fn uattribute_is_present_absent_returns_false() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(!OcUAttribute::is_present(&label, TEST_GUID));
     }
 
@@ -3326,10 +3319,10 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcUAttribute::set(&cmd, &label, TEST_GUID).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcUAttribute::set(&label, TEST_GUID).unwrap();
+            doc.commit().unwrap();
         }
         assert!(OcUAttribute::is_present(&label, TEST_GUID));
         assert!(!OcUAttribute::is_present(&label, OTHER_GUID));
@@ -3341,15 +3334,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcUAttribute::set(&cmd, &label, TEST_GUID).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcUAttribute::set(&label, TEST_GUID).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcUAttribute::forget(&cmd, &label, TEST_GUID));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcUAttribute::forget(&label, TEST_GUID));
+            doc.commit().unwrap();
         }
         assert!(!OcUAttribute::is_present(&label, TEST_GUID));
     }
@@ -3358,10 +3351,10 @@ mod tests {
     fn uattribute_forget_absent_returns_false() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        assert!(!OcUAttribute::forget(&cmd, &label, TEST_GUID));
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        assert!(!OcUAttribute::forget(&label, TEST_GUID));
+        doc.commit().unwrap();
     }
 
     #[test]
@@ -3370,14 +3363,14 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            OcUAttribute::set(&cmd, &label, TEST_GUID).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            OcUAttribute::set(&label, TEST_GUID).unwrap();
+            doc.commit().unwrap();
         }
         assert!(OcUAttribute::is_present(&label, TEST_GUID));
         doc.undo().unwrap();
@@ -3391,10 +3384,10 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcNamedData::set(&cmd, &label).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcNamedData::set(&label).unwrap();
+            doc.commit().unwrap();
         }
         let found = OcNamedData::find(&label).expect("named data should be present");
         assert!(!found.has_integers());
@@ -3407,9 +3400,9 @@ mod tests {
     fn nameddata_find_absent_returns_none() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        cmd.commit().unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        doc.commit().unwrap();
         assert!(OcNamedData::find(&label).is_none());
     }
 
@@ -3419,15 +3412,15 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcNamedData::set(&cmd, &label).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcNamedData::set(&label).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcNamedData::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcNamedData::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcNamedData::find(&label).is_none());
     }
@@ -3438,13 +3431,13 @@ mod tests {
         let nd;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            nd = OcNamedData::set(&cmd, &label).unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            nd = OcNamedData::set(&label).unwrap();
             assert!(!nd.has_integer("count"));
             assert_eq!(nd.get_integer("count"), 0);
-            nd.set_integer(&cmd, "count", 42);
-            cmd.commit().unwrap();
+            nd.set_integer("count", 42);
+            doc.commit().unwrap();
         }
         assert!(nd.has_integers());
         assert!(nd.has_integer("count"));
@@ -3457,13 +3450,13 @@ mod tests {
         let nd;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            nd = OcNamedData::set(&cmd, &label).unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            nd = OcNamedData::set(&label).unwrap();
             assert!(!nd.has_real("radius"));
             assert_eq!(nd.get_real("radius"), 0.0);
-            nd.set_real(&cmd, "radius", 3.5);
-            cmd.commit().unwrap();
+            nd.set_real("radius", 3.5);
+            doc.commit().unwrap();
         }
         assert!(nd.has_reals());
         assert!(nd.has_real("radius"));
@@ -3476,13 +3469,13 @@ mod tests {
         let nd;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            nd = OcNamedData::set(&cmd, &label).unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            nd = OcNamedData::set(&label).unwrap();
             assert!(!nd.has_string("material"));
             assert_eq!(nd.get_string("material"), "");
-            nd.set_string(&cmd, "material", "aluminum");
-            cmd.commit().unwrap();
+            nd.set_string("material", "aluminum");
+            doc.commit().unwrap();
         }
         assert!(nd.has_strings());
         assert!(nd.has_string("material"));
@@ -3495,12 +3488,12 @@ mod tests {
         let nd;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            nd = OcNamedData::set(&cmd, &label).unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            nd = OcNamedData::set(&label).unwrap();
             // Both key and value carry non-ASCII / non-BMP content.
-            nd.set_string(&cmd, "matériau 😀", "café 😀");
-            cmd.commit().unwrap();
+            nd.set_string("matériau 😀", "café 😀");
+            doc.commit().unwrap();
         }
         assert!(nd.has_string("matériau 😀"));
         assert_eq!(nd.get_string("matériau 😀"), "café 😀");
@@ -3512,13 +3505,13 @@ mod tests {
         let nd;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            nd = OcNamedData::set(&cmd, &label).unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            nd = OcNamedData::set(&label).unwrap();
             assert!(!nd.has_byte("flags"));
             assert_eq!(nd.get_byte("flags"), 0);
-            nd.set_byte(&cmd, "flags", 0xFF);
-            cmd.commit().unwrap();
+            nd.set_byte("flags", 0xFF);
+            doc.commit().unwrap();
         }
         assert!(nd.has_bytes());
         assert!(nd.has_byte("flags"));
@@ -3531,16 +3524,16 @@ mod tests {
         let nd;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            nd = OcNamedData::set(&cmd, &label).unwrap();
-            nd.set_integer(&cmd, "count", 1);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            nd = OcNamedData::set(&label).unwrap();
+            nd.set_integer("count", 1);
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            nd.set_integer(&cmd, "count", 2);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            nd.set_integer("count", 2);
+            doc.commit().unwrap();
         }
         assert_eq!(nd.get_integer("count"), 2);
     }
@@ -3551,16 +3544,16 @@ mod tests {
         let nd;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let label = main.get_or_create_child(&cmd, 1);
-            nd = OcNamedData::set(&cmd, &label).unwrap();
-            nd.set_integer(&cmd, "count", 1);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let label = main.get_or_create_child(1);
+            nd = OcNamedData::set(&label).unwrap();
+            nd.set_integer("count", 1);
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            nd.set_integer(&cmd, "count", 2);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            nd.set_integer("count", 2);
+            doc.commit().unwrap();
         }
         assert_eq!(nd.get_integer("count"), 2);
         doc.undo().unwrap();
@@ -3572,14 +3565,14 @@ mod tests {
         let list;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let list_label = main.get_or_create_child(&cmd, 1);
-            let a = main.get_or_create_child(&cmd, 2);
-            let b = main.get_or_create_child(&cmd, 3);
-            list = OcReferenceList::set(&cmd, &list_label).unwrap();
-            list.append(&cmd, &a);
-            list.append(&cmd, &b);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let list_label = main.get_or_create_child(1);
+            let a = main.get_or_create_child(2);
+            let b = main.get_or_create_child(3);
+            list = OcReferenceList::set(&list_label).unwrap();
+            list.append(&a);
+            list.append(&b);
+            doc.commit().unwrap();
         }
         let v = list.iter().collect::<Vec<_>>();
         assert_eq!(
@@ -3594,10 +3587,10 @@ mod tests {
         let list;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let list_label = main.get_or_create_child(&cmd, 1);
-            list = OcReferenceList::set(&cmd, &list_label).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let list_label = main.get_or_create_child(1);
+            list = OcReferenceList::set(&list_label).unwrap();
+            doc.commit().unwrap();
         }
         assert!(list.at(0).is_none(), "at(0) on empty list should be None");
     }

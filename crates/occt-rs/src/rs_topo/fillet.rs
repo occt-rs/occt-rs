@@ -18,8 +18,13 @@
 //! # History
 //!
 //! `BRepFilletAPI_MakeFillet` exposes `Modified` and `Generated` for shape
-//! history queries.  These are deferred to Milestone F (`ShapeHistory` trait).
-//! Do not drop `FilletBuilder` before history is read when that work lands.
+//! history queries. Use [`build_with_history`] to keep the builder alive and
+//! query history via [`HistoryProvider`]/[`BuiltWithHistory`]; use [`build`]
+//! when history is not needed. Do not drop `FilletBuilder` before history
+//! queries made through `BuiltWithHistory` are complete.
+//!
+//! [`build_with_history`]: FilletBuilder::build_with_history
+//! [`build`]: FilletBuilder::build
 //!
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_fillet_a_p_i___make_fillet.html>
 
@@ -163,9 +168,14 @@ mod history_tests {
         };
         let pre_edges: Vec<_> = {
             let all = solid_shape.edges();
+            // Deduplicate by PlacedShapeKey, not OrientedShapeKey — a solid's
+            // internal edges are shared by exactly two faces, read in opposite
+            // Orientation by ordinary BRep convention (same TShape, same
+            // Location). The oriented tier would not collapse the two
+            // occurrences into one.
             let mut seen = std::collections::HashSet::new();
             all.into_iter()
-                .filter(|e| seen.insert(e.shape_key()))
+                .filter(|e| seen.insert(e.placed_shape_key()))
                 .collect()
         };
 

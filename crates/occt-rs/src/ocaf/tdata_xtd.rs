@@ -38,7 +38,6 @@ use occt_sys::ffi;
 use crate::error::OcctError;
 use crate::gp::{OcAx1, OcAx2, OcPnt};
 use crate::ocaf::attributes::OcReal;
-use crate::ocaf::document::Command;
 use crate::ocaf::label::OcLabel;
 use crate::ocaf::topo_naming::TopoNamingBuilder;
 use crate::ocaf::topo_naming::TopoNamingNamedShape;
@@ -94,8 +93,8 @@ impl GeometryKind {
 ///
 /// ```ignore
 /// // Inside an open command:
-/// let mut geom = OcGeometryAttr::set(&cmd, &label)?;
-/// geom.set_type(&cmd, GeometryKind::Circle);
+/// let mut geom = OcGeometryAttr::set(&label)?;
+/// geom.set_type(GeometryKind::Circle);
 /// ```
 pub struct OcGeometryAttr {
     inner: cxx::UniquePtr<ffi::TDataXtdGeometryHandle>,
@@ -111,7 +110,7 @@ impl OcGeometryAttr {
     /// to a default state.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, kind: GeometryKind) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel, kind: GeometryKind) -> Result<Self, OcctError> {
         let inner =
             ffi::tdataxtd_geometry_set(&label.inner, kind as i32).map_err(OcctError::from)?;
         Ok(Self {
@@ -133,7 +132,7 @@ impl OcGeometryAttr {
     /// Must be called inside an open [`Command`] scope.
     ///
     /// [`set`]: Self::set
-    pub fn set_type(&mut self, _cmd: &Command<'_>, kind: GeometryKind) {
+    pub fn set_type(&mut self, kind: GeometryKind) {
         ffi::tdataxtd_geometry_set_type(self.inner.pin_mut(), kind as i32);
     }
 
@@ -161,7 +160,7 @@ impl OcGeometryAttr {
     ///
     /// Returns `false` if the attribute was not present.
     /// Must be called inside an open [`Command`] scope.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdataxtd_geometry_forget(&label.inner)
     }
     /// Infers the geometry kind of `label` by inspecting its
@@ -297,7 +296,6 @@ impl OcConstraintAttr {
     ///
     /// Panics if `geoms` is empty or has more than 4 entries.
     pub fn set(
-        _cmd: &Command<'_>,
         label: &OcLabel,
         kind: ConstraintKind,
         geoms: &[&TopoNamingNamedShape],
@@ -335,7 +333,7 @@ impl OcConstraintAttr {
     /// Sets or replaces a geometry reference at `index` (1-based).
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn set_geometry(&mut self, _cmd: &Command<'_>, index: i32, ns: &TopoNamingNamedShape) {
+    pub fn set_geometry(&mut self, index: i32, ns: &TopoNamingNamedShape) {
         ffi::tdataxtd_constraint_set_geometry(self.inner.pin_mut(), index, ns.inner());
     }
 
@@ -343,14 +341,14 @@ impl OcConstraintAttr {
     ///
     /// The `OcReal` must already be set on a label inside an open command.
     /// Must be called inside an open [`Command`] scope.
-    pub fn set_value(&mut self, _cmd: &Command<'_>, val: &OcReal) {
+    pub fn set_value(&mut self, val: &OcReal) {
         ffi::tdataxtd_constraint_set_value(self.inner.pin_mut(), val.inner());
     }
 
     /// Updates the constraint kind.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn set_kind(&mut self, _cmd: &Command<'_>, kind: ConstraintKind) {
+    pub fn set_kind(&mut self, kind: ConstraintKind) {
         ffi::tdataxtd_constraint_set_type(self.inner.pin_mut(), kind as i32);
     }
 
@@ -401,7 +399,7 @@ impl OcConstraintAttr {
     /// Sets the solver-validity flag.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn set_verified(&mut self, _cmd: &Command<'_>, status: bool) {
+    pub fn set_verified(&mut self, status: bool) {
         ffi::tdataxtd_constraint_set_verified(self.inner.pin_mut(), status);
     }
 
@@ -425,7 +423,7 @@ impl OcConstraintAttr {
     /// Sets the plane of a 2D constraint.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn set_plane(&mut self, _cmd: &Command<'_>, plane: &TopoNamingNamedShape) {
+    pub fn set_plane(&mut self, plane: &TopoNamingNamedShape) {
         ffi::tdataxtd_constraint_set_plane(self.inner.pin_mut(), plane.inner());
     }
 
@@ -448,7 +446,7 @@ impl OcConstraintAttr {
     ///
     /// Returns `false` if the attribute was not present.
     /// Must be called inside an open [`Command`] scope.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdataxtd_constraint_forget(&label.inner)
     }
 }
@@ -482,7 +480,7 @@ impl std::fmt::Debug for OcConstraintAttr {
 ///
 /// ```ignore
 /// // Inside an open command:
-/// let attr = OcPositionAttr::set(&cmd, &label, OcPnt::new(1.0, 2.0, 3.0))?;
+/// let attr = OcPositionAttr::set(&label, OcPnt::new(1.0, 2.0, 3.0))?;
 /// assert_eq!(attr.position(), OcPnt::new(1.0, 2.0, 3.0));
 /// ```
 ///
@@ -502,7 +500,7 @@ impl OcPositionAttr {
     /// a default state.
     ///
     /// Must be called inside an open [`Command`] scope.
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel, pos: OcPnt) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel, pos: OcPnt) -> Result<Self, OcctError> {
         let inner = ffi::tdataxtd_position_set(&label.inner, pos.x, pos.y, pos.z)
             .map_err(OcctError::from)?;
         Ok(Self {
@@ -521,7 +519,7 @@ impl OcPositionAttr {
     /// Must be called inside an open [`Command`] scope.
     ///
     /// [`set`]: Self::set
-    pub fn set_position(&mut self, _cmd: &Command<'_>, pos: OcPnt) {
+    pub fn set_position(&mut self, pos: OcPnt) {
         ffi::tdataxtd_position_set_position(self.inner.pin_mut(), pos.x, pos.y, pos.z);
     }
 
@@ -553,7 +551,7 @@ impl OcPositionAttr {
     ///
     /// Returns `false` if the attribute was not present.
     /// Must be called inside an open [`Command`] scope.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdataxtd_position_forget(&label.inner)
     }
 }
@@ -626,26 +624,26 @@ impl std::fmt::Debug for OcPositionAttr {
 ///
 /// let main = doc.main();
 /// let (pt_a, pt_b, pt_c, pt_d) = {
-///     let cmd = doc.begin_command().unwrap();
-///     let sketch = main.get_or_create_child(&cmd, 1);
+///     doc.begin_command().unwrap();
+///     let sketch = main.get_or_create_child(1);
 ///
-///     let la = sketch.get_or_create_child(&cmd, 1);
-///     OcPointAttr::record_shape(&cmd, &la, OcPnt::new(0.0, 1.0, 0.0)).unwrap();
-///     OcPointAttr::set(&cmd, &la).unwrap();
+///     let la = sketch.get_or_create_child(1);
+///     OcPointAttr::record_shape(&la, OcPnt::new(0.0, 1.0, 0.0)).unwrap();
+///     OcPointAttr::set(&la).unwrap();
 ///
-///     let lb = sketch.get_or_create_child(&cmd, 2);
-///     OcPointAttr::record_shape(&cmd, &lb, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
-///     OcPointAttr::set(&cmd, &lb).unwrap();
+///     let lb = sketch.get_or_create_child(2);
+///     OcPointAttr::record_shape(&lb, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
+///     OcPointAttr::set(&lb).unwrap();
 ///
-///     let lc = sketch.get_or_create_child(&cmd, 3);
-///     OcPointAttr::record_shape(&cmd, &lc, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
-///     OcPointAttr::set(&cmd, &lc).unwrap();
+///     let lc = sketch.get_or_create_child(3);
+///     OcPointAttr::record_shape(&lc, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+///     OcPointAttr::set(&lc).unwrap();
 ///
-///     let ld = sketch.get_or_create_child(&cmd, 4);
-///     OcPointAttr::record_shape(&cmd, &ld, OcPnt::new(1.0, 1.0, 0.0)).unwrap();
-///     OcPointAttr::set(&cmd, &ld).unwrap();
+///     let ld = sketch.get_or_create_child(4);
+///     OcPointAttr::record_shape(&ld, OcPnt::new(1.0, 1.0, 0.0)).unwrap();
+///     OcPointAttr::set(&ld).unwrap();
 ///
-///     cmd.commit().unwrap();
+///     doc.commit().unwrap();
 ///     (la, lb, lc, ld)
 /// };
 ///
@@ -658,22 +656,22 @@ impl std::fmt::Debug for OcPositionAttr {
 /// // And let's use the topo-naming system to make a new point that evolved from an old one:
 ///
 /// let pt_a_edited = {
-///     let cmd = doc.begin_command().unwrap();
-///     let sketch = main.get_or_create_child(&cmd, 1);
-///     let l = sketch.get_or_create_child(&cmd, 5);
+///     doc.begin_command().unwrap();
+///     let sketch = main.get_or_create_child(1);
+///     let l = sketch.get_or_create_child(5);
 ///
 ///     // Retrieve the current shape before overwriting it
 ///     let old_shape = TopoNamingNamedShape::find(&pt_a).unwrap().get().unwrap();
 ///
 ///     // Record the new coordinate
-///     OcPointAttr::record_shape(&cmd, &l, OcPnt::new(0.5, 1.0, 0.0)).unwrap();
-///     OcPointAttr::set(&cmd, &l).unwrap();
+///     OcPointAttr::record_shape(&l, OcPnt::new(0.5, 1.0, 0.0)).unwrap();
+///     OcPointAttr::set(&l).unwrap();
 ///
 ///     // Retrieve the new shape and record the evolution explicitly
 ///     let new_shape = TopoNamingNamedShape::find(&l).unwrap().get().unwrap();
-///     cmd.name_builder(&l).modified(&old_shape, &new_shape);
+///     doc.name_builder(&l).modified(&old_shape, &new_shape);
 ///
-///     cmd.commit().unwrap();
+///     doc.commit().unwrap();
 ///     l
 /// };
 ///
@@ -724,11 +722,7 @@ impl OcPointAttr {
     /// Must be called inside an open [`Command`] scope.
     ///
     /// [`set`]: Self::set
-    pub fn record_shape(
-        _cmd: &Command<'_>,
-        label: &OcLabel,
-        pos: OcPnt,
-    ) -> Result<TopoNamingNamedShape, OcctError> {
+    pub fn record_shape(label: &OcLabel, pos: OcPnt) -> Result<TopoNamingNamedShape, OcctError> {
         let vertex =
             ffi::tdataxtd_make_vertex_shape(pos.x, pos.y, pos.z).map_err(OcctError::from)?;
         // Safety: vertex_as_shape is a zero-cost upcast; clone_shape is
@@ -748,7 +742,7 @@ impl OcPointAttr {
     /// Must be called inside an open [`Command`] scope.
     ///
     /// [`record_shape`]: Self::record_shape
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdataxtd_point_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self {
             inner,
@@ -814,7 +808,7 @@ impl OcPointAttr {
     /// Returns `false` if the attribute was not present.
     /// Note: this removes the tag only, not the co-located `TNaming_NamedShape`.
     /// Must be called inside an open [`Command`] scope.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdataxtd_point_forget(&label.inner)
     }
 }
@@ -865,11 +859,7 @@ impl OcAxisAttr {
     /// Must be called inside an open [`Command`] scope.
     ///
     /// [`set`]: Self::set
-    pub fn record_shape(
-        _cmd: &Command<'_>,
-        label: &OcLabel,
-        axis: OcAx1,
-    ) -> Result<TopoNamingNamedShape, OcctError> {
+    pub fn record_shape(label: &OcLabel, axis: OcAx1) -> Result<TopoNamingNamedShape, OcctError> {
         let loc = axis.location();
         let dir = axis.direction();
         let edge = ffi::tdataxtd_make_infinite_edge_from_ax1(
@@ -898,7 +888,7 @@ impl OcAxisAttr {
     /// Must be called inside an open [`Command`] scope.
     ///
     /// [`record_shape`]: Self::record_shape
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdataxtd_axis_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self::from_ffi(inner))
     }
@@ -945,7 +935,7 @@ impl OcAxisAttr {
     /// Returns `false` if the attribute was not present.
     /// Note: this removes the tag only, not the co-located `TNaming_NamedShape`.
     /// Must be called inside an open [`Command`] scope.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdataxtd_axis_forget(&label.inner)
     }
 }
@@ -989,11 +979,7 @@ impl OcPlaneAttr {
     /// Must be called inside an open [`Command`] scope.
     ///
     /// [`set`]: Self::set
-    pub fn record_shape(
-        _cmd: &Command<'_>,
-        label: &OcLabel,
-        frame: OcAx2,
-    ) -> Result<TopoNamingNamedShape, OcctError> {
+    pub fn record_shape(label: &OcLabel, frame: OcAx2) -> Result<TopoNamingNamedShape, OcctError> {
         let loc = frame.location();
         let n = frame.direction();
         let x = frame.x_direction();
@@ -1026,7 +1012,7 @@ impl OcPlaneAttr {
     /// Must be called inside an open [`Command`] scope.
     ///
     /// [`record_shape`]: Self::record_shape
-    pub fn set(_cmd: &Command<'_>, label: &OcLabel) -> Result<Self, OcctError> {
+    pub fn set(label: &OcLabel) -> Result<Self, OcctError> {
         let inner = ffi::tdataxtd_plane_set(&label.inner).map_err(OcctError::from)?;
         Ok(Self::from_ffi(inner))
     }
@@ -1066,7 +1052,7 @@ impl OcPlaneAttr {
     /// Returns `false` if the attribute was not present.
     /// Note: this removes the tag only, not the co-located `TNaming_NamedShape`.
     /// Must be called inside an open [`Command`] scope.
-    pub fn forget(_cmd: &Command<'_>, label: &OcLabel) -> bool {
+    pub fn forget(label: &OcLabel) -> bool {
         ffi::tdataxtd_plane_forget(&label.inner)
     }
 
@@ -1102,9 +1088,9 @@ mod tests {
     }
 
     /// Build a unit square face and record it as a primitive named shape on
-    /// `label` using the already-open `cmd`.  Returns the `TopoNamingNamedShape`
+    /// `label` assuming an already-open `cmd`.  Returns the `TopoNamingNamedShape`
     /// handle.  Does not open or close any command.
-    fn record_named_shape(_cmd: &Command<'_>, label: &OcLabel) -> TopoNamingNamedShape {
+    fn record_named_shape(label: &OcLabel) -> TopoNamingNamedShape {
         let edges = [
             OcEdge::from_pnts(OcPnt::new(0.0, 0.0, 0.0), OcPnt::new(1.0, 0.0, 0.0)).unwrap(),
             OcEdge::from_pnts(OcPnt::new(1.0, 0.0, 0.0), OcPnt::new(1.0, 1.0, 0.0)).unwrap(),
@@ -1125,26 +1111,26 @@ mod tests {
 
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
+            doc.commit().unwrap();
             l
         };
 
         assert!(
             OcGeometryAttr::find(&label).is_none(),
-            "attribute should not exist before cmd2"
+            "attribute should not exist before the second command"
         );
 
         {
-            let cmd = doc.begin_command().unwrap();
-            let result = OcGeometryAttr::set(&cmd, &label, GeometryKind::Line);
+            doc.begin_command().unwrap();
+            let result = OcGeometryAttr::set(&label, GeometryKind::Line);
             assert!(result.is_ok(), "set returned Err: {:?}", result.err());
             assert!(
                 OcGeometryAttr::find(&label).is_some(),
                 "find inside open command returned None"
             );
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
         }
 
         assert!(
@@ -1153,10 +1139,10 @@ mod tests {
         );
 
         {
-            let cmd = doc.begin_command().unwrap();
-            let forgotten = OcGeometryAttr::forget(&cmd, &label);
+            doc.begin_command().unwrap();
+            let forgotten = OcGeometryAttr::forget(&label);
             assert!(forgotten, "forget returned false");
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
         }
         assert!(
             OcGeometryAttr::find(&label).is_none(),
@@ -1184,10 +1170,10 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcGeometryAttr::set(&cmd, &label, GeometryKind::Circle).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcGeometryAttr::set(&label, GeometryKind::Circle).unwrap();
+            doc.commit().unwrap();
         }
         let found = OcGeometryAttr::find(&label).expect("attribute should be present");
         assert_eq!(found.kind(), GeometryKind::Circle);
@@ -1197,11 +1183,11 @@ mod tests {
     fn geometry_set_defaults_to_any() {
         let (_app, mut doc) = new_doc();
         let main = doc.main();
-        let cmd = doc.begin_command().unwrap();
-        let label = main.get_or_create_child(&cmd, 1);
-        let attr = OcGeometryAttr::set(&cmd, &label, GeometryKind::Any).unwrap();
+        doc.begin_command().unwrap();
+        let label = main.get_or_create_child(1);
+        let attr = OcGeometryAttr::set(&label, GeometryKind::Any).unwrap();
         assert_eq!(attr.kind(), GeometryKind::Any);
-        cmd.commit().unwrap();
+        doc.commit().unwrap();
     }
 
     #[test]
@@ -1210,35 +1196,35 @@ mod tests {
         let label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            label = main.get_or_create_child(&cmd, 1);
-            OcGeometryAttr::set(&cmd, &label, GeometryKind::Any).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            label = main.get_or_create_child(1);
+            OcGeometryAttr::set(&label, GeometryKind::Any).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcGeometryAttr::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcGeometryAttr::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcGeometryAttr::find(&label).is_none());
     }
 
     #[test]
     fn geometry_undo_restores() {
-        // Label created in cmd1 so it survives undo of cmd2.
+        // Label created in the first command so it survives undo of the second one.
         // Matches the two-command pattern used in attributes.rs undo tests.
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
+            doc.commit().unwrap();
             l
         };
         {
-            let cmd = doc.begin_command().unwrap();
-            OcGeometryAttr::set(&cmd, &label, GeometryKind::Any).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            OcGeometryAttr::set(&label, GeometryKind::Any).unwrap();
+            doc.commit().unwrap();
         }
         assert!(OcGeometryAttr::find(&label).is_some());
         doc.undo().unwrap();
@@ -1253,12 +1239,12 @@ mod tests {
         let c_label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let geom_label = main.get_or_create_child(&cmd, 1);
-            c_label = main.get_or_create_child(&cmd, 2);
-            let ns = record_named_shape(&cmd, &geom_label);
-            OcConstraintAttr::set(&cmd, &c_label, ConstraintKind::Fix, &[&ns]).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let geom_label = main.get_or_create_child(1);
+            c_label = main.get_or_create_child(2);
+            let ns = record_named_shape(&geom_label);
+            OcConstraintAttr::set(&c_label, ConstraintKind::Fix, &[&ns]).unwrap();
+            doc.commit().unwrap();
         }
         let found = OcConstraintAttr::find(&c_label).expect("constraint should be present");
         assert_eq!(found.kind(), ConstraintKind::Fix);
@@ -1271,14 +1257,14 @@ mod tests {
         let c_label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l1 = main.get_or_create_child(&cmd, 1);
-            let l2 = main.get_or_create_child(&cmd, 2);
-            c_label = main.get_or_create_child(&cmd, 3);
-            let ns1 = record_named_shape(&cmd, &l1);
-            let ns2 = record_named_shape(&cmd, &l2);
-            OcConstraintAttr::set(&cmd, &c_label, ConstraintKind::Parallel, &[&ns1, &ns2]).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l1 = main.get_or_create_child(1);
+            let l2 = main.get_or_create_child(2);
+            c_label = main.get_or_create_child(3);
+            let ns1 = record_named_shape(&l1);
+            let ns2 = record_named_shape(&l2);
+            OcConstraintAttr::set(&c_label, ConstraintKind::Parallel, &[&ns1, &ns2]).unwrap();
+            doc.commit().unwrap();
         }
         let found = OcConstraintAttr::find(&c_label).unwrap();
         assert_eq!(found.nb_geometries(), 2);
@@ -1291,12 +1277,12 @@ mod tests {
         let c_label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l1 = main.get_or_create_child(&cmd, 1);
-            c_label = main.get_or_create_child(&cmd, 2);
-            let ns = record_named_shape(&cmd, &l1);
-            OcConstraintAttr::set(&cmd, &c_label, ConstraintKind::Fix, &[&ns]).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l1 = main.get_or_create_child(1);
+            c_label = main.get_or_create_child(2);
+            let ns = record_named_shape(&l1);
+            OcConstraintAttr::set(&c_label, ConstraintKind::Fix, &[&ns]).unwrap();
+            doc.commit().unwrap();
         }
         let found = OcConstraintAttr::find(&c_label).unwrap();
         assert!(found.geometry(1).is_some());
@@ -1308,12 +1294,12 @@ mod tests {
         let c_label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l1 = main.get_or_create_child(&cmd, 1);
-            c_label = main.get_or_create_child(&cmd, 2);
-            let ns = record_named_shape(&cmd, &l1);
-            OcConstraintAttr::set(&cmd, &c_label, ConstraintKind::Fix, &[&ns]).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l1 = main.get_or_create_child(1);
+            c_label = main.get_or_create_child(2);
+            let ns = record_named_shape(&l1);
+            OcConstraintAttr::set(&c_label, ConstraintKind::Fix, &[&ns]).unwrap();
+            doc.commit().unwrap();
         }
         let found = OcConstraintAttr::find(&c_label).unwrap();
         assert!(found.geometry(2).is_none());
@@ -1325,16 +1311,15 @@ mod tests {
         let c_label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let geom_label = main.get_or_create_child(&cmd, 1);
-            c_label = main.get_or_create_child(&cmd, 2);
-            let val_label = c_label.get_or_create_child(&cmd, 1);
-            let ns = record_named_shape(&cmd, &geom_label);
-            let real = OcReal::set(&cmd, &val_label, 42.0).unwrap();
-            let mut c =
-                OcConstraintAttr::set(&cmd, &c_label, ConstraintKind::Radius, &[&ns]).unwrap();
-            c.set_value(&cmd, &real);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let geom_label = main.get_or_create_child(1);
+            c_label = main.get_or_create_child(2);
+            let val_label = c_label.get_or_create_child(1);
+            let ns = record_named_shape(&geom_label);
+            let real = OcReal::set(&val_label, 42.0).unwrap();
+            let mut c = OcConstraintAttr::set(&c_label, ConstraintKind::Radius, &[&ns]).unwrap();
+            c.set_value(&real);
+            doc.commit().unwrap();
         }
         let found = OcConstraintAttr::find(&c_label).unwrap();
         assert!(found.is_dimension());
@@ -1348,39 +1333,39 @@ mod tests {
         let c_label;
         {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l1 = main.get_or_create_child(&cmd, 1);
-            c_label = main.get_or_create_child(&cmd, 2);
-            let ns = record_named_shape(&cmd, &l1);
-            OcConstraintAttr::set(&cmd, &c_label, ConstraintKind::Fix, &[&ns]).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l1 = main.get_or_create_child(1);
+            c_label = main.get_or_create_child(2);
+            let ns = record_named_shape(&l1);
+            OcConstraintAttr::set(&c_label, ConstraintKind::Fix, &[&ns]).unwrap();
+            doc.commit().unwrap();
         }
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcConstraintAttr::forget(&cmd, &c_label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcConstraintAttr::forget(&c_label));
+            doc.commit().unwrap();
         }
         assert!(OcConstraintAttr::find(&c_label).is_none());
     }
 
     #[test]
     fn constraint_undo_restores() {
-        // Label and named shape created in cmd1; constraint set in cmd2.
-        // Undo of cmd2 removes the constraint while the label survives.
+        // Label and named shape created in the first command; constraint set in second.
+        // Undo of the second removes the constraint while the label survives.
         let (_app, mut doc) = new_doc();
         let (_l1, c_label, ns) = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l1 = main.get_or_create_child(&cmd, 1);
-            let cl = main.get_or_create_child(&cmd, 2);
-            let ns = record_named_shape(&cmd, &l1);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l1 = main.get_or_create_child(1);
+            let cl = main.get_or_create_child(2);
+            let ns = record_named_shape(&l1);
+            doc.commit().unwrap();
             (l1, cl, ns)
         };
         {
-            let cmd = doc.begin_command().unwrap();
-            OcConstraintAttr::set(&cmd, &c_label, ConstraintKind::Fix, &[&ns]).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            OcConstraintAttr::set(&c_label, ConstraintKind::Fix, &[&ns]).unwrap();
+            doc.commit().unwrap();
         }
         assert!(OcConstraintAttr::find(&c_label).is_some());
         doc.undo().unwrap();
@@ -1403,10 +1388,10 @@ mod tests {
             let (_app, mut doc) = new_doc();
             let label = {
                 let main = doc.main();
-                let cmd = doc.begin_command().unwrap();
-                let l = main.get_or_create_child(&cmd, 1);
-                OcPositionAttr::set(&cmd, &l, OcPnt::new(1.0, 2.0, 3.0)).unwrap();
-                cmd.commit().unwrap();
+                doc.begin_command().unwrap();
+                let l = main.get_or_create_child(1);
+                OcPositionAttr::set(&l, OcPnt::new(1.0, 2.0, 3.0)).unwrap();
+                doc.commit().unwrap();
                 l
             };
             let found = OcPositionAttr::find(&label).expect("attribute should be present");
@@ -1418,21 +1403,21 @@ mod tests {
 
         #[test]
         fn position_set_position_updates() {
-            // Two-command pattern: create in cmd1, update in cmd2.
+            // Two-command pattern: create in first commnd, update in second.
             let (_app, mut doc) = new_doc();
             let label = {
                 let main = doc.main();
-                let cmd = doc.begin_command().unwrap();
-                let l = main.get_or_create_child(&cmd, 1);
-                OcPositionAttr::set(&cmd, &l, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
-                cmd.commit().unwrap();
+                doc.begin_command().unwrap();
+                let l = main.get_or_create_child(1);
+                OcPositionAttr::set(&l, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
+                doc.commit().unwrap();
                 l
             };
             {
-                let cmd = doc.begin_command().unwrap();
+                doc.begin_command().unwrap();
                 let mut attr = OcPositionAttr::find(&label).unwrap();
-                attr.set_position(&cmd, OcPnt::new(4.0, 5.0, 6.0));
-                cmd.commit().unwrap();
+                attr.set_position(OcPnt::new(4.0, 5.0, 6.0));
+                doc.commit().unwrap();
             }
             let found = OcPositionAttr::find(&label).unwrap();
             let p = found.position();
@@ -1446,35 +1431,35 @@ mod tests {
             let (_app, mut doc) = new_doc();
             let label = {
                 let main = doc.main();
-                let cmd = doc.begin_command().unwrap();
-                let l = main.get_or_create_child(&cmd, 1);
-                OcPositionAttr::set(&cmd, &l, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
-                cmd.commit().unwrap();
+                doc.begin_command().unwrap();
+                let l = main.get_or_create_child(1);
+                OcPositionAttr::set(&l, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+                doc.commit().unwrap();
                 l
             };
             {
-                let cmd = doc.begin_command().unwrap();
-                assert!(OcPositionAttr::forget(&cmd, &label));
-                cmd.commit().unwrap();
+                doc.begin_command().unwrap();
+                assert!(OcPositionAttr::forget(&label));
+                doc.commit().unwrap();
             }
             assert!(OcPositionAttr::find(&label).is_none());
         }
 
         #[test]
         fn position_undo_restores() {
-            // Label created in cmd1 so it survives undo of cmd2.
+            // Label created in first command so it survives undo of second.
             let (_app, mut doc) = new_doc();
             let label = {
                 let main = doc.main();
-                let cmd = doc.begin_command().unwrap();
-                let l = main.get_or_create_child(&cmd, 1);
-                cmd.commit().unwrap();
+                doc.begin_command().unwrap();
+                let l = main.get_or_create_child(1);
+                doc.commit().unwrap();
                 l
             };
             {
-                let cmd = doc.begin_command().unwrap();
-                OcPositionAttr::set(&cmd, &label, OcPnt::new(7.0, 8.0, 9.0)).unwrap();
-                cmd.commit().unwrap();
+                doc.begin_command().unwrap();
+                OcPositionAttr::set(&label, OcPnt::new(7.0, 8.0, 9.0)).unwrap();
+                doc.commit().unwrap();
             }
             assert!(OcPositionAttr::find(&label).is_some());
             doc.undo().unwrap();
@@ -1483,22 +1468,22 @@ mod tests {
 
         #[test]
         fn position_undo_set_position_restores() {
-            // Two-command pattern: create in cmd1, update in cmd2, undo cmd2.
-            // After undo, position should revert to cmd1 value.
+            // Two-command pattern: create in first command, update in second, undo second.
+            // After undo, position should revert to first command value.
             let (_app, mut doc) = new_doc();
             let label = {
                 let main = doc.main();
-                let cmd = doc.begin_command().unwrap();
-                let l = main.get_or_create_child(&cmd, 1);
-                OcPositionAttr::set(&cmd, &l, OcPnt::new(1.0, 2.0, 3.0)).unwrap();
-                cmd.commit().unwrap();
+                doc.begin_command().unwrap();
+                let l = main.get_or_create_child(1);
+                OcPositionAttr::set(&l, OcPnt::new(1.0, 2.0, 3.0)).unwrap();
+                doc.commit().unwrap();
                 l
             };
             {
-                let cmd = doc.begin_command().unwrap();
+                doc.begin_command().unwrap();
                 let mut attr = OcPositionAttr::find(&label).unwrap();
-                attr.set_position(&cmd, OcPnt::new(9.0, 9.0, 9.0));
-                cmd.commit().unwrap();
+                attr.set_position(OcPnt::new(9.0, 9.0, 9.0));
+                doc.commit().unwrap();
             }
             doc.undo().unwrap();
             let found =
@@ -1528,11 +1513,11 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
-            OcPointAttr::record_shape(&cmd, &l, OcPnt::new(1.0, 2.0, 3.0)).unwrap();
-            OcPointAttr::set(&cmd, &l).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
+            OcPointAttr::record_shape(&l, OcPnt::new(1.0, 2.0, 3.0)).unwrap();
+            OcPointAttr::set(&l).unwrap();
+            doc.commit().unwrap();
             l
         };
         assert!(OcPointAttr::find(&label).is_some());
@@ -1545,14 +1530,14 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
-            let ns = OcPointAttr::record_shape(&cmd, &l, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
+            let ns = OcPointAttr::record_shape(&l, OcPnt::new(0.0, 0.0, 0.0)).unwrap();
             // Verify the handle is non-null by checking it can be used in a constraint.
-            let c_label = main.get_or_create_child(&cmd, 2);
-            OcConstraintAttr::set(&cmd, &c_label, ConstraintKind::Fix, &[&ns]).unwrap();
-            OcPointAttr::set(&cmd, &l).unwrap();
-            cmd.commit().unwrap();
+            let c_label = main.get_or_create_child(2);
+            OcConstraintAttr::set(&c_label, ConstraintKind::Fix, &[&ns]).unwrap();
+            OcPointAttr::set(&l).unwrap();
+            doc.commit().unwrap();
             l
         };
         assert!(OcPointAttr::find(&label).is_some());
@@ -1563,17 +1548,17 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
-            OcPointAttr::record_shape(&cmd, &l, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
-            OcPointAttr::set(&cmd, &l).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
+            OcPointAttr::record_shape(&l, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+            OcPointAttr::set(&l).unwrap();
+            doc.commit().unwrap();
             l
         };
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcPointAttr::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcPointAttr::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcPointAttr::find(&label).is_none());
     }
@@ -1583,16 +1568,16 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
+            doc.commit().unwrap();
             l
         };
         {
-            let cmd = doc.begin_command().unwrap();
-            OcPointAttr::record_shape(&cmd, &label, OcPnt::new(5.0, 0.0, 0.0)).unwrap();
-            OcPointAttr::set(&cmd, &label).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            OcPointAttr::record_shape(&label, OcPnt::new(5.0, 0.0, 0.0)).unwrap();
+            OcPointAttr::set(&label).unwrap();
+            doc.commit().unwrap();
         }
         assert!(OcPointAttr::find(&label).is_some());
         doc.undo().unwrap();
@@ -1606,12 +1591,12 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
             let axis = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
-            OcAxisAttr::record_shape(&cmd, &l, axis).unwrap();
-            OcAxisAttr::set(&cmd, &l).unwrap();
-            cmd.commit().unwrap();
+            OcAxisAttr::record_shape(&l, axis).unwrap();
+            OcAxisAttr::set(&l).unwrap();
+            doc.commit().unwrap();
             l
         };
         assert!(OcAxisAttr::find(&label).is_some());
@@ -1622,14 +1607,14 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
             let axis = OcAx1::new(OcPnt::origin(), OcDir::new(1.0, 0.0, 0.0).unwrap());
-            let ns = OcAxisAttr::record_shape(&cmd, &l, axis).unwrap();
-            let c_label = main.get_or_create_child(&cmd, 2);
-            OcConstraintAttr::set(&cmd, &c_label, ConstraintKind::Fix, &[&ns]).unwrap();
-            OcAxisAttr::set(&cmd, &l).unwrap();
-            cmd.commit().unwrap();
+            let ns = OcAxisAttr::record_shape(&l, axis).unwrap();
+            let c_label = main.get_or_create_child(2);
+            OcConstraintAttr::set(&c_label, ConstraintKind::Fix, &[&ns]).unwrap();
+            OcAxisAttr::set(&l).unwrap();
+            doc.commit().unwrap();
             l
         };
         assert!(OcAxisAttr::find(&label).is_some());
@@ -1640,18 +1625,18 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
             let axis = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 1.0, 0.0).unwrap());
-            OcAxisAttr::record_shape(&cmd, &l, axis).unwrap();
-            OcAxisAttr::set(&cmd, &l).unwrap();
-            cmd.commit().unwrap();
+            OcAxisAttr::record_shape(&l, axis).unwrap();
+            OcAxisAttr::set(&l).unwrap();
+            doc.commit().unwrap();
             l
         };
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcAxisAttr::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcAxisAttr::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcAxisAttr::find(&label).is_none());
     }
@@ -1661,17 +1646,17 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
+            doc.commit().unwrap();
             l
         };
         {
-            let cmd = doc.begin_command().unwrap();
+            doc.begin_command().unwrap();
             let axis = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
-            OcAxisAttr::record_shape(&cmd, &label, axis).unwrap();
-            OcAxisAttr::set(&cmd, &label).unwrap();
-            cmd.commit().unwrap();
+            OcAxisAttr::record_shape(&label, axis).unwrap();
+            OcAxisAttr::set(&label).unwrap();
+            doc.commit().unwrap();
         }
         assert!(OcAxisAttr::find(&label).is_some());
         doc.undo().unwrap();
@@ -1685,17 +1670,17 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
             let frame = OcAx2::new(
                 OcPnt::origin(),
                 OcDir::new(0.0, 0.0, 1.0).unwrap(),
                 OcDir::new(1.0, 0.0, 0.0).unwrap(),
             )
             .unwrap();
-            OcPlaneAttr::record_shape(&cmd, &l, frame).unwrap();
-            OcPlaneAttr::set(&cmd, &l).unwrap();
-            cmd.commit().unwrap();
+            OcPlaneAttr::record_shape(&l, frame).unwrap();
+            OcPlaneAttr::set(&l).unwrap();
+            doc.commit().unwrap();
             l
         };
         assert!(OcPlaneAttr::find(&label).is_some());
@@ -1708,10 +1693,10 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let plane_label = main.get_or_create_child(&cmd, 1);
-            let geom_label = main.get_or_create_child(&cmd, 2);
-            let c_label = main.get_or_create_child(&cmd, 3);
+            doc.begin_command().unwrap();
+            let plane_label = main.get_or_create_child(1);
+            let geom_label = main.get_or_create_child(2);
+            let c_label = main.get_or_create_child(3);
 
             let frame = OcAx2::new(
                 OcPnt::origin(),
@@ -1719,18 +1704,17 @@ mod tests {
                 OcDir::new(1.0, 0.0, 0.0).unwrap(),
             )
             .unwrap();
-            let plane_ns = OcPlaneAttr::record_shape(&cmd, &plane_label, frame).unwrap();
-            OcPlaneAttr::set(&cmd, &plane_label).unwrap();
+            let plane_ns = OcPlaneAttr::record_shape(&plane_label, frame).unwrap();
+            OcPlaneAttr::set(&plane_label).unwrap();
 
             let geom_ns =
-                OcPointAttr::record_shape(&cmd, &geom_label, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
-            OcPointAttr::set(&cmd, &geom_label).unwrap();
+                OcPointAttr::record_shape(&geom_label, OcPnt::new(1.0, 0.0, 0.0)).unwrap();
+            OcPointAttr::set(&geom_label).unwrap();
 
-            let mut c =
-                OcConstraintAttr::set(&cmd, &c_label, ConstraintKind::Fix, &[&geom_ns]).unwrap();
-            c.set_plane(&cmd, &plane_ns);
+            let mut c = OcConstraintAttr::set(&c_label, ConstraintKind::Fix, &[&geom_ns]).unwrap();
+            c.set_plane(&plane_ns);
 
-            cmd.commit().unwrap();
+            doc.commit().unwrap();
             plane_label
         };
         assert!(OcPlaneAttr::find(&label).is_some());
@@ -1741,23 +1725,23 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
             let frame = OcAx2::new(
                 OcPnt::origin(),
                 OcDir::new(0.0, 0.0, 1.0).unwrap(),
                 OcDir::new(1.0, 0.0, 0.0).unwrap(),
             )
             .unwrap();
-            OcPlaneAttr::record_shape(&cmd, &l, frame).unwrap();
-            OcPlaneAttr::set(&cmd, &l).unwrap();
-            cmd.commit().unwrap();
+            OcPlaneAttr::record_shape(&l, frame).unwrap();
+            OcPlaneAttr::set(&l).unwrap();
+            doc.commit().unwrap();
             l
         };
         {
-            let cmd = doc.begin_command().unwrap();
-            assert!(OcPlaneAttr::forget(&cmd, &label));
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            assert!(OcPlaneAttr::forget(&label));
+            doc.commit().unwrap();
         }
         assert!(OcPlaneAttr::find(&label).is_none());
     }
@@ -1767,22 +1751,22 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
+            doc.commit().unwrap();
             l
         };
         {
-            let cmd = doc.begin_command().unwrap();
+            doc.begin_command().unwrap();
             let frame = OcAx2::new(
                 OcPnt::origin(),
                 OcDir::new(0.0, 0.0, 1.0).unwrap(),
                 OcDir::new(1.0, 0.0, 0.0).unwrap(),
             )
             .unwrap();
-            OcPlaneAttr::record_shape(&cmd, &label, frame).unwrap();
-            OcPlaneAttr::set(&cmd, &label).unwrap();
-            cmd.commit().unwrap();
+            OcPlaneAttr::record_shape(&label, frame).unwrap();
+            OcPlaneAttr::set(&label).unwrap();
+            doc.commit().unwrap();
         }
         assert!(OcPlaneAttr::find(&label).is_some());
         doc.undo().unwrap();
@@ -1794,11 +1778,11 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
-            OcPointAttr::record_shape(&cmd, &l, OcPnt::new(1.0, 2.0, 3.0)).unwrap();
-            OcPointAttr::set(&cmd, &l).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
+            OcPointAttr::record_shape(&l, OcPnt::new(1.0, 2.0, 3.0)).unwrap();
+            OcPointAttr::set(&l).unwrap();
+            doc.commit().unwrap();
             l
         };
         assert_eq!(
@@ -1812,12 +1796,12 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
             let axis = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
-            OcAxisAttr::record_shape(&cmd, &l, axis).unwrap();
-            OcAxisAttr::set(&cmd, &l).unwrap();
-            cmd.commit().unwrap();
+            OcAxisAttr::record_shape(&l, axis).unwrap();
+            OcAxisAttr::set(&l).unwrap();
+            doc.commit().unwrap();
             l
         };
         assert_eq!(
@@ -1831,17 +1815,17 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
             let frame = OcAx2::new(
                 OcPnt::origin(),
                 OcDir::new(0.0, 0.0, 1.0).unwrap(),
                 OcDir::new(1.0, 0.0, 0.0).unwrap(),
             )
             .unwrap();
-            OcPlaneAttr::record_shape(&cmd, &l, frame).unwrap();
-            OcPlaneAttr::set(&cmd, &l).unwrap();
-            cmd.commit().unwrap();
+            OcPlaneAttr::record_shape(&l, frame).unwrap();
+            OcPlaneAttr::set(&l).unwrap();
+            doc.commit().unwrap();
             l
         };
         assert_eq!(
@@ -1855,9 +1839,9 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
+            doc.commit().unwrap();
             l
         };
         assert_eq!(
@@ -1871,11 +1855,11 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
-            OcPointAttr::record_shape(&cmd, &l, OcPnt::new(3.0, 4.0, 5.0)).unwrap();
-            OcPointAttr::set(&cmd, &l).unwrap();
-            cmd.commit().unwrap();
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
+            OcPointAttr::record_shape(&l, OcPnt::new(3.0, 4.0, 5.0)).unwrap();
+            OcPointAttr::set(&l).unwrap();
+            doc.commit().unwrap();
             l
         };
         let p = OcPointAttr::get(&label)
@@ -1891,12 +1875,12 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
             let axis = OcAx1::new(OcPnt::origin(), OcDir::new(0.0, 0.0, 1.0).unwrap());
-            OcAxisAttr::record_shape(&cmd, &l, axis).unwrap();
-            OcAxisAttr::set(&cmd, &l).unwrap();
-            cmd.commit().unwrap();
+            OcAxisAttr::record_shape(&l, axis).unwrap();
+            OcAxisAttr::set(&l).unwrap();
+            doc.commit().unwrap();
             l
         };
         let (kind, _ns) = OcAxisAttr::get(&label).unwrap().expect("should be present");
@@ -1908,17 +1892,17 @@ mod tests {
         let (_app, mut doc) = new_doc();
         let label = {
             let main = doc.main();
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
+            doc.begin_command().unwrap();
+            let l = main.get_or_create_child(1);
             let frame = OcAx2::new(
                 OcPnt::origin(),
                 OcDir::new(0.0, 0.0, 1.0).unwrap(),
                 OcDir::new(1.0, 0.0, 0.0).unwrap(),
             )
             .unwrap();
-            OcPlaneAttr::record_shape(&cmd, &l, frame).unwrap();
-            OcPlaneAttr::set(&cmd, &l).unwrap();
-            cmd.commit().unwrap();
+            OcPlaneAttr::record_shape(&l, frame).unwrap();
+            OcPlaneAttr::set(&l).unwrap();
+            doc.commit().unwrap();
             l
         };
         let (kind, _ns) = OcPlaneAttr::get(&label)

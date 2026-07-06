@@ -13,8 +13,7 @@
 // explorer is destroyed.  This maps to a Rust lifetime tied to &self.
 //
 // TopExp_Explorer does not deduplicate: a vertex shared by N edges is returned
-// N times when exploring TopAbs_VERTEX.  Callers that need unique sub-shapes
-// should track seen TShape pointers (via shape_tshape_ptr) on the Rust side.
+// N times when exploring TopAbs_VERTEX.
 //
 // Reference:
 //   TopExp_Explorer  — https://dev.opencascade.org/doc/refman/html/class_top_exp___explorer.html

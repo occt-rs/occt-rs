@@ -7,8 +7,6 @@
 //!
 //! For symmetric chamfers on all edges, prefer [`OcShape::chamfer`].
 //!
-//! History (`Modified`, `Generated`) deferred to F2.
-//!
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_fillet_a_p_i___make_chamfer.html>
 //!
 //! [`add_edge`]: ChamferBuilder::add_edge
@@ -73,30 +71,30 @@ use crate::rs_topo::{BuiltWithHistory, HistoryProvider, OcEdge, OcFace, OcShape}
 ///     .extrude(OcVec::new(0.0, 0.0, 1.0)).unwrap();
 ///
 /// let (solid_label, pre_faces) = {
-///     let cmd = doc.begin_command().unwrap();
-///     let body   = main.get_or_create_child(&cmd, 3);
-///     let lsolid = body.get_or_create_child(&cmd, 1);
+///     doc.begin_command().unwrap();
+///     let body   = main.get_or_create_child(3);
+///     let lsolid = body.get_or_create_child(1);
 ///
-///     OcReal::set(&cmd, &lsolid, 1.0).unwrap();
-///     cmd.name_builder(&lsolid).primitive(&solid_shape);
+///     OcReal::set(&lsolid, 1.0).unwrap();
+///     doc.name_builder(&lsolid).primitive(&solid_shape);
 ///
-///     cmd.commit().unwrap();
+///     doc.commit().unwrap();
 ///
 ///     let faces: Vec<_> = solid_shape.faces().collect();
 ///     (lsolid, faces)
 /// };
 ///
-/// // ── cmd: chamfer one edge, record result on body/2 ────────────────────
+/// // ── command: chamfer one edge, record result on body/2 ────────────────────
 /// //
 /// // The chamfer distance is stored first as the authoritative parameter.
 /// // The result is recorded as Modify — it evolved from the solid at body/1.
 /// let chamfer_label = {
-///     let cmd = doc.begin_command().unwrap();
-///     let body     = main.get_or_create_child(&cmd, 3);
-///     let lchamfer = body.get_or_create_child(&cmd, 2);
+///     doc.begin_command().unwrap();
+///     let body     = main.get_or_create_child(3);
+///     let lchamfer = body.get_or_create_child(2);
 ///
 ///     // Store the chamfer distance — the authoritative parameter
-///     let distance = OcReal::set(&cmd, &lchamfer, 0.05).unwrap();
+///     let distance = OcReal::set(&lchamfer, 0.05).unwrap();
 ///
 ///     // Apply the chamfer using the stored distance
 ///     // In this case, we are using naive edge selection. If done properly, the edge selection
@@ -107,14 +105,14 @@ use crate::rs_topo::{BuiltWithHistory, HistoryProvider, OcEdge, OcFace, OcShape}
 ///     let mut built = cb.build_with_history().unwrap();
 ///
 ///     // Record the result and which faces were modified
-///     let mut nb = cmd.name_builder(&lchamfer);
+///     let mut nb = doc.name_builder(&lchamfer);
 ///     for face in &pre_faces {
 ///         for modified in built.modified(&face.as_shape()) {
 ///             nb.modified(&face.as_shape(), &modified);
 ///         }
 ///     }
 ///
-///     cmd.commit().unwrap();
+///     doc.commit().unwrap();
 ///     lchamfer
 /// };
 ///
