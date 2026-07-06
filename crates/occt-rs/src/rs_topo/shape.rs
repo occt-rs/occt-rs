@@ -173,11 +173,6 @@ impl OcShape {
     /// Wraps `BRepBuilderAPI_Transform(shape, trsf, copy=true)`.  The result
     /// geometry is fully independent of `self`; no TShape handles are shared.
     ///
-    /// Scaling (scale ≠ 1) is handled correctly here because the transform is
-    /// applied at the geometry level — `BRepBuilderAPI_Transform` rewrites
-    /// underlying curves and surfaces.  This is the correct path for scaling;
-    /// `TopLoc_Location` rejects scale ≠ 1 since OCCT 7.6.
-    ///
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___transform.html>
     pub fn transformed(&self, trsf: &crate::gp::OcTrsf) -> Result<OcShape, OcctError> {
         let result = occt_sys::ffi::transform_shape(

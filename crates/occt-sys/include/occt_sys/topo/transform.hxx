@@ -5,10 +5,6 @@
 // BRepBuilderAPI_Transform; the builder applies the full 3×4 matrix to all
 // curves and surfaces regardless of gp_TrsfForm.
 //
-// copy=true (always passed from Rust): the result geometry is fully
-// independent of the input.  Shape() is safe to return after the builder
-// is destroyed.
-//
 // History methods (Modified, Generated, IsDeleted) are present on
 // BRepBuilderAPI_Transform but not yet bound.  They require TopTools_ListOfShape
 // to cross the cxx bridge — deferred to Milestone F (TransformBuilder type).
@@ -49,8 +45,7 @@ inline std::unique_ptr<TopoDS_Shape> transform_shape(
                        r21, r22, r23, t2,
                        r31, r32, r33, t3);
 
-        // copy = Standard_True: result geometry is independent of input.
-        BRepBuilderAPI_Transform builder(shape, trsf, Standard_True);
+        BRepBuilderAPI_Transform builder(shape, trsf, Standard_False);
 
         if (!builder.IsDone()) {
             throw std::runtime_error(
