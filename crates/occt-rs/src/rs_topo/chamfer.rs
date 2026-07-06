@@ -7,8 +7,6 @@
 //!
 //! For symmetric chamfers on all edges, prefer [`OcShape::chamfer`].
 //!
-//! History (`Modified`, `Generated`) deferred to F2.
-//!
 //! Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_fillet_a_p_i___make_chamfer.html>
 //!
 //! [`add_edge`]: ChamferBuilder::add_edge

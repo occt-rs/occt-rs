@@ -11,10 +11,6 @@
 //! hollowing out the solid), then calls `MakeThickSolidByJoin` at build time.
 //! For a one-call convenience, use [`OcShape::thick_solid`].
 //!
-//! # History
-//!
-//! `Modified` / `Generated` deferred to F2.
-//!
 //! [`OcShape::offset_shape`]: crate::rs_topo::OcShape::offset_shape
 //! [`OcShape::thick_solid`]: crate::rs_topo::OcShape::thick_solid
 
