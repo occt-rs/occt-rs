@@ -6,8 +6,9 @@
 // curves and surfaces regardless of gp_TrsfForm.
 //
 // History methods (Modified, Generated, IsDeleted) are present on
-// BRepBuilderAPI_Transform but not yet bound.  They require TopTools_ListOfShape
-// to cross the cxx bridge — deferred to Milestone F (TransformBuilder type).
+// BRepBuilderAPI_Transform and are bound below on MakeTransformBuilder.
+// TopTools_ListOfShape (Modified/Generated's return type) never crosses the
+// bridge directly — see ShapeListIter in solid.hxx.
 //
 // Reference:
 //   BRepBuilderAPI_Transform — https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___transform.html
@@ -26,17 +27,12 @@
 #include "solid.hxx"
 #include "../exception.hxx"
 
-// Sourced from OCCT 7.9 documentation.
-// No derivation from any other binding crate.
-//
-// Reference: BRepBuilderAPI_Transform — https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___transform.html
-//
-// MakeTransformBuilder: persistent counterpart to transform_shape (above).
-// BRepBuilderAPI_Transform computes the transform in its own constructor —
-// there is no separate Build() step to call after construction; is_done()
-// reflects the result immediately. Modified()/Generated()/IsDeleted() read
-// history populated during that same construction and require the instance
-// to stay alive — see file-level lifetime note in sys_topo.rs.
+// MakeTransformBuilder: BRepBuilderAPI_Transform computes the transform in
+// its own constructor; there is no separate Build() step to call after
+// construction; is_done() reflects the result immediately.
+// Modified()/Generated()/IsDeleted() read history populated during that same
+// construction and require the instance to stay alive — see file-level
+// lifetime note in sys_topo.rs.
 struct MakeTransformBuilder {
     BRepBuilderAPI_Transform inner;
 
@@ -89,40 +85,6 @@ inline std::unique_ptr<MakeTransformBuilder> new_make_transform_builder(
     try {
         return std::make_unique<MakeTransformBuilder>(
             shape, r11, r12, r13, t1, r21, r22, r23, t2, r31, r32, r33, t3, copy);
-    } catch (const std::runtime_error&) {
-        throw;
-    } catch (...) {
-        rethrow_occt_as_runtime_error();
-    }
-}
-// transform_shape: applies the transform given as 12 matrix entries to `shape`.
-//
-// Entries: (r11..r34) are Value(row, col) from gp_Trsf, rows 1-3, cols 1-4.
-// SetValues reconstructs the gp_Trsf; see file-level note on gp_TrsfForm.
-//
-// Throws std::runtime_error (OCCT: wire format) if BRepBuilderAPI_Transform
-// raises or IsDone() is false after construction.
-inline std::unique_ptr<TopoDS_Shape> transform_shape(
-    const TopoDS_Shape& shape,
-    double r11, double r12, double r13, double t1,
-    double r21, double r22, double r23, double t2,
-    double r31, double r32, double r33, double t3)
-{
-    try {
-        gp_Trsf trsf;
-        trsf.SetValues(r11, r12, r13, t1,
-                       r21, r22, r23, t2,
-                       r31, r32, r33, t3);
-
-        BRepBuilderAPI_Transform builder(shape, trsf, Standard_False);
-
-        if (!builder.IsDone()) {
-            throw std::runtime_error(
-                "OCCT:BRepBuilderAPI_Transform:IsDone() false after construction");
-        }
-        // Shape() is non-const on BRepBuilderAPI_MakeShape; called here on the
-        // C++ stack builder, not across the bridge.
-        return std::make_unique<TopoDS_Shape>(builder.Shape());
     } catch (const std::runtime_error&) {
         throw;
     } catch (...) {

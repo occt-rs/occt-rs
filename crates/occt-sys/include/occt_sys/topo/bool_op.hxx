@@ -15,102 +15,121 @@
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 
-// fuse_shapes: binary union via BRepAlgoAPI_Fuse.
-//
-// Uses the preferred empty-ctor + SetArguments/SetTools/Build pattern rather
-// than the legacy two-arg constructor (per OCCT 7.4+ recommended usage).
-// TopTools_ListOfShape is constructed on the C++ stack and never crosses the
-// FFI boundary.
-//
-// Throws std::runtime_error (OCCT: wire format) on construction failure or
-// if the operation reports errors.
-inline std::unique_ptr<TopoDS_Shape> fuse_shapes(
-    const TopoDS_Shape& s1,
-    const TopoDS_Shape& s2)
-{
-    try {
-        TopTools_ListOfShape args, tools;
-        args.Append(s1);
-        tools.Append(s2);
-
-        BRepAlgoAPI_Fuse fuse;
-        fuse.SetArguments(args);
-        fuse.SetTools(tools);
-        fuse.Build(Message_ProgressRange());
-
-        if (!fuse.IsDone() || fuse.HasErrors()) {
-            throw std::runtime_error("OCCT:BRepAlgoAPI_Fuse:Boolean operation failed");
-        }
-        return std::make_unique<TopoDS_Shape>(fuse.Shape());
-    } catch (const std::runtime_error&) {
-        throw;
-    } catch (...) {
-        rethrow_occt_as_runtime_error();
-    }
-}
-
 // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___cut.html
 // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___common.html
-
-// cut_shapes: binary subtraction via BRepAlgoAPI_Cut.
 //
-// SetArguments receives the "object" (left operand, the shape being cut into);
-// SetTools receives the "tool" (right operand, the shape being subtracted).
-// Semantics: result = s1 − s2.
+// MakeFuseBuilder / MakeCutBuilder / MakeCommonBuilder: empty-ctor +
+// SetArguments/SetTools/Build, with the builder instance kept alive so
+// Modified/Generated/IsDeleted can be read afterward.
 //
-// For disjoint inputs, OCCT returns s1 unchanged (IsDone()==true, no error).
-// The Rust layer receives a valid shape and does not need special-casing.
-inline std::unique_ptr<TopoDS_Shape> cut_shapes(
-    const TopoDS_Shape& s1,
-    const TopoDS_Shape& s2)
-{
-    try {
-        TopTools_ListOfShape args, tools;
-        args.Append(s1);
-        tools.Append(s2);
+// Three distinct structs, not one generic type: BRepAlgoAPI_Fuse, _Cut, and
+// _Common share the SetArguments/SetTools/Build shape but have no common
+// instantiation point above the abstract BRepAlgoAPI_BuilderAlgo.
 
-        BRepAlgoAPI_Cut cut;
-        cut.SetArguments(args);
-        cut.SetTools(tools);
-        cut.Build(Message_ProgressRange());
+struct MakeFuseBuilder {
+    BRepAlgoAPI_Fuse inner;
+    MakeFuseBuilder() = default;
 
-        if (!cut.IsDone() || cut.HasErrors()) {
-            throw std::runtime_error("OCCT:BRepAlgoAPI_Cut:Boolean operation failed");
-        }
-        return std::make_unique<TopoDS_Shape>(cut.Shape());
-    } catch (const std::runtime_error&) {
-        throw;
-    } catch (...) {
-        rethrow_occt_as_runtime_error();
+    void build(const TopoDS_Shape& s1, const TopoDS_Shape& s2) {
+        try {
+            TopTools_ListOfShape args, tools;
+            args.Append(s1);
+            tools.Append(s2);
+            inner.SetArguments(args);
+            inner.SetTools(tools);
+            inner.Build(Message_ProgressRange());
+        } catch (const std::runtime_error&) { throw; }
+        catch (...) { rethrow_occt_as_runtime_error(); }
     }
+    bool is_done() const { return inner.IsDone(); }
+    bool has_errors() const { return inner.HasErrors(); }
+    std::unique_ptr<TopoDS_Shape> shape() {
+        return std::make_unique<TopoDS_Shape>(inner.Shape());
+    }
+    bool is_deleted(const TopoDS_Shape& s) {
+        return inner.IsDeleted(s) == Standard_True;
+    }
+};
+inline std::unique_ptr<ShapeListIter>
+fuse_modified_iter(MakeFuseBuilder& b, const TopoDS_Shape& s) {
+    return shape_list_iter_new(b.inner.Modified(s));
+}
+inline std::unique_ptr<ShapeListIter>
+fuse_generated_iter(MakeFuseBuilder& b, const TopoDS_Shape& s) {
+    return shape_list_iter_new(b.inner.Generated(s));
+}
+inline std::unique_ptr<MakeFuseBuilder> new_make_fuse_builder() {
+    return std::make_unique<MakeFuseBuilder>();
 }
 
-// common_shapes: binary intersection via BRepAlgoAPI_Common.
-//
-// For disjoint inputs, OCCT returns an empty TopoDS_Compound (IsDone()==true).
-// The Rust layer detects this via ShapeType == Compound and maps to
-// CommonError::NoIntersection.
-inline std::unique_ptr<TopoDS_Shape> common_shapes(
-    const TopoDS_Shape& s1,
-    const TopoDS_Shape& s2)
-{
-    try {
-        TopTools_ListOfShape args, tools;
-        args.Append(s1);
-        tools.Append(s2);
+struct MakeCutBuilder {
+    BRepAlgoAPI_Cut inner;
+    MakeCutBuilder() = default;
 
-        BRepAlgoAPI_Common common;
-        common.SetArguments(args);
-        common.SetTools(tools);
-        common.Build(Message_ProgressRange());
-
-        if (!common.IsDone() || common.HasErrors()) {
-            throw std::runtime_error("OCCT:BRepAlgoAPI_Common:Boolean operation failed");
-        }
-        return std::make_unique<TopoDS_Shape>(common.Shape());
-    } catch (const std::runtime_error&) {
-        throw;
-    } catch (...) {
-        rethrow_occt_as_runtime_error();
+    void build(const TopoDS_Shape& s1, const TopoDS_Shape& s2) {
+        try {
+            TopTools_ListOfShape args, tools;
+            args.Append(s1);
+            tools.Append(s2);
+            inner.SetArguments(args);
+            inner.SetTools(tools);
+            inner.Build(Message_ProgressRange());
+        } catch (const std::runtime_error&) { throw; }
+        catch (...) { rethrow_occt_as_runtime_error(); }
     }
+    bool is_done() const { return inner.IsDone(); }
+    bool has_errors() const { return inner.HasErrors(); }
+    std::unique_ptr<TopoDS_Shape> shape() {
+        return std::make_unique<TopoDS_Shape>(inner.Shape());
+    }
+    bool is_deleted(const TopoDS_Shape& s) {
+        return inner.IsDeleted(s) == Standard_True;
+    }
+};
+inline std::unique_ptr<ShapeListIter>
+cut_modified_iter(MakeCutBuilder& b, const TopoDS_Shape& s) {
+    return shape_list_iter_new(b.inner.Modified(s));
+}
+inline std::unique_ptr<ShapeListIter>
+cut_generated_iter(MakeCutBuilder& b, const TopoDS_Shape& s) {
+    return shape_list_iter_new(b.inner.Generated(s));
+}
+inline std::unique_ptr<MakeCutBuilder> new_make_cut_builder() {
+    return std::make_unique<MakeCutBuilder>();
+}
+
+struct MakeCommonBuilder {
+    BRepAlgoAPI_Common inner;
+    MakeCommonBuilder() = default;
+
+    void build(const TopoDS_Shape& s1, const TopoDS_Shape& s2) {
+        try {
+            TopTools_ListOfShape args, tools;
+            args.Append(s1);
+            tools.Append(s2);
+            inner.SetArguments(args);
+            inner.SetTools(tools);
+            inner.Build(Message_ProgressRange());
+        } catch (const std::runtime_error&) { throw; }
+        catch (...) { rethrow_occt_as_runtime_error(); }
+    }
+    bool is_done() const { return inner.IsDone(); }
+    bool has_errors() const { return inner.HasErrors(); }
+    std::unique_ptr<TopoDS_Shape> shape() {
+        return std::make_unique<TopoDS_Shape>(inner.Shape());
+    }
+    bool is_deleted(const TopoDS_Shape& s) {
+        return inner.IsDeleted(s) == Standard_True;
+    }
+};
+inline std::unique_ptr<ShapeListIter>
+common_modified_iter(MakeCommonBuilder& b, const TopoDS_Shape& s) {
+    return shape_list_iter_new(b.inner.Modified(s));
+}
+inline std::unique_ptr<ShapeListIter>
+common_generated_iter(MakeCommonBuilder& b, const TopoDS_Shape& s) {
+    return shape_list_iter_new(b.inner.Generated(s));
+}
+inline std::unique_ptr<MakeCommonBuilder> new_make_common_builder() {
+    return std::make_unique<MakeCommonBuilder>();
 }

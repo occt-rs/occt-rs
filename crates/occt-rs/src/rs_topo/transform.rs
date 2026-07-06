@@ -59,12 +59,20 @@ impl TransformBuilder {
     }
 
     /// Returns the transformed shape. Consumes `self`.
+    ///
+    /// One build per instance is load-bearing, not incidental: `Shape()` is
+    /// not overridden on `BRepBuilderAPI_Transform` (plain
+    /// `BRepBuilderAPI_MakeShape` base), and the transform already ran once
+    /// in the constructor — there is no repeat-build path to guard, but a
+    /// future refactor that added one would inherit the same stale-`myShape`
+    /// hazard documented on [`FuseBuilder::build`](crate::rs_topo::FuseBuilder::build).
     pub fn build(mut self) -> Result<OcShape, OcctError> {
         self.try_build()
     }
 
     /// Returns the transformed shape, keeping the builder alive for shape
-    /// history queries via [`BuiltWithHistory`].
+    /// history queries via [`BuiltWithHistory`]. One build per instance —
+    /// see [`build`](Self::build).
     pub fn build_with_history(mut self) -> Result<BuiltWithHistory<Self>, OcctError> {
         let shape = self.try_build()?;
         Ok(BuiltWithHistory::new(self, shape))

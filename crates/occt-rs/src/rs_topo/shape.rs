@@ -16,7 +16,13 @@ use occt_sys::ffi;
 use crate::error::OcctError;
 use crate::rs_topo::offset::{OffsetShapeBuilder, ThickSolidBuilder};
 use crate::rs_topo::shape_explorer_iter::{ShapeEdgeIter, ShapeFaceIter};
-use crate::rs_topo::{chamfer::ChamferBuilder, face::OcFace, fillet::FilletBuilder};
+use crate::rs_topo::{
+    bool_op::{CommonBuilder, CutBuilder, FuseBuilder},
+    chamfer::ChamferBuilder,
+    face::OcFace,
+    fillet::FilletBuilder,
+    transform::TransformBuilder,
+};
 use crate::rs_topo::{OcEdge, ShapeType};
 
 /// TopAbs_ShapeEnum::TopAbs_FACE.
@@ -145,69 +151,47 @@ impl OcShape {
     }
     /// Fuse (union) this shape with `other`, returning a new `OcShape`.
     ///
-    /// Wraps `BRepAlgoAPI_Fuse` via the preferred SetArguments/SetTools/Build
-    /// pattern. The builder and its history are not preserved; if Modified/
-    /// Generated/IsDeleted are needed in future, promote to an explicit FuseBuilder.
+    /// Wraps [`FuseBuilder`] via its `build()`. History is not preserved; if
+    /// Modified/Generated/IsDeleted are needed, use `FuseBuilder` directly
+    /// via `build_with_history()`.
     pub fn oc_fuse(&self, other: &OcShape) -> Result<OcShape, OcctError> {
-        let result =
-            occt_sys::ffi::fuse_shapes(self.as_ffi(), other.as_ffi()).map_err(OcctError::from)?;
-        // Safety: fuse_shapes returns Ok(UniquePtr) via make_unique on success;
-        // the Ok branch is never null.
-        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
+        FuseBuilder::new().build(self, other)
     }
     /// Subtract `tool` from `self`, returning a new `OcShape`.
     ///
-    /// Wraps `BRepAlgoAPI_Cut` via the preferred SetArguments/SetTools/Build
-    /// pattern. `self` is the "object" (left operand); `tool` is subtracted from it.
+    /// Wraps [`CutBuilder`] via its `build()`. `self` is the "object" (left
+    /// operand); `tool` is subtracted from it. History is not preserved; use
+    /// `CutBuilder` directly via `build_with_history()` if needed.
     ///
     /// For disjoint inputs, OCCT returns `self` unchanged as a solid — this is
     /// a valid `Ok` result. No compound detection is needed.
     pub fn oc_cut(&self, tool: &OcShape) -> Result<OcShape, OcctError> {
-        let result =
-            occt_sys::ffi::cut_shapes(self.as_ffi(), tool.as_ffi()).map_err(OcctError::from)?;
-        // Safety: cut_shapes returns Ok(UniquePtr) via make_unique on success.
-        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
+        CutBuilder::new().build(self, tool)
     }
-    /// Applies `trsf` to a copy of this shape, returning a new independent `OcShape`.
+    /// Applies `trsf` to this shape, returning the transformed `OcShape`.
     ///
-    /// Wraps `BRepBuilderAPI_Transform(shape, trsf, copy=true)`.  The result
-    /// geometry is fully independent of `self`; no TShape handles are shared.
+    /// Wraps [`TransformBuilder`] with `copy=false`. Per OCCT semantics: for
+    /// a direct isometry, the result shares `self`'s TShape with a new
+    /// Location — no geometry duplication. This is not full independence;
+    /// callers needing a fully independent copy (duplicated curves/surfaces,
+    /// no shared TShape) should use `TransformBuilder::new` directly with
+    /// `copy=true`.
     ///
     /// Reference: <https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___transform.html>
     pub fn transformed(&self, trsf: &crate::gp::OcTrsf) -> Result<OcShape, OcctError> {
-        let result = occt_sys::ffi::transform_shape(
-            self.as_ffi(),
-            trsf.value(1, 1).unwrap(),
-            trsf.value(1, 2).unwrap(),
-            trsf.value(1, 3).unwrap(),
-            trsf.value(1, 4).unwrap(),
-            trsf.value(2, 1).unwrap(),
-            trsf.value(2, 2).unwrap(),
-            trsf.value(2, 3).unwrap(),
-            trsf.value(2, 4).unwrap(),
-            trsf.value(3, 1).unwrap(),
-            trsf.value(3, 2).unwrap(),
-            trsf.value(3, 3).unwrap(),
-            trsf.value(3, 4).unwrap(),
-        )
-        .map_err(OcctError::from)?;
-        // Safety: transform_shape returns Ok(UniquePtr) via make_unique on success.
-        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
+        TransformBuilder::new(self, trsf, false)?.build()
     }
 
     /// Intersect `self` with `other`, returning a new `OcShape`.
     ///
-    /// Wraps `BRepAlgoAPI_Common` via the preferred SetArguments/SetTools/Build
-    /// pattern.
+    /// Wraps [`CommonBuilder`] via its `build()`. History is not preserved;
+    /// use `CommonBuilder` directly via `build_with_history()` if needed.
     ///
     /// For non-intersecting inputs, OCCT returns an empty `TopoDS_Compound`
     /// (`IsDone()==true`); this is returned as `Ok`. Use `shape_type()` and
     /// content queries on the result if the intersection's presence matters.
     pub fn oc_common(&self, other: &OcShape) -> Result<OcShape, OcctError> {
-        let result =
-            occt_sys::ffi::common_shapes(self.as_ffi(), other.as_ffi()).map_err(OcctError::from)?;
-        // Safety: common_shapes returns Ok(UniquePtr) via make_unique on success.
-        Ok(unsafe { OcShape::from_ffi_unchecked(result) })
+        CommonBuilder::new().build(self, other)
     }
     /// Applies constant-radius fillets to the given edges and returns the
     /// resulting shape.

@@ -1,3 +1,4 @@
+pub mod bool_op;
 pub mod chamfer;
 pub mod edge;
 pub mod face;
@@ -13,6 +14,7 @@ pub mod transform;
 pub mod vertex;
 pub mod wire;
 
+pub use bool_op::{CommonBuilder, CutBuilder, FuseBuilder};
 pub use chamfer::ChamferBuilder;
 pub use edge::OcEdge;
 pub use face::OcFace;
@@ -22,5 +24,6 @@ pub use offset::{OffsetShapeBuilder, ThickSolidBuilder};
 pub use shape::OcShape;
 pub use shape_type::ShapeType;
 pub use solid::OcSolid;
+pub use transform::TransformBuilder;
 pub use vertex::OcVertex;
 pub use wire::OcWire;

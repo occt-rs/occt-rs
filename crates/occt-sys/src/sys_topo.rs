@@ -1010,29 +1010,6 @@ pub mod ffi {
         fn is_done(self: &MakeFilletBuilder) -> bool;
         fn shape(self: Pin<&mut MakeFilletBuilder>) -> UniquePtr<TopodsShape>;
         fn is_deleted(self: Pin<&mut MakeFilletBuilder>, s: &TopodsShape) -> bool;
-        // ── Boolean operations ────────────────────────────────────────────────────
-        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___fuse.html
-        fn fuse_shapes(s1: &TopodsShape, s2: &TopodsShape) -> Result<UniquePtr<TopodsShape>>;
-        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___cut.html
-        fn cut_shapes(s1: &TopodsShape, s2: &TopodsShape) -> Result<UniquePtr<TopodsShape>>;
-        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___common.html
-        fn common_shapes(s1: &TopodsShape, s2: &TopodsShape) -> Result<UniquePtr<TopodsShape>>;
-        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___transform.html
-        fn transform_shape(
-            shape: &TopodsShape,
-            r11: f64,
-            r12: f64,
-            r13: f64,
-            t1: f64,
-            r21: f64,
-            r22: f64,
-            r23: f64,
-            t2: f64,
-            r31: f64,
-            r32: f64,
-            r33: f64,
-            t3: f64,
-        ) -> Result<UniquePtr<TopodsShape>>;
         // ── MakeTransformBuilder ───────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___transform.html
         //
@@ -1067,6 +1044,63 @@ pub mod ffi {
         ) -> UniquePtr<ShapeListIter>;
         fn transform_generated_iter(
             b: Pin<&mut MakeTransformBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+
+        // ── MakeFuseBuilder / MakeCutBuilder / MakeCommonBuilder ───────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___fuse.html
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___cut.html
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_algo_a_p_i___common.html
+        type MakeFuseBuilder;
+        fn new_make_fuse_builder() -> UniquePtr<MakeFuseBuilder>;
+        fn build(self: Pin<&mut MakeFuseBuilder>, s1: &TopodsShape, s2: &TopodsShape)
+            -> Result<()>;
+        fn is_done(self: &MakeFuseBuilder) -> bool;
+        fn has_errors(self: &MakeFuseBuilder) -> bool;
+        fn shape(self: Pin<&mut MakeFuseBuilder>) -> UniquePtr<TopodsShape>;
+        fn is_deleted(self: Pin<&mut MakeFuseBuilder>, s: &TopodsShape) -> bool;
+        fn fuse_modified_iter(
+            b: Pin<&mut MakeFuseBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+        fn fuse_generated_iter(
+            b: Pin<&mut MakeFuseBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+
+        type MakeCutBuilder;
+        fn new_make_cut_builder() -> UniquePtr<MakeCutBuilder>;
+        fn build(self: Pin<&mut MakeCutBuilder>, s1: &TopodsShape, s2: &TopodsShape) -> Result<()>;
+        fn is_done(self: &MakeCutBuilder) -> bool;
+        fn has_errors(self: &MakeCutBuilder) -> bool;
+        fn shape(self: Pin<&mut MakeCutBuilder>) -> UniquePtr<TopodsShape>;
+        fn is_deleted(self: Pin<&mut MakeCutBuilder>, s: &TopodsShape) -> bool;
+        fn cut_modified_iter(
+            b: Pin<&mut MakeCutBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+        fn cut_generated_iter(
+            b: Pin<&mut MakeCutBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+
+        type MakeCommonBuilder;
+        fn new_make_common_builder() -> UniquePtr<MakeCommonBuilder>;
+        fn build(
+            self: Pin<&mut MakeCommonBuilder>,
+            s1: &TopodsShape,
+            s2: &TopodsShape,
+        ) -> Result<()>;
+        fn is_done(self: &MakeCommonBuilder) -> bool;
+        fn has_errors(self: &MakeCommonBuilder) -> bool;
+        fn shape(self: Pin<&mut MakeCommonBuilder>) -> UniquePtr<TopodsShape>;
+        fn is_deleted(self: Pin<&mut MakeCommonBuilder>, s: &TopodsShape) -> bool;
+        fn common_modified_iter(
+            b: Pin<&mut MakeCommonBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+        fn common_generated_iter(
+            b: Pin<&mut MakeCommonBuilder>,
             s: &TopodsShape,
         ) -> UniquePtr<ShapeListIter>;
 
