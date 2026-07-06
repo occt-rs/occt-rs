@@ -1033,6 +1033,42 @@ pub mod ffi {
             r33: f64,
             t3: f64,
         ) -> Result<UniquePtr<TopodsShape>>;
+        // ── MakeTransformBuilder ───────────────────────────────────────────────
+        // Reference: https://dev.opencascade.org/doc/refman/html/class_b_rep_builder_a_p_i___transform.html
+        //
+        // Returns Result: BRepBuilderAPI_Transform computes in its constructor and
+        // can throw; there is no separate build() to call afterward.
+        type MakeTransformBuilder;
+
+        #[allow(clippy::too_many_arguments)]
+        fn new_make_transform_builder(
+            shape: &TopodsShape,
+            r11: f64,
+            r12: f64,
+            r13: f64,
+            t1: f64,
+            r21: f64,
+            r22: f64,
+            r23: f64,
+            t2: f64,
+            r31: f64,
+            r32: f64,
+            r33: f64,
+            t3: f64,
+            copy: bool,
+        ) -> Result<UniquePtr<MakeTransformBuilder>>;
+        fn is_done(self: &MakeTransformBuilder) -> bool;
+        fn shape(self: Pin<&mut MakeTransformBuilder>) -> UniquePtr<TopodsShape>;
+        fn is_deleted(self: Pin<&mut MakeTransformBuilder>, s: &TopodsShape) -> bool;
+
+        fn transform_modified_iter(
+            b: Pin<&mut MakeTransformBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
+        fn transform_generated_iter(
+            b: Pin<&mut MakeTransformBuilder>,
+            s: &TopodsShape,
+        ) -> UniquePtr<ShapeListIter>;
 
         // ── TopoDS_Vertex ─────────────────────────────────────────────────
         // Reference: https://dev.opencascade.org/doc/refman/html/class_topo_d_s___vertex.html
