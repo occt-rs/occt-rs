@@ -1467,30 +1467,31 @@ use std::collections::HashMap;
 
 // ── Raw driver trait ──────────────────────────────────────────────────────────
 //
-// Implemented by `occt-rs::function_driver::FunctionDriverAdapter<D>`, which
-// bridges to the public `FunctionDriver` trait using the safe wrapper types.
-// Marked unsafe because implementors receive and must correctly handle raw
-// pointers to short-lived C++ stack objects.
-
+/// The bridge from the CPP trampoline to rust.
+///
+/// On CPP, the Rust shim defines its implementation as
+/// calling the rust-side implementation of these methods. On the Rust side, the implementation is
+/// defined as calling its FunctionDriver equivilent methods after marshalling the CPP ffi types
+/// into the safe wrappers.
 pub unsafe trait FunctionDriverRaw: 'static {
-    /// Called by RustFunctionDriverShim::Execute.
     /// log: valid for the duration of this call; non-const (may be mutated).
     unsafe fn execute_raw(&self, log: *mut ffi::TFunctionLogbookHandle) -> i32;
 
-    /// Called by RustFunctionDriverShim::MustExecute.
+    /// The cpp _Driver::Execute -> Rust FunctionDriver::must_execute bridge
+    ///
     /// log: valid for the duration of this call; treat as read-only (the
     /// underlying Handle was copied from a const source).
     unsafe fn must_execute_raw(&self, log: *mut ffi::TFunctionLogbookHandle) -> bool;
 
-    /// Called by RustFunctionDriverShim::Validate.
+    /// The CPP _Driver::Validate -> Rust FnDriver::validate bridge
     /// log: valid for the duration of this call; non-const (may be mutated).
     unsafe fn validate_raw(&self, log: *mut ffi::TFunctionLogbookHandle);
 
-    /// Called by RustFunctionDriverShim::Arguments.
+    /// The CPP _Driver::Arguments -> Rust FnDriver::arguments bridge
     /// list: valid for the duration of this call; append via tfunction_labellist_append.
     unsafe fn arguments_raw(&self, list: *mut ffi::TFunctionLabelListShim);
 
-    /// Called by RustFunctionDriverShim::Results.
+    /// The CPP _Driver::Results -> Rust FnDriver::results bridge
     /// list: valid for the duration of this call; append via tfunction_labellist_append.
     unsafe fn results_raw(&self, list: *mut ffi::TFunctionLabelListShim);
 }

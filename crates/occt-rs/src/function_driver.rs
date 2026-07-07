@@ -177,8 +177,9 @@ pub trait FunctionDriver: 'static {
     /// The default implementation always returns `true` (equivalent to the
     /// OCCT base class behaviour, which re-executes unconditionally).
     fn must_execute(&self, log: &OcFunctionLogbook<'_>) -> bool {
-        let _ = log;
-        true
+        self.arguments()
+            .iter()
+            .any(|label| log.is_modified(label, false))
     }
 
     /// Validates the function's result labels in the logbook.
@@ -186,23 +187,25 @@ pub trait FunctionDriver: 'static {
     ///
     /// The default implementation does nothing (equivalent to OCCT base class).
     fn validate(&self, log: &mut OcFunctionLogbook<'_>) {
-        let _ = log;
+        for label in self.results() {
+            log.set_valid(&label, true);
+        }
     }
 
     /// Fills `list` with the document labels that this function reads from
     /// (its arguments). Use [`OcFunctionLabelList::push`] for each.
     ///
     /// The default implementation pushes nothing (equivalent to OCCT base class).
-    fn arguments(&self, list: &mut OcFunctionLabelList<'_>) {
-        let _ = list;
+    fn arguments(&self) -> Vec<OcLabel> {
+        vec![]
     }
 
     /// Fills `list` with the document labels that this function writes to
     /// (its results). Use [`OcFunctionLabelList::push`] for each.
     ///
     /// The default implementation pushes nothing (equivalent to OCCT base class).
-    fn results(&self, list: &mut OcFunctionLabelList<'_>) {
-        let _ = list;
+    fn results(&self) -> Vec<OcLabel> {
+        vec![]
     }
 }
 
@@ -235,22 +238,25 @@ unsafe impl<D: FunctionDriver> FunctionDriverRaw for FunctionDriverAdapter<D> {
         self.driver.must_execute(&logbook)
     }
 
-    unsafe fn validate_raw(&self, log: *mut ffi::TFunctionLogbookHandle) -> () {
+    unsafe fn validate_raw(&self, log: *mut ffi::TFunctionLogbookHandle) {
         // Safety: ptr valid for call duration; exclusive access.
         let mut logbook = unsafe { OcFunctionLogbook::from_raw(log) };
         self.driver.validate(&mut logbook)
     }
 
     unsafe fn arguments_raw(&self, list: *mut ffi::TFunctionLabelListShim) {
-        // Safety: ptr valid for call duration; exclusive access.
         let mut label_list = unsafe { OcFunctionLabelList::from_raw(list) };
-        self.driver.arguments(&mut label_list)
+        for label in self.driver.arguments() {
+            label_list.push(&label);
+        }
     }
 
     unsafe fn results_raw(&self, list: *mut ffi::TFunctionLabelListShim) {
         // Safety: ptr valid for call duration; exclusive access.
         let mut label_list = unsafe { OcFunctionLabelList::from_raw(list) };
-        self.driver.results(&mut label_list)
+        for label in self.driver.results() {
+            label_list.push(&label);
+        }
     }
 }
 
