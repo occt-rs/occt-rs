@@ -341,12 +341,9 @@ mod tests {
         let main = doc.main();
 
         // Create the parent label at main/1 in its own command.
-        let parent = {
-            let cmd = doc.begin_command().unwrap();
-            let l = main.get_or_create_child(&cmd, 1);
-            cmd.commit().unwrap();
-            l
-        };
+        doc.begin_command().unwrap();
+        let parent = main.get_or_create_child(1);
+        doc.commit().unwrap();
 
         // ── Driver definition ────────────────────────────────────────────────────
         //
@@ -392,12 +389,10 @@ mod tests {
         // Open a command so that label creation is part of a transaction, matching
         // how OCCT's TFunction machinery would call Execute.
 
-        {
-            let cmd = doc.begin_command().unwrap();
-            let code = unsafe { rust_driver_execute(id, 0) };
-            assert_eq!(code, 0, "driver returned non-zero exit code");
-            cmd.commit().unwrap();
-        }
+        doc.begin_command().unwrap();
+        let code = unsafe { rust_driver_execute(id, 0) };
+        assert_eq!(code, 0, "driver returned non-zero exit code");
+        doc.commit().unwrap();
 
         // ── Verification ─────────────────────────────────────────────────────────
 
