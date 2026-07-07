@@ -29,11 +29,14 @@
 
 #include <Standard_GUID.hxx>
 #include <TDF_LabelList.hxx>
+#include <TFunction_IFunction.hxx>
+#include <TFunction_Iterator.hxx>
 #include <TFunction_Driver.hxx>
 #include <TFunction_DriverTable.hxx>
 #include <TFunction_Logbook.hxx>
 
 #include "label.hxx"
+#include "label_list.hxx"
 #include "../exception.hxx"
 #include "rust/cxx.h"
 
@@ -46,7 +49,6 @@
 // for the duration of each call.
 
 struct TFunctionLogbookHandle;
-struct TFunctionLabelListShim;
 
 int32_t rust_driver_execute(uint64_t id, std::size_t log) noexcept;
 bool    rust_driver_must_execute(uint64_t id, std::size_t log) noexcept;
@@ -123,28 +125,143 @@ inline void tfunction_logbook_done(TFunctionLogbookHandle& h, bool status) {
     h.inner->Done(status ? Standard_True : Standard_False);
 }
 
-// ── TFunctionLabelListShim ────────────────────────────────────────────────────
+// ── TFunctionLogbookHandle — new functions (type itself already declared) ──
 //
-// Opaque cxx bridge type. Holds a raw pointer to the TDF_LabelList
-// out-parameter of Arguments() or Results(). The pointer is non-owning and
-// valid only for the duration of the Rust callback. Do not store or use it
-// after rust_driver_arguments / rust_driver_results returns.
-//
-// Rust appends to the list via tfunction_labellist_append, called through the
-// OcFunctionLabelList wrapper's push() method.
-
-struct TFunctionLabelListShim {
-    TDF_LabelList* list; // non-owning; valid only during Arguments/Results callback
-};
-
-// Appends label to the list. Called from Rust via OcFunctionLabelList::push.
-// Reference: NCollection_List::Append
-inline void tfunction_labellist_append(
-    TFunctionLabelListShim& shim,
-    const TdfLabel& label)
-{
-    shim.list->Append(label.inner);
+// CORRECTION to the doc comment on the existing type: TFunction_Logbook is a
+// TDF_Attribute with ordinary document-attribute lifetime (attached at the
+// document root via TFunction_Logbook::Set) — NOT scoped to a single
+// dispatch call. That was true only of how this bridge type was previously
+// obtained (the raw pointer handed to driver callbacks), not of the
+// underlying OCCT object. tfunction_logbook_set is the new owned path; safe
+// alongside the existing dispatch-context pointer since
+// Handle(TFunction_Logbook) is refcounted.
+ 
+inline std::unique_ptr<TFunctionLogbookHandle> tfunction_logbook_set(const TdfLabel& access) {
+    Handle(TFunction_Logbook) lb = TFunction_Logbook::Set(access.inner);
+    return std::make_unique<TFunctionLogbookHandle>(TFunctionLogbookHandle{lb});
 }
+ 
+// SetTouched — non-const. NOTE: no with_children parameter, unlike
+// SetImpacted/SetValid above. Confirmed from TFunction_Logbook.hxx.
+inline void tfunction_logbook_set_touched(TFunctionLogbookHandle& h, const TdfLabel& label) {
+    h.inner->SetTouched(label.inner);
+}
+ 
+inline void tfunction_logbook_get_touched(const TFunctionLogbookHandle& h, TdfLabelList& out) {
+    const TDF_LabelMap& touched = h.inner->GetTouched();
+    for (TDF_MapIteratorOfLabelMap it(touched); it.More(); it.Next()) {
+        out.list->Append(it.Key());
+    }
+}
+ 
+inline void tfunction_logbook_clear(TFunctionLogbookHandle& h) {
+    h.inner->Clear();
+}
+ 
+// ── TFunction_IFunction — flat functions, no persistent bridge type ────────
+//
+// Not given an opaque type: TFunction_IFunction is a zero-cost value wrapper
+// around one TDF_Label (confirmed from TFunction_IFunction.hxx — no Handle,
+// no heap state). Each function below reconstructs it on the stack.
+//
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_function___i_function.html
+ 
+inline bool tfunction_ifunction_new_function(
+    const TdfLabel& label,
+    uint32_t a32b, uint16_t a16b1, uint16_t a16b2, uint16_t a16b3,
+    uint8_t a8b1, uint8_t a8b2, uint8_t a8b3, uint8_t a8b4, uint8_t a8b5, uint8_t a8b6)
+{
+    // Cast convention copied exactly from tfunction_register_rust_driver
+    // below, not reinvented.
+    Standard_GUID guid(
+        static_cast<int>(a32b),
+        static_cast<char16_t>(a16b1),
+        static_cast<char16_t>(a16b2),
+        static_cast<char16_t>(a16b3),
+        a8b1, a8b2, a8b3, a8b4, a8b5, a8b6
+    );
+    return TFunction_IFunction::NewFunction(label.inner, guid);
+}
+ 
+inline bool tfunction_ifunction_delete_function(const TdfLabel& label) {
+    return TFunction_IFunction::DeleteFunction(label.inner);
+}
+ 
+inline bool tfunction_ifunction_update_dependencies_all(const TdfLabel& access) {
+    return TFunction_IFunction::UpdateDependencies(access.inner);
+}
+ 
+inline bool tfunction_ifunction_update_dependencies_one(const TdfLabel& label) {
+    TFunction_IFunction iFunc(label.inner);
+    return iFunc.UpdateDependencies();
+}
+ 
+inline void tfunction_ifunction_arguments(const TdfLabel& label, TdfLabelList& out) {
+    TFunction_IFunction iFunc(label.inner);
+    iFunc.Arguments(*out.list);
+}
+ 
+inline void tfunction_ifunction_results(const TdfLabel& label, TdfLabelList& out) {
+    TFunction_IFunction iFunc(label.inner);
+    iFunc.Results(*out.list);
+}
+ 
+inline void tfunction_ifunction_get_previous(const TdfLabel& label, TdfLabelList& out) {
+    TFunction_IFunction iFunc(label.inner);
+    iFunc.GetPrevious(*out.list);
+}
+ 
+inline void tfunction_ifunction_get_next(const TdfLabel& label, TdfLabelList& out) {
+    TFunction_IFunction iFunc(label.inner);
+    iFunc.GetNext(*out.list);
+}
+ 
+inline int32_t tfunction_ifunction_get_status(const TdfLabel& label) {
+    TFunction_IFunction iFunc(label.inner);
+    return static_cast<int32_t>(iFunc.GetStatus());
+}
+ 
+inline void tfunction_ifunction_set_status(const TdfLabel& label, int32_t status) {
+    TFunction_IFunction iFunc(label.inner);
+    iFunc.SetStatus(static_cast<TFunction_ExecutionStatus>(status));
+}
+ 
+// ── TFunction_Iterator — stateful, gets a real opaque type ──────────────────
+//
+// Reference: https://dev.opencascade.org/doc/refman/html/class_t_function___iterator.html
+ 
+struct TFunctionIteratorShim {
+    TFunction_Iterator it;
+};
+ 
+inline std::unique_ptr<TFunctionIteratorShim> new_tfunction_iterator(const TdfLabel& access) {
+    auto shim = std::make_unique<TFunctionIteratorShim>();
+    shim->it.Init(access.inner);
+    return shim;
+}
+ 
+inline void tfunction_iterator_set_usage_of_execution_status(
+    TFunctionIteratorShim& it, bool usage)
+{
+    it.it.SetUsageOfExecutionStatus(usage ? Standard_True : Standard_False);
+}
+ 
+inline bool tfunction_iterator_more(const TFunctionIteratorShim& it) {
+    return it.it.More() == Standard_True;
+}
+ 
+inline void tfunction_iterator_next(TFunctionIteratorShim& it) {
+    it.it.Next();
+}
+ 
+inline void tfunction_iterator_current(const TFunctionIteratorShim& it, TdfLabelList& out) {
+    const TDF_LabelList& current = it.it.Current();
+    for (TDF_ListIteratorOfLabelList lit(current); lit.More(); lit.Next()) {
+        out.list->Append(lit.Value());
+    }
+}
+
+
 
 // ── RustFunctionDriverShim ────────────────────────────────────────────────────
 //
@@ -202,17 +319,18 @@ public:
     // Arguments — virtual; base class has a default (empty) implementation.
     // Rust appends argument labels via OcFunctionLabelList::push.
     // Reference: TFunction_Driver::Arguments
-    void Arguments(TDF_LabelList& args) const override {
-        TFunctionLabelListShim shim{ &args };
-        rust_driver_arguments(myRustId, reinterpret_cast<std::size_t>(&shim));
-    }
+   void Arguments(TDF_LabelList& args) const override {
+      TdfLabelList shim(args);
+      rust_driver_arguments(myRustId, reinterpret_cast<std::size_t>(&shim));
+  }
+
 
     // Results — virtual; base class has a default (empty) implementation.
     // Rust appends result labels via OcFunctionLabelList::push.
     // Reference: TFunction_Driver::Results
-    void Results(TDF_LabelList& res) const override {
-        TFunctionLabelListShim shim{ &res };
-        rust_driver_results(myRustId, reinterpret_cast<std::size_t>(&shim));
+  void Results(TDF_LabelList& res) const override {
+      TdfLabelList shim(res);
+      rust_driver_results(myRustId, reinterpret_cast<std::size_t>(&shim));
     }
 
     DEFINE_STANDARD_RTTIEXT(RustFunctionDriverShim, TFunction_Driver)

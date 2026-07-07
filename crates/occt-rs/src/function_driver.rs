@@ -55,8 +55,61 @@ use crate::ocaf::OcLabel;
 
 pub struct OcFunctionLogbook<'a> {
     inner: *mut ffi::TFunctionLogbookHandle,
+    _owned: Option<cxx::UniquePtr<ffi::TFunctionLogbookHandle>>,
     _lifetime: PhantomData<&'a mut ffi::TFunctionLogbookHandle>,
     _not_send: PhantomData<*mut ()>,
+}
+
+impl OcFunctionLogbook<'static> {
+    /// Owned, document-lifetime logbook handle for `access`'s scope — NOT
+    /// tied to a driver dispatch callback. Use this for setup code (marking
+    /// inputs touched before a rebuild) and for tests, where `from_raw`'s
+    /// borrowed pointer isn't available.
+    ///
+    /// STILL UNRESOLVED (flagged, not fixed): `OcFunctionLogbook::inner` is a
+    /// bare `*mut` with no `Drop`, correct today only because `from_raw`'s
+    /// pointer is always borrowed from a C++ call stack. `owned.into_raw()`
+    /// below leaks that allocation on every call — not unsound, just a real
+    /// leak. Needs `OcFunctionLogbook` to gain an owned/borrowed distinction
+    /// before this ships.
+    pub fn from_label(access: &OcLabel) -> OcFunctionLogbook<'static> {
+        let mut owned = ffi::tfunction_logbook_set(&access.inner);
+        // Safety: UniquePtr heap-allocates; the object's address is stable
+        // regardless of where the UniquePtr itself is stored. raw remains valid
+        // for exactly as long as _owned lives, which is the struct's lifetime.
+        let raw =
+            unsafe { Pin::get_unchecked_mut(owned.pin_mut()) as *mut ffi::TFunctionLogbookHandle };
+        OcFunctionLogbook {
+            inner: raw,
+            _owned: Some(owned),
+            _lifetime: PhantomData,
+            _not_send: PhantomData,
+        }
+    }
+
+    /// Marks `label` as touched. Note: unlike `set_impacted`/`set_valid`,
+    /// OCCT's `SetTouched` takes no `with_children` parameter (confirmed
+    /// from TFunction_Logbook.hxx).
+    pub fn set_touched(&mut self, label: &OcLabel) {
+        let pin = unsafe { Pin::new_unchecked(&mut *self.inner) };
+        ffi::tfunction_logbook_set_touched(pin, &label.inner);
+    }
+
+    /// Returns every label currently marked touched in this logbook.
+    pub fn get_touched(&self) -> Vec<OcLabel> {
+        let mut shim = ffi::new_tdf_label_list();
+        ffi::tfunction_logbook_get_touched(unsafe { &*self.inner }, shim.pin_mut());
+        let len = ffi::tdf_labellist_len(&shim);
+        (0..len)
+            .map(|i| unsafe { OcLabel::from_ffi_unchecked(ffi::tdf_labellist_get(&shim, i)) })
+            .collect()
+    }
+
+    /// Resets touched/impacted/valid to empty.
+    pub fn clear(&mut self) {
+        let pin = unsafe { Pin::new_unchecked(&mut *self.inner) };
+        ffi::tfunction_logbook_clear(pin);
+    }
 }
 
 impl<'a> OcFunctionLogbook<'a> {
@@ -67,6 +120,7 @@ impl<'a> OcFunctionLogbook<'a> {
     pub(crate) unsafe fn from_raw(ptr: *mut ffi::TFunctionLogbookHandle) -> Self {
         OcFunctionLogbook {
             inner: ptr,
+            _owned: None,
             _lifetime: PhantomData,
             _not_send: PhantomData,
         }
@@ -122,15 +176,15 @@ impl<'a> OcFunctionLogbook<'a> {
 // [`FunctionDriver::results`] callback.
 
 pub struct OcFunctionLabelList<'a> {
-    inner: *mut ffi::TFunctionLabelListShim,
-    _lifetime: PhantomData<&'a mut ffi::TFunctionLabelListShim>,
+    inner: *mut ffi::TdfLabelList,
+    _lifetime: PhantomData<&'a mut ffi::TdfLabelList>,
     _not_send: PhantomData<*mut ()>,
 }
 
 impl<'a> OcFunctionLabelList<'a> {
     /// # Safety
     /// `ptr` must be valid and exclusively reachable for the lifetime `'a`.
-    pub(crate) unsafe fn from_raw(ptr: *mut ffi::TFunctionLabelListShim) -> Self {
+    pub(crate) unsafe fn from_raw(ptr: *mut ffi::TdfLabelList) -> Self {
         OcFunctionLabelList {
             inner: ptr,
             _lifetime: PhantomData,
@@ -144,7 +198,7 @@ impl<'a> OcFunctionLabelList<'a> {
     /// for each label that this driver reads from / writes to.
     pub fn push(&mut self, label: &OcLabel) {
         let pin = unsafe { Pin::new_unchecked(&mut *self.inner) };
-        ffi::tfunction_labellist_append(pin, &label.inner);
+        ffi::tdf_labellist_append(pin, &label.inner);
     }
 }
 
@@ -244,14 +298,14 @@ unsafe impl<D: FunctionDriver> FunctionDriverRaw for FunctionDriverAdapter<D> {
         self.driver.validate(&mut logbook)
     }
 
-    unsafe fn arguments_raw(&self, list: *mut ffi::TFunctionLabelListShim) {
+    unsafe fn arguments_raw(&self, list: *mut ffi::TdfLabelList) {
         let mut label_list = unsafe { OcFunctionLabelList::from_raw(list) };
         for label in self.driver.arguments() {
             label_list.push(&label);
         }
     }
 
-    unsafe fn results_raw(&self, list: *mut ffi::TFunctionLabelListShim) {
+    unsafe fn results_raw(&self, list: *mut ffi::TdfLabelList) {
         // Safety: ptr valid for call duration; exclusive access.
         let mut label_list = unsafe { OcFunctionLabelList::from_raw(list) };
         for label in self.driver.results() {
@@ -281,6 +335,8 @@ pub fn register_driver(uuid: uuid::Uuid, driver: impl FunctionDriver) -> bool {
 #[cfg(test)]
 mod tests {
     use uuid::Uuid;
+
+    use crate::ocaf::OcApplication;
 
     use super::*;
 
@@ -376,8 +432,8 @@ mod tests {
                 true
             }
             unsafe fn validate_raw(&self, _: *mut ffi::TFunctionLogbookHandle) {}
-            unsafe fn arguments_raw(&self, _: *mut ffi::TFunctionLabelListShim) {}
-            unsafe fn results_raw(&self, _: *mut ffi::TFunctionLabelListShim) {}
+            unsafe fn arguments_raw(&self, _: *mut ffi::TdfLabelList) {}
+            unsafe fn results_raw(&self, _: *mut ffi::TdfLabelList) {}
         }
 
         // ── Registration ─────────────────────────────────────────────────────────

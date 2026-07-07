@@ -446,6 +446,14 @@ pub mod ffi {
         fn tdatastd_nameddata_has_byte(h: &TDataStdNamedDataHandle, name: &str) -> bool;
         fn tdatastd_nameddata_get_byte(h: &TDataStdNamedDataHandle, name: &str) -> u8;
         fn tdatastd_nameddata_set_byte(h: &TDataStdNamedDataHandle, name: &str, value: u8);
+        // ── TDF_Reference ────────────────────────────────────────────────────────────
+        type TdfReferenceHandle;
+        fn tdf_reference_set(
+            at: &TdfLabel,
+            target: &TdfLabel,
+        ) -> Result<UniquePtr<TdfReferenceHandle>>;
+        fn tdf_reference_find(at: &TdfLabel) -> UniquePtr<TdfReferenceHandle>;
+        fn tdf_reference_get(h: &TdfReferenceHandle) -> UniquePtr<TdfLabel>;
 
         // ── TDataStdReferenceArrayHandle ─────────────────────────────────────────────
         // Shim holding Handle(TDataStd_ReferenceArray) by value.
@@ -942,6 +950,46 @@ pub mod ffi {
         ) -> Result<UniquePtr<DocumentHandle>>;
         // Const: NbDocuments() — number of documents registered with this application.
         fn application_nb_documents(app: &ApplicationHandle) -> i32;
+
+        // ── TFunction_IFunction ──────────────────────────────────────────────────────
+        #[allow(clippy::too_many_arguments)]
+        fn tfunction_ifunction_new_function(
+            label: &TdfLabel,
+            a32b: u32,
+            a16b1: u16,
+            a16b2: u16,
+            a16b3: u16,
+            a8b1: u8,
+            a8b2: u8,
+            a8b3: u8,
+            a8b4: u8,
+            a8b5: u8,
+            a8b6: u8,
+        ) -> bool;
+
+        fn tfunction_ifunction_delete_function(label: &TdfLabel) -> bool;
+        fn tfunction_ifunction_update_dependencies_all(access: &TdfLabel) -> bool;
+        fn tfunction_ifunction_update_dependencies_one(label: &TdfLabel) -> bool;
+
+        fn tfunction_ifunction_arguments(label: &TdfLabel, out: Pin<&mut TdfLabelList>);
+        fn tfunction_ifunction_results(label: &TdfLabel, out: Pin<&mut TdfLabelList>);
+        fn tfunction_ifunction_get_previous(label: &TdfLabel, out: Pin<&mut TdfLabelList>);
+        fn tfunction_ifunction_get_next(label: &TdfLabel, out: Pin<&mut TdfLabelList>);
+
+        fn tfunction_ifunction_get_status(label: &TdfLabel) -> i32;
+        fn tfunction_ifunction_set_status(label: &TdfLabel, status: i32);
+
+        // ── TFunction_Iterator ───────────────────────────────────────────────────────
+        type TFunctionIteratorShim;
+        fn new_tfunction_iterator(access: &TdfLabel) -> UniquePtr<TFunctionIteratorShim>;
+        fn tfunction_iterator_set_usage_of_execution_status(
+            it: Pin<&mut TFunctionIteratorShim>,
+            usage: bool,
+        );
+        fn tfunction_iterator_more(it: &TFunctionIteratorShim) -> bool;
+        fn tfunction_iterator_next(it: Pin<&mut TFunctionIteratorShim>);
+        fn tfunction_iterator_current(it: &TFunctionIteratorShim, out: Pin<&mut TdfLabelList>);
+
         // ── TFunctionLogbookHandle ────────────────────────────────────────────
         // Opaque bridge type wrapping Handle(TFunction_Logbook) by value.
         // Passed by raw pointer to extern "Rust" callbacks; valid only for
@@ -981,16 +1029,16 @@ pub mod ffi {
         // Done — non-const. Sets execution status flag.
         fn tfunction_logbook_done(h: Pin<&mut TFunctionLogbookHandle>, status: bool);
 
-        // ── TFunctionLabelListShim ────────────────────────────────────────────
-        // Opaque bridge type wrapping TDF_LabelList* (non-owning pointer to the
-        // out-parameter of Arguments() / Results()). Valid only during the
-        // rust_driver_arguments / rust_driver_results callback.
-        //
-        // Reference: TFunction_Driver::Arguments / Results
-        type TFunctionLabelListShim;
+        type TdfLabelList;
+        fn new_tdf_label_list() -> UniquePtr<TdfLabelList>;
+        fn tdf_labellist_append(shim: Pin<&mut TdfLabelList>, label: &TdfLabel);
+        fn tdf_labellist_len(shim: &TdfLabelList) -> usize;
+        fn tdf_labellist_get(shim: &TdfLabelList, index: usize) -> UniquePtr<TdfLabel>;
+        fn tfunction_logbook_set(access: &TdfLabel) -> UniquePtr<TFunctionLogbookHandle>;
+        fn tfunction_logbook_set_touched(h: Pin<&mut TFunctionLogbookHandle>, label: &TdfLabel);
+        fn tfunction_logbook_get_touched(h: &TFunctionLogbookHandle, out: Pin<&mut TdfLabelList>);
+        fn tfunction_logbook_clear(h: Pin<&mut TFunctionLogbookHandle>);
 
-        // Appends label to the list. Called via OcFunctionLabelList::push.
-        fn tfunction_labellist_append(shim: Pin<&mut TFunctionLabelListShim>, label: &TdfLabel);
         // ── TFunction registration ────────────────────────────────────────────
         // Creates a RustFunctionDriverShim for rust_id and registers it under
         // the given UUID fields in the global TFunction_DriverTable.
@@ -1489,11 +1537,11 @@ pub unsafe trait FunctionDriverRaw: 'static {
 
     /// The CPP _Driver::Arguments -> Rust FnDriver::arguments bridge
     /// list: valid for the duration of this call; append via tfunction_labellist_append.
-    unsafe fn arguments_raw(&self, list: *mut ffi::TFunctionLabelListShim);
+    unsafe fn arguments_raw(&self, list: *mut ffi::TdfLabelList);
 
     /// The CPP _Driver::Results -> Rust FnDriver::results bridge
     /// list: valid for the duration of this call; append via tfunction_labellist_append.
-    unsafe fn results_raw(&self, list: *mut ffi::TFunctionLabelListShim);
+    unsafe fn results_raw(&self, list: *mut ffi::TdfLabelList);
 }
 
 // ── Registry ──────────────────────────────────────────────────────────────────
@@ -1655,9 +1703,7 @@ pub unsafe fn rust_driver_arguments(id: u64, list: usize) {
             let r = r.borrow();
             match r.get(&id) {
                 // Safety: pointer valid for call duration.
-                Some(driver) => unsafe {
-                    driver.arguments_raw(list as *mut ffi::TFunctionLabelListShim)
-                },
+                Some(driver) => unsafe { driver.arguments_raw(list as *mut ffi::TdfLabelList) },
                 None => {
                     eprintln!("occt-sys: rust_driver_arguments called with unknown id {id}");
                 }
@@ -1677,9 +1723,7 @@ pub unsafe fn rust_driver_results(id: u64, list: usize) {
             let r = r.borrow();
             match r.get(&id) {
                 // Safety: pointer valid for call duration.
-                Some(driver) => unsafe {
-                    driver.results_raw(list as *mut ffi::TFunctionLabelListShim)
-                },
+                Some(driver) => unsafe { driver.results_raw(list as *mut ffi::TdfLabelList) },
                 None => {
                     eprintln!("occt-sys: rust_driver_results called with unknown id {id}");
                 }
@@ -1724,8 +1768,8 @@ mod tests {
             true
         }
         unsafe fn validate_raw(&self, _log: *mut ffi::TFunctionLogbookHandle) {}
-        unsafe fn arguments_raw(&self, _list: *mut ffi::TFunctionLabelListShim) {}
-        unsafe fn results_raw(&self, _list: *mut ffi::TFunctionLabelListShim) {}
+        unsafe fn arguments_raw(&self, _list: *mut ffi::TdfLabelList) {}
+        unsafe fn results_raw(&self, _list: *mut ffi::TdfLabelList) {}
     }
 
     // Null stand-in for log/list pointers in tests where the driver does not
@@ -1789,10 +1833,10 @@ mod tests {
             unsafe fn validate_raw(&self, _: *mut ffi::TFunctionLogbookHandle) {
                 panic!("intentional panic");
             }
-            unsafe fn arguments_raw(&self, _: *mut ffi::TFunctionLabelListShim) {
+            unsafe fn arguments_raw(&self, _: *mut ffi::TdfLabelList) {
                 panic!("intentional panic");
             }
-            unsafe fn results_raw(&self, _: *mut ffi::TFunctionLabelListShim) {
+            unsafe fn results_raw(&self, _: *mut ffi::TdfLabelList) {
                 panic!("intentional panic");
             }
         }

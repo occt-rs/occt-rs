@@ -25,7 +25,10 @@
 pub mod application;
 pub mod attributes;
 pub mod document;
+pub mod func_iface;
+pub mod func_iter;
 pub mod label;
+pub mod reference;
 pub mod tdata_xtd;
 pub mod topo_naming;
 pub use application::OcApplication;
