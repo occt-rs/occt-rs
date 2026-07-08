@@ -11,6 +11,7 @@ authors    = [ "Ben Pieters-Hawke" ]
 # cxx-build in build.rs; the Rust side is provided by the cxx runtime crate.
 [dependencies]
 cxx        = "1.0.194"
+uuid = "1.23.4"
  
 [build-dependencies]
 cxx-build  = "1.0.194"

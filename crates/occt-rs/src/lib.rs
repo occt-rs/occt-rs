@@ -84,6 +84,7 @@
 
 pub mod app_util;
 pub mod error;
+pub mod function_driver;
 pub mod gp;
 pub mod ocaf;
 pub mod rs_topo;
